@@ -1,0 +1,27 @@
+# The hub's routing-relevant settings. Merge into config.yaml; see config.example.yaml for everything else.
+config-version: 8
+
+server:
+  # Tailscale Serve exposes this on the tailnet only (https://<hub>.ts.net:8317, Funnel off).
+  host: "127.0.0.1"
+  port: 8317
+
+routing:
+  strategy: "soonest-reset-first"   # fork; "round-robin" = stock behaviour
+  session-affinity: true
+  session-affinity-ttl: "1h"
+  retry:
+    request-retry: 3
+    max-retry-interval: 30
+
+access:
+  api-keys:
+    - "replace-with-a-54-char-url-safe-key"
+
+management:
+  allow-remote: true
+  secret-key: "replace-me"
+
+observability:
+  usage:
+    usage-statistics-enabled: true
