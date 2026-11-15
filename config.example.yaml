@@ -1323,6 +1323,22 @@ observability:
     enable: false
     addr: "127.0.0.1:8316"
 
+# Quota history recorder (t3code fork). When enabled, the hub polls the usage endpoint of
+# every enabled Claude and Codex OAuth credential and stores one sample per poll, so the
+# management panel can chart remaining quota over time. Disabled by default; when disabled
+# nothing is polled or written. Changes are applied on config hot-reload.
+# Endpoints: GET /v8/management/quota-history?since=<unix ms>&until=<unix ms>
+#            POST /v8/management/quota-history/refresh (also mirrored under /v0/management).
+quota-history:
+  enabled: false
+  # Poll interval per account (Go duration or "<n>d"). Default 10m, minimum 5m.
+  interval: 10m
+  # Samples older than this are pruned hourly. Default 35d, minimum 1d.
+  retention: 35d
+  # bbolt database file. Default: quota-history.db next to the config file.
+  # Relative paths are resolved against the config file directory. Must not be inside auth-dir.
+  path: ""
+
 # Standard dynamic library plugins are trusted in-process code. They are disabled by default.
 # Build Go examples with go build -buildmode=c-shared for the target GOOS/GOARCH.
 # Other languages can implement the same C ABI and JSON method protocol.

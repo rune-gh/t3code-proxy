@@ -75,6 +75,9 @@ type Config struct {
 	// KVStore configures the local bbolt key-value store.
 	KVStore KVStoreConfig `yaml:"kv-store" json:"kv-store"`
 
+	// QuotaHistory configures the optional Claude/Codex quota history recorder (fork addition).
+	QuotaHistory QuotaHistoryConfig `yaml:"quota-history,omitempty" json:"quota-history"`
+
 	// CommercialMode disables high-overhead request logging and HTTP middleware features to minimize per-request memory usage.
 	CommercialMode bool `yaml:"commercial-mode" json:"commercial-mode"`
 

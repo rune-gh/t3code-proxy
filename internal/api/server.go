@@ -264,6 +264,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		s.mgmt.SetPostAuthPersistHook(optionState.postAuthPersistHook)
 	}
 	s.localPassword = optionState.localPassword
+	s.mgmt.ApplyQuotaHistoryConfig(cfg)
 
 	// Home heartbeat gate: when home is enabled, block all endpoints with 503 until the
 	// subscribe-config heartbeat connection is healthy.
@@ -507,6 +508,9 @@ func (s *Server) Stop(ctx context.Context) error {
 	}
 	if s.codexLiveHandler != nil {
 		s.codexLiveHandler.Close()
+	}
+	if s.mgmt != nil {
+		s.mgmt.CloseQuotaHistory()
 	}
 	if s.tunnelHub != nil {
 		s.tunnelHub.Close()
