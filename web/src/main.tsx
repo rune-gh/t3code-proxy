@@ -1,27 +1,40 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/styles/global.scss';
-import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
+import { BRAND_LOGO_URI, BRAND_NAME } from '@/assets/brandLogo';
 import App from './App.tsx';
 
-document.title = 'CLI Proxy API Management Center';
+document.title = BRAND_NAME;
 document.documentElement.setAttribute('translate', 'no');
 document.documentElement.classList.add('notranslate');
 
 const faviconEl = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (faviconEl) {
-  faviconEl.href = INLINE_LOGO_JPEG;
-  faviconEl.type = 'image/jpeg';
+  faviconEl.href = BRAND_LOGO_URI;
+  faviconEl.type = 'image/svg+xml';
 } else {
   const newFavicon = document.createElement('link');
   newFavicon.rel = 'icon';
-  newFavicon.type = 'image/jpeg';
-  newFavicon.href = INLINE_LOGO_JPEG;
+  newFavicon.type = 'image/svg+xml';
+  newFavicon.href = BRAND_LOGO_URI;
   document.head.appendChild(newFavicon);
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+const render = () =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+
+// DEV-only fixture session (`/?fixture=quota-history#/quota`): statically false in
+// production builds, so the fixture module is dropped from the single-file bundle.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('fixture')) {
+  void import('@/features/quota/__fixtures__/devFixture')
+    .then(({ installQuotaHistoryFixture, isFixtureRequested }) => {
+      if (isFixtureRequested()) installQuotaHistoryFixture();
+    })
+    .finally(render);
+} else {
+  render();
+}

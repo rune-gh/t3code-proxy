@@ -363,7 +363,11 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
       <div className={styles.laneHead}>
         <div className={styles.laneTop}>
           <span className={styles.laneDot} />
-          <span className={styles.laneName} title={lane.accountName ?? lane.displayName}>
+          <span
+            data-sensitive
+            className={styles.laneName}
+            title={lane.accountName ?? lane.displayName}
+          >
             {lane.accountName ?? lane.displayName}
           </span>
           {periodLabel && <span className={styles.lanePeriod}>{periodLabel}</span>}

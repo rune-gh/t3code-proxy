@@ -1,0 +1,132 @@
+/* Pool chart: colour comes from the card's --pool-color. */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.stopTop {
+  stop-color: var(--pool-color);
+  stop-opacity: 0.3;
+}
+
+.stopTopSoft {
+  stop-color: var(--pool-color);
+  stop-opacity: 0.13;
+}
+
+.stopBottom {
+  stop-color: var(--pool-color);
+  stop-opacity: 0;
+}
+
+.dayRule {
+  stroke: var(--pool-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.gridRule {
+  stroke: var(--pool-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axisLabel {
+  fill: var(--text-tertiary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.line {
+  fill: none;
+  stroke: var(--pool-color);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dashed {
+  stroke-dasharray: 6 5;
+  stroke-linecap: butt;
+}
+
+.accountLine {
+  fill: none;
+  stroke: var(--pool-color);
+  stroke-opacity: 0.42;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.jumpLabel {
+  fill: var(--text-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--bg-primary);
+  stroke-width: 3px;
+}
+
+.nowRule {
+  stroke: var(--text-quaternary);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.nowLabel {
+  fill: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.nowDot,
+.hoverDot {
+  fill: var(--pool-color);
+  stroke: var(--bg-primary);
+  stroke-width: 2;
+}
+
+.emptyLabel {
+  fill: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--bg-primary);
+  stroke-width: 4px;
+}
+
+.emptyRing {
+  fill: var(--bg-primary);
+  stroke: var(--text-primary);
+  stroke-width: 2;
+}
+
+.hoverRule {
+  stroke: var(--text-quaternary);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--floating-shadow);
+}

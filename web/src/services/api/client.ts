@@ -3,7 +3,7 @@
  * Replaces the original src/core/api-client.js
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosAdapter, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { ApiClientConfig, ApiError } from '@/types';
 import {
   BUILD_DATE_HEADER_KEYS,
@@ -15,6 +15,17 @@ import {
 } from '@/utils/constants';
 import { computeApiUrl } from '@/utils/connection';
 import { parseApiErrorResponse } from './apiError';
+
+/**
+ * DEV-only transport override (fixture previews). Applied per request so that
+ * connection-pinned clients from captureConnection() inherit it as well.
+ */
+let devAdapter: AxiosAdapter | null = null;
+
+export const installDevApiAdapter = (adapter: AxiosAdapter | null): void => {
+  if (!import.meta.env.DEV) return;
+  devAdapter = adapter;
+};
 
 class ApiClient {
   private instance: AxiosInstance;
@@ -49,6 +60,11 @@ class ApiClient {
     } else {
       this.instance.defaults.timeout = REQUEST_TIMEOUT_MS;
     }
+  }
+
+  /** Current management base URL (`<origin>/v8/management`), or '' when disconnected. */
+  getApiBase(): string {
+    return this.apiBase;
   }
 
   /** Guards read/modify/write operations across connection changes, including ABA switches. */
@@ -126,6 +142,7 @@ class ApiClient {
       (config) => {
         // Set baseURL
         config.baseURL = this.apiBase;
+        if (devAdapter) config.adapter = devAdapter;
 
         // Add authorization header
         if (this.managementKey) {

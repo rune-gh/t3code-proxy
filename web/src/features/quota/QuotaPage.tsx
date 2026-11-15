@@ -9,8 +9,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { authFilesApi } from '@/services/api';
+import { Trans, useTranslation } from 'react-i18next';
+import { authFilesApi, quotaHistoryApi, type QuotaHistory } from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { CardLayoutSwitch } from '@/components/ui/CardLayoutSwitch';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -23,12 +23,30 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNow } from '@/hooks/useNow';
 import { useRevealGroup } from '@/hooks/motion';
 import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
-import type { AuthFileItem, ResolvedTheme } from '@/types';
+import type { AuthFileItem, ClaudeQuotaState, CodexQuotaState, ResolvedTheme } from '@/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
 import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
+import { QuotaPoolCard } from './components/QuotaPoolCard';
+import { QuotaPoolToolbar, type BurnWindowHours } from './components/QuotaPoolToolbar';
+import type { PoolChartMode } from './components/PoolChart';
+import {
+  POOL_PROVIDERS,
+  defaultPoolSpan,
+  defaultPoolWindow,
+  historyFromLiveSnapshots,
+  shiftPoolSpan,
+  type FutureUsage,
+  type LiveAccountInput,
+  type PoolProvider,
+  type PoolSpan,
+  type PoolWindowChoice,
+} from './poolModel';
+import { readPlanWeights, writePlanWeights, type PlanWeightsByProvider } from './poolPrefs';
+import { useQuotaHistory } from './hooks/useQuotaHistory';
+import { startOfDay } from './quotaTimelineModel';
 import {
   CARD_ENTRANCE_BUDGET_MS,
   QUOTA_CARD_LAYOUT_KEY,
@@ -72,8 +90,14 @@ const SKELETON_CARD_COUNT = 6;
  */
 const displayNameFor = (name: string) => name;
 
+const historyAuthIndex = (file: AuthFileItem): string =>
+  file.authIndex !== undefined && file.authIndex !== null && String(file.authIndex) !== ''
+    ? String(file.authIndex)
+    : file.name;
+
 export function QuotaPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
@@ -90,6 +114,8 @@ export function QuotaPage() {
   // Compact cards the user opened to full size; not persisted.
   const [expandedCards, setExpandedCards] = useState<ReadonlySet<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Account labels stay blurred on this page until the user asks to see them.
+  const [showEmails, setShowEmails] = useState(false);
   // 页头 + tabs 的入场级联（标题 → meta → 动作 → tabs，级差 70ms）
   const revealRef = useRevealGroup<HTMLDivElement>();
 
@@ -195,9 +221,23 @@ export function QuotaPage() {
       ),
     [entries]
   );
+  const tabEntries = useMemo(() => filterEntriesByTab(entries, tab), [entries, tab]);
+  // Claude and Codex render as pooled charts; their per-credential cards live inside them.
+  const pooledProviders = useMemo<PoolProvider[]>(
+    () => POOL_PROVIDERS.filter((provider) => tabEntries.some((entry) => entry.type === provider)),
+    [tabEntries]
+  );
+  const pooledEntries = useMemo(
+    () => tabEntries.filter((entry) => (pooledProviders as string[]).includes(entry.type)),
+    [pooledProviders, tabEntries]
+  );
+  const stockTabEntries = useMemo(
+    () => tabEntries.filter((entry) => !(pooledProviders as string[]).includes(entry.type)),
+    [pooledProviders, tabEntries]
+  );
   const filteredEntries = useMemo(
-    () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
-    [entries, tab, search]
+    () => filterEntriesBySearch(stockTabEntries, search),
+    [stockTabEntries, search]
   );
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -250,16 +290,83 @@ export function QuotaPage() {
     [t]
   );
 
+  /* ---------- 额度池（历史 + 投影） ---------- */
+
+  const now = useNow();
+  // null = follow today (Now a quarter into a 14-day span).
+  const [pinnedSpan, setPinnedSpan] = useState<PoolSpan | null>(null);
+  const span = pinnedSpan ?? defaultPoolSpan(now);
+  const [chartMode, setChartMode] = useState<PoolChartMode>('remaining');
+  const [burnWindow, setBurnWindow] = useState<BurnWindowHours>(3);
+  const [futureUsage, setFutureUsage] = useState<FutureUsage>('same');
+  const [showAccounts, setShowAccounts] = useState(false);
+  const [poolWindows, setPoolWindows] = useState<Record<PoolProvider, PoolWindowChoice>>({
+    claude: defaultPoolWindow('claude'),
+    codex: defaultPoolWindow('codex'),
+  });
+  const [planWeights, setPlanWeights] = useState<PlanWeightsByProvider>(() => readPlanWeights());
+
+  const handlePlanWeightChange = useCallback(
+    (provider: PoolProvider, plan: string, weight: number | null) => {
+      setPlanWeights((previous) => {
+        const forProvider = { ...(previous[provider] ?? {}) };
+        if (weight === null || weight === 1) delete forProvider[plan];
+        else forProvider[plan] = weight;
+        const next = { ...previous, [provider]: forProvider };
+        writePlanWeights(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const historyActive = !disableControls && pooledProviders.length > 0;
+  // Keyed by day so the minute clock doesn't refetch on its own; the hook polls every 60 s.
+  const quotaHistory = useQuotaHistory(startOfDay(span.start), historyActive);
+  const refetchHistory = quotaHistory.refetch;
+  const historyReady = quotaHistory.status === 'ready' && quotaHistory.history !== null;
+
+  // Without recorded history, the live per-credential reads still give a current point.
+  const liveHistory = useMemo<QuotaHistory>(() => {
+    const inputs: LiveAccountInput[] = entries
+      .filter((entry) => entry.type === 'claude' || entry.type === 'codex')
+      .map((entry) => {
+        const quota = quotaByType[entry.type][getQuotaCacheKey(entry.file)] as
+          ClaudeQuotaState | CodexQuotaState | undefined;
+        return {
+          authIndex: historyAuthIndex(entry.file),
+          provider: entry.type as PoolProvider,
+          label: entry.file.email || entry.file.name,
+          plan: quota?.planType ?? null,
+          disabled: Boolean(entry.file.disabled),
+          windows: quota?.windows?.length ? quota.windows : null,
+        };
+      });
+    return historyFromLiveSnapshots(inputs, now);
+  }, [entries, now, quotaByType]);
+
+  const poolHistory: QuotaHistory = historyReady ? quotaHistory.history! : liveHistory;
+  const showHistoryHint =
+    pooledProviders.length > 0 &&
+    !historyReady &&
+    (quotaHistory.status === 'unavailable' || quotaHistory.status === 'error');
+
   const { loadedCount, attentionCount } = useMemo(() => {
+    const recorded = new Set<string>();
+    if (historyReady) {
+      quotaHistory.history!.samples.forEach((sample) => {
+        if (!sample.error) recorded.add(sample.authIndex);
+      });
+    }
     let loaded = 0;
     let attention = 0;
     entries.forEach((entry) => {
       const status = quotaByType[entry.type][getQuotaCacheKey(entry.file)]?.status;
-      if (status === 'success') loaded += 1;
+      if (status === 'success' || recorded.has(historyAuthIndex(entry.file))) loaded += 1;
       else if (status === 'error') attention += 1;
     });
     return { loadedCount: loaded, attentionCount: attention };
-  }, [entries, quotaByType]);
+  }, [entries, historyReady, quotaByType, quotaHistory.history]);
 
   // 剪枝：文件列表落定后，各 provider 缓存只保留仍存在的凭证
   useEffect(() => {
@@ -290,12 +397,17 @@ export function QuotaPage() {
   const pendingRefreshRef = useRef<number | null>(null);
   const prevLoadingRef = useRef(loading);
 
-  // 刷新全部：先重取文件列表，待其落定（loading 下降沿）再批量拉当前页额度
+  // 刷新全部：先让 hub 立即采样一次，再重取文件列表，待其落定（loading 下降沿）
+  // 批量拉池内凭证 + 当前页额度，最后重取历史。
   const handleRefreshAll = useCallback(() => {
     if (disableControls) return;
     pendingRefreshRef.current = sessionGeneration;
+    void quotaHistoryApi
+      .refresh()
+      .catch(() => undefined)
+      .then(() => refetchHistory());
     void loadFiles();
-  }, [disableControls, loadFiles, sessionGeneration]);
+  }, [disableControls, loadFiles, refetchHistory, sessionGeneration]);
 
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
@@ -319,9 +431,19 @@ export function QuotaPage() {
         disableControls
       )
     ) {
-      void loadQuota(pageItems);
+      void loadQuota([...pooledEntries, ...pageItems]).then(() => refetchHistory());
     }
-  }, [disableControls, error, filesGeneration, loading, loadQuota, pageItems, sessionGeneration]);
+  }, [
+    disableControls,
+    error,
+    filesGeneration,
+    loading,
+    loadQuota,
+    pageItems,
+    pooledEntries,
+    refetchHistory,
+    sessionGeneration,
+  ]);
 
   useDevinQuotaAutoLoad(
     pageItems,
@@ -380,10 +502,13 @@ export function QuotaPage() {
     );
   };
 
-  const isEmpty = !loading && filteredEntries.length === 0;
+  const isEmpty = !loading && tabEntries.length === 0;
+  const isSearchEmpty =
+    !loading && !isEmpty && stockTabEntries.length > 0 && filteredEntries.length === 0;
+  const showStockSection = stockTabEntries.length > 0;
 
   return (
-    <div className={styles.page} ref={revealRef}>
+    <div className={`${styles.page} ${showEmails ? '' : styles.hideEmails}`} ref={revealRef}>
       <QuotaHeader
         totalCount={entries.length}
         loadedCount={loadedCount}
@@ -391,6 +516,8 @@ export function QuotaPage() {
         refreshing={loading || batchLoading}
         disableControls={disableControls}
         onRefreshAll={handleRefreshAll}
+        showEmails={showEmails}
+        onToggleEmails={() => setShowEmails((value) => !value)}
       />
 
       <section className={styles.workbench}>
@@ -402,49 +529,116 @@ export function QuotaPage() {
             active={tab}
             resolvedTheme={resolvedTheme}
             onChange={handleTabChange}
+            variant="pill"
           />
         </div>
 
-        <div className={styles.toolbar}>
-          <div className={styles.search}>
-            <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
-            <input
-              ref={searchInputRef}
-              className={styles.searchInput}
-              type="search"
-              value={search}
-              onChange={(event) => handleSearchChange(event.target.value)}
-              placeholder={t('quota_management.search_placeholder')}
-              aria-label={t('quota_management.search_label')}
+        {pooledProviders.length > 0 && (
+          <>
+            <QuotaPoolToolbar
+              mode={chartMode}
+              onModeChange={setChartMode}
+              burnWindow={burnWindow}
+              onBurnWindowChange={setBurnWindow}
+              futureUsage={futureUsage}
+              onFutureUsageChange={setFutureUsage}
+              showAccounts={showAccounts}
+              onShowAccountsChange={setShowAccounts}
+              spanStart={span.start}
+              spanEnd={span.end}
+              isToday={pinnedSpan === null}
+              onShift={(direction) => setPinnedSpan(shiftPoolSpan(span, direction))}
+              onToday={() => setPinnedSpan(null)}
+              locale={locale}
             />
-            {search && (
-              <button
-                type="button"
-                className={styles.clearSearch}
-                aria-label={t('quota_management.search_clear')}
-                title={t('quota_management.search_clear')}
-                onClick={() => {
-                  handleSearchChange('');
-                  searchInputRef.current?.focus();
-                }}
-              >
-                <IconX size={14} aria-hidden="true" />
-              </button>
+
+            {showHistoryHint && (
+              <p className={styles.historyHint}>
+                <Trans
+                  i18nKey="quota_pool.history_hint"
+                  defaults="Enable <code>quota-history</code> in config.yaml to record history"
+                  components={{ code: <code /> }}
+                />
+              </p>
             )}
-          </div>
-          <div className={styles.viewControls}>
-            <div className={styles.sort}>
-              <Select
-                value={sortMode}
-                options={sortOptions}
-                onChange={handleSortModeChange}
-                ariaLabel={t('quota_management.sort_label')}
-                size="sm"
+
+            {pooledProviders.map((provider) => {
+              const providerEntries = pooledEntries.filter((entry) => entry.type === provider);
+              return (
+                <QuotaPoolCard
+                  key={provider}
+                  provider={provider}
+                  history={poolHistory}
+                  window={poolWindows[provider]}
+                  onWindowChange={(choice) =>
+                    setPoolWindows((previous) => ({ ...previous, [provider]: choice }))
+                  }
+                  weights={planWeights[provider] ?? {}}
+                  onWeightChange={(plan, weight) => handlePlanWeightChange(provider, plan, weight)}
+                  mode={chartMode}
+                  showAccounts={showAccounts}
+                  spanStart={span.start}
+                  spanEnd={span.end}
+                  now={now}
+                  burnWindowHours={burnWindow}
+                  futureUsage={futureUsage}
+                  showEmails={showEmails}
+                  resolvedTheme={resolvedTheme}
+                  locale={locale}
+                  detailsCount={providerEntries.length}
+                  details={
+                    <div className={styles.grid}>
+                      {providerEntries.map((entry, index) => renderCard(entry, index))}
+                    </div>
+                  }
+                />
+              );
+            })}
+          </>
+        )}
+
+        {showStockSection && (
+          <div className={styles.toolbar}>
+            <div className={styles.search}>
+              <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                className={styles.searchInput}
+                type="search"
+                value={search}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder={t('quota_management.search_placeholder')}
+                aria-label={t('quota_management.search_label')}
               />
+              {search && (
+                <button
+                  type="button"
+                  className={styles.clearSearch}
+                  aria-label={t('quota_management.search_clear')}
+                  title={t('quota_management.search_clear')}
+                  onClick={() => {
+                    handleSearchChange('');
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  <IconX size={14} aria-hidden="true" />
+                </button>
+              )}
             </div>
-            <CardLayoutSwitch value={layout} onChange={handleLayoutChange} />
+            <div className={styles.viewControls}>
+              <div className={styles.sort}>
+                <Select
+                  value={sortMode}
+                  options={sortOptions}
+                  onChange={handleSortModeChange}
+                  ariaLabel={t('quota_management.sort_label')}
+                  size="sm"
+                />
+              </div>
+              <CardLayoutSwitch value={layout} onChange={handleLayoutChange} />
+            </div>
           </div>
-        </div>
+        )}
 
         {error && (
           <div className={styles.errorBanner} role="alert">
@@ -452,30 +646,30 @@ export function QuotaPage() {
           </div>
         )}
 
-        {loading ? (
+        {loading && (showStockSection || entries.length === 0) ? (
           <div className={styles.grid} aria-hidden="true">
             {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
               <Skeleton key={index} height={168} rounded={14} />
             ))}
           </div>
-        ) : isEmpty ? (
+        ) : isEmpty || isSearchEmpty ? (
           <EmptyState
             title={
-              search.trim()
+              isSearchEmpty
                 ? t('quota_management.search_empty_title')
                 : tab === 'all'
                   ? t('quota_management.empty_title')
                   : t(`${QUOTA_ADAPTERS[tab].i18nPrefix}.empty_title`)
             }
             description={
-              search.trim()
+              isSearchEmpty
                 ? t('quota_management.search_empty_desc')
                 : tab === 'all'
                   ? t('quota_management.empty_desc')
                   : t(`${QUOTA_ADAPTERS[tab].i18nPrefix}.empty_desc`)
             }
             action={
-              search.trim() ? (
+              isSearchEmpty ? (
                 <Button variant="secondary" size="sm" onClick={() => handleSearchChange('')}>
                   {t('quota_management.search_clear')}
                 </Button>
@@ -486,7 +680,7 @@ export function QuotaPage() {
               )
             }
           />
-        ) : (
+        ) : !showStockSection ? null : (
           // One container for every layout, so switching layouts never remounts the cards.
           <StackedColumns
             stacked={layout !== 'even'}

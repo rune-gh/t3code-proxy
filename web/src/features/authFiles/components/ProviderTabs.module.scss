@@ -127,6 +127,38 @@
   }
 }
 
+/* Pill variant: filled active segment, no rule underneath. */
+.tabsPill {
+  gap: 4px;
+  border-bottom: 0;
+
+  .tab {
+    padding: 8px 13px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .tabActive {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+  }
+
+  .tabCount,
+  .tabActive .tabCount {
+    padding: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tab,
   .tab::after {

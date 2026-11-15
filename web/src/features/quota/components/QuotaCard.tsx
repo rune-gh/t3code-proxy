@@ -163,7 +163,7 @@ export function QuotaCard(props: QuotaCardProps) {
             <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
           )}
         </span>
-        <span className={styles.fileName} title={displayName}>
+        <span data-sensitive className={styles.fileName} title={displayName}>
           {displayName}
         </span>
         {glance !== undefined && (
