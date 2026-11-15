@@ -1,27 +1,42 @@
-# The hub's routing-relevant settings. Merge into config.yaml; see config.example.yaml for everything else.
+# The hub's fork-relevant settings (Theo's gist config + this fork's features).
+# Merge into config.yaml; see config.example.yaml for everything else.
 config-version: 8
 
 server:
-  # Tailscale Serve exposes this on the tailnet only (https://<hub>.ts.net:8317, Funnel off).
+  # Tailscale Serve exposes this on the tailnet only:
+  #   tailscale serve --bg --https=8317 http://127.0.0.1:8317
   host: "127.0.0.1"
   port: 8317
+  trusted-proxies: ["127.0.0.1", "::1"]
+
+management:
+  allow-remote: true                 # open the panel over Tailscale
+  secret-key: "replace-me"           # empty disables the management API
+  # Serve this fork's dashboard: the stock updater pulls management.html from
+  # the latest GitHub release of this repo instead of upstream's panel.
+  panel-github-repository: "https://github.com/rune-oai/t3code-proxy"
+
+access:
+  api-keys:
+    - "replace-with-a-54-char-url-safe-key"
 
 routing:
-  strategy: "soonest-reset-first"   # fork; "round-robin" = stock behaviour
+  strategy: "soonest-reset-first"    # fork; "round-robin" = stock behaviour
   session-affinity: true
   session-affinity-ttl: "1h"
   retry:
     request-retry: 3
     max-retry-interval: 30
 
-access:
-  api-keys:
-    - "replace-with-a-54-char-url-safe-key"
-
-management:
-  allow-remote: true
-  secret-key: "replace-me"
+# Fork: record Claude/Codex quota every 10 min for the pooled dashboard.
+quota-history:
+  enabled: true
+  interval: 10m
+  retention: 35d
 
 observability:
   usage:
     usage-statistics-enabled: true
+
+# Codex websockets are client config (supports_websockets = true in the Codex
+# model provider); nothing to set here.
