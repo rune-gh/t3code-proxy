@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <title>t3code-proxy</title>
+  <defs>
+    <linearGradient id="tile" x1="128" y1="0" x2="128" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2A2D"/>
+      <stop offset="0.45" stop-color="#0C0C0D"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="40" y1="0" x2="216" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.28"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0 120 -190 0 128 0)">
+      <stop stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#tile)"/>
+  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#sheen)"/>
+  <rect x="5.5" y="5.5" width="245" height="245" rx="56.5" stroke="url(#rim)" stroke-width="3"/>
+  <g transform="translate(40 42) scale(0.6875)">
+    <path d="M128 234C94 228 44 190 26 140l26-28L38 22l68 46q22-6 44 0l68-46-14 90 26 28c-18 50-68 88-102 94Z" fill="#0A0A0A" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
+    <path d="m58 54 26 18-20 20Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <path d="m198 54-26 18 20 20Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M50 148q44 0 64 28l14 22 14-22q20-28 64-28c-14 36-46 60-78 68-32-8-64-32-78-68Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M119 72q9-2 18 0v26h17l-26 32-26-32h17Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M70 138q13-15 26 0M160 138q13-15 26 0" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+    <path d="M117 196h22l-11 13Z" fill="#0A0A0A" stroke="#0A0A0A" stroke-width="8" stroke-linejoin="round"/>
+  </g>
+</svg>

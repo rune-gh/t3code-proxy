@@ -1,0 +1,86 @@
+// Sign-in screen: one centred column with the fox, the product name and the form.
+
+.container {
+  display: flex;
+  justify-content: center;
+  height: 100vh;
+  height: 100dvh;
+  padding: 24px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+  // Centre vertically when there is room, scroll from the top when there is not.
+  margin-block: auto;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.fox {
+  width: 56px;
+  height: 56px;
+}
+
+.brandName {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.restoring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: var(--text-base);
+}
+
+// Hand-off to the app: fade the column out, then the reveal veil takes over.
+// Duration must match `exit` in useLoginTransitionStore.
+@keyframes exitToBase {
+  to {
+    opacity: 0;
+  }
+}
+
+.container[data-phase='exiting'] .column {
+  animation: exitToBase 120ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container[data-phase='exiting'] .column {
+    animation-duration: 60ms;
+  }
+}

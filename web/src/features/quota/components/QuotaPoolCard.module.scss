@@ -1,0 +1,244 @@
+@use '../../../styles/mixins' as *;
+
+/* Pool section. Provider series colour drives the chart via --pool-color. */
+
+.pool {
+  min-width: 0;
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.headControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---------- plan weights popover ---------- */
+
+.weightsAnchor {
+  position: relative;
+}
+
+.weightsPopover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: $z-dropdown;
+  width: 260px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--popover);
+  box-shadow: var(--shadow-popover);
+}
+
+.weightsTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.weightsHint {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.weightRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font-size: var(--text-base);
+  color: var(--foreground);
+}
+
+.weightInputWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted-foreground);
+}
+
+.weightInput {
+  width: 72px;
+  height: var(--control-h-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- panel ---------- */
+
+.panel {
+  --pool-color: #c96442;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+
+  &[data-provider='codex'] {
+    --pool-color: #3f6fd8;
+  }
+}
+
+:global([data-theme='dark']) .panel {
+  --pool-color: #d97757;
+
+  &[data-provider='codex'] {
+    --pool-color: #7aa2f7;
+  }
+}
+
+.stats {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-8);
+  flex-wrap: wrap;
+}
+
+.headline {
+  flex: 0 0 auto;
+}
+
+.statRow {
+  display: flex;
+  gap: var(--space-4) var(--space-8);
+  flex-wrap: wrap;
+}
+
+.stat {
+  white-space: nowrap;
+}
+
+.label {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.weightNote {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.noData {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+/* ---------- legend ---------- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.swatchSolid,
+.swatchDashed,
+.swatchThin {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2px solid var(--pool-color);
+}
+
+.swatchDashed {
+  border-top-style: dashed;
+}
+
+.swatchThin {
+  border-top-width: 1px;
+  opacity: 0.6;
+}
+
+/* ---------- account cards toggle ---------- */
+
+.detailsBar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: calc(-1 * var(--space-1));
+}
+
+.chevron,
+.chevronOpen {
+  margin-left: var(--space-1);
+  vertical-align: -3px;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+@include mobile {
+  .panel {
+    padding: var(--space-3);
+  }
+
+  .stats,
+  .statRow {
+    gap: var(--space-3) var(--space-5);
+  }
+}

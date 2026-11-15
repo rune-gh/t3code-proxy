@@ -1,0 +1,197 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Install options dialog: the version choice is a grouped list (same vocabulary as the
+ * config sheet); the selected row only changes its fill.
+ * ============================================================ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-md);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.fieldLabel {
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.modes {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: $radius-lg;
+  background: var(--muted);
+
+  > * + * {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.mode {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px $spacing-md;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease;
+
+  input {
+    flex: 0 0 auto;
+    margin: 3px 0 0;
+    accent-color: var(--foreground);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(.modeDisabled) {
+      background: color-mix(in srgb, var(--accent) 55%, var(--muted));
+    }
+  }
+}
+
+.modeActive {
+  background: var(--card);
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(.modeDisabled) {
+      background: var(--card);
+    }
+  }
+}
+
+.modeDisabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.modeText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    color: var(--foreground);
+    font-size: var(--text-md);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  small {
+    color: var(--muted-foreground);
+    font-size: var(--text-sm);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+}
+
+.panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $spacing-sm;
+
+  :global(.form-group) {
+    margin: 0;
+  }
+}
+
+.hint,
+.warning {
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--muted-foreground);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.checkbox {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+
+  input {
+    flex: 0 0 auto;
+    margin: 0;
+    accent-color: var(--foreground);
+  }
+}
+
+.releaseLink {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color var(--duration-fast) ease;
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  &:focus-visible {
+    border-radius: $radius-sm;
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--foreground);
+      text-decoration: underline;
+    }
+  }
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+
+  @include mobile {
+    flex-direction: column-reverse;
+  }
+}

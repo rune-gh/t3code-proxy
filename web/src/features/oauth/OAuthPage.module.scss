@@ -1,0 +1,21 @@
+/* Add account page: layout only; tiles and dialogs style themselves. */
+
+.choose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Claude and Codex: two large tiles side by side, stacked on narrow screens. */
+.primaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.compactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: var(--space-2);
+}

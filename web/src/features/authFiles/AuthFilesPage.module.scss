@@ -1,0 +1,38 @@
+/* Accounts page shell: layout only; row styles live in AccountsTable.module.scss. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.search {
+  flex: 1 1 280px;
+  min-width: 0;
+  max-width: 420px;
+
+  :global(.form-group) {
+    margin-bottom: 0;
+  }
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  flex-wrap: wrap;
+}
+
+.pageInfo {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.pageControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

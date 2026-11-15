@@ -1,0 +1,140 @@
+.field {
+  max-width: 480px;
+
+  :global(.form-group) {
+    margin: 0;
+  }
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 72ch;
+
+  p {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--text-sm);
+  }
+}
+
+.prose,
+.hint {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+
+  a {
+    color: var(--primary);
+  }
+
+  code {
+    color: var(--foreground);
+    font-size: var(--text-xs);
+  }
+}
+
+.prose {
+  color: var(--foreground);
+  font-size: var(--text-base);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.keySelect {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.keyValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--control-h);
+  padding: 0 2px 0 10px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+
+.keyText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buttonContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.errorRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  :global(.error-box) {
+    margin: 0;
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 72ch;
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  line-height: 1.5;
+
+  strong {
+    font-weight: 600;
+  }
+}
+
+.testRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.testResult {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.testOk {
+  color: var(--success-foreground);
+}
+
+.testError {
+  color: var(--destructive-foreground);
+}
+
+.link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

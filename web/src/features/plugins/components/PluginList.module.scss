@@ -1,0 +1,145 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * List container and in-view notices (error / safety note / source errors) shared by
+ * both views. Notices are quiet single blocks: hairline border, body colour, no filled banners.
+ * ============================================================ */
+
+.listArea {
+  min-width: 0;
+}
+
+.list {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: $radius-lg;
+  background: var(--card);
+}
+
+// Store cards: wide enough that a card still shows name, description, metadata and action.
+.grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 12px;
+}
+
+// ─── Error ──────────────────────────────────────────────
+
+.errorBox {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  padding: 12px $spacing-md;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  background: var(--destructive-surface);
+  color: var(--destructive-foreground);
+  font-size: var(--text-md);
+  line-height: 1.5;
+
+  span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :global(.btn) {
+    flex-shrink: 0;
+  }
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+// ─── Notes ──────────────────────────────────────────────
+
+.note,
+.sourceErrors {
+  min-width: 0;
+  padding: 12px $spacing-md;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted-foreground);
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--muted-foreground);
+  }
+
+  > div {
+    min-width: 0;
+  }
+
+  p {
+    margin: 2px 0 0;
+  }
+
+  strong {
+    display: block;
+    color: var(--foreground);
+    font-weight: 600;
+  }
+}
+
+.sourceErrors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted-foreground);
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0 0 0 21px;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  li span {
+    color: var(--foreground);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    color: var(--muted-foreground);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+}
+
+.sourceErrorsTitle {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  color: var(--foreground);
+  font-weight: 600;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--warning);
+  }
+}

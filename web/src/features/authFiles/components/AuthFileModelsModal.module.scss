@@ -1,0 +1,64 @@
+@use '../../../styles/mixins' as *;
+
+/* Supported models dialog: a list of model ids, click a row to copy. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(52dvh, 480px);
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+
+  &:hover {
+    background: var(--accent);
+  }
+}
+
+.itemExcluded {
+  color: var(--muted-foreground);
+}
+
+.modelId {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.itemExcluded .modelId {
+  color: var(--muted-foreground);
+}
+
+.modelDisplayName {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  @include text-ellipsis;
+}
+
+.modelType {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.excludedBadge {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--destructive-foreground);
+  background: var(--destructive-surface);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+  white-space: nowrap;
+}

@@ -1,0 +1,206 @@
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  min-width: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.legendItem,
+.tooltipRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  b {
+    color: var(--foreground);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.success {
+  background: var(--success);
+}
+
+.failure {
+  background: var(--destructive);
+}
+
+.plot {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  height: 200px;
+}
+
+.yAxis {
+  position: relative;
+
+  span {
+    position: absolute;
+    right: var(--space-2);
+    transform: translateY(-50%);
+    font-size: var(--text-xs);
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+}
+
+.canvas {
+  position: relative;
+  min-width: 0;
+}
+
+.gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.baseline {
+  background: var(--border-strong);
+}
+
+.columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.column {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+
+  &.active {
+    background: var(--accent);
+  }
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  min-height: 1px;
+
+  &.success {
+    opacity: 0.85;
+  }
+
+  &:first-child {
+    border-radius: 2px 2px 0 0;
+  }
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  pointer-events: none;
+
+  .tooltipRow {
+    justify-content: flex-start;
+
+    b {
+      margin-left: auto;
+    }
+  }
+}
+
+.tooltipTime {
+  color: var(--foreground);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.xAxis {
+  position: relative;
+  height: 14px;
+  margin-left: 40px;
+
+  span {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    font-size: var(--text-xs);
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}
+
+.tableToggle {
+  font-size: var(--text-base);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+
+  th,
+  td {
+    padding: 4px var(--space-2);
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+  }
+
+  thead th {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  tbody th[scope='row'] {
+    text-align: left;
+    font-weight: 500;
+    color: var(--foreground);
+  }
+}
+
+@media (max-width: 600px) {
+  .columns {
+    gap: 2px;
+  }
+}

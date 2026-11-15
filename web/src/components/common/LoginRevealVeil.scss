@@ -1,0 +1,27 @@
+// Brief cover between the login page and the app shell. The duration must
+// match `reveal` in useLoginTransitionStore.
+@keyframes loginVeilOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.login-reveal-veil {
+  position: fixed;
+  inset: 0;
+  // Below toasts, above every app-shell layer
+  z-index: $z-notification - 1;
+  // Same colour the login page fades to, so the hand-off is seamless
+  background: var(--background);
+  pointer-events: none;
+  animation: loginVeilOut 160ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-reveal-veil {
+    animation-duration: 80ms;
+  }
+}

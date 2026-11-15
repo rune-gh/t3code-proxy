@@ -1,0 +1,34 @@
+# t3code-proxy in a container.
+#
+#   mkdir -p data && cp config.hub.example.yaml data/config.yaml
+#   # edit data/config.yaml: replace the placeholders and set server.host to ""
+#   # (inside a container the server must listen on all interfaces; the port
+#   # mapping below still keeps it on the host's loopback only)
+#   docker compose up -d
+#   docker compose exec t3code-proxy t3code-proxy -config /data/config.yaml -claude-login -no-browser
+#
+# data/ holds config.yaml, the account files (data/.t3code-proxy), logs, and
+# the quota history. The container runs as uid 10001 by default; set
+# T3CODE_PROXY_UID/T3CODE_PROXY_GID to your own ids (id -u / id -g) so it can
+# write to the bind-mounted data/ directory.
+services:
+  t3code-proxy:
+    image: ${T3CODE_PROXY_IMAGE:-ghcr.io/rune-oai/t3code-proxy:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    container_name: t3code-proxy
+    user: "${T3CODE_PROXY_UID:-10001}:${T3CODE_PROXY_GID:-10001}"
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      - "127.0.0.1:8317:8317"   # API and web panel
+      - "127.0.0.1:54545:54545" # Claude OAuth callback during -claude-login
+      - "127.0.0.1:1455:1455"   # Codex OAuth callback during -codex-login
+    volumes:
+      - ${T3CODE_PROXY_DATA:-./data}:/data
+    restart: unless-stopped

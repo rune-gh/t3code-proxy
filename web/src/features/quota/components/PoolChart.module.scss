@@ -1,0 +1,125 @@
+/* Pool chart: series colour comes from the panel's --pool-color; the rest is neutral. */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.areaRecorded,
+.areaProjected {
+  fill: var(--pool-color);
+  stroke: none;
+}
+
+.areaRecorded {
+  fill-opacity: 0.12;
+}
+
+.areaProjected {
+  fill-opacity: 0.05;
+}
+
+.dayRule,
+.gridRule {
+  stroke: var(--border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.dayRule {
+  stroke-opacity: 0.6;
+}
+
+.axisLabel {
+  fill: var(--muted-foreground);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.line {
+  fill: none;
+  stroke: var(--pool-color);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dashed {
+  stroke-dasharray: 5 4;
+  stroke-linecap: butt;
+}
+
+.accountLine {
+  fill: none;
+  stroke: var(--pool-color);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.jumpLabel {
+  fill: var(--muted-foreground);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 3px;
+}
+
+.nowRule,
+.hoverRule {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.nowLabel {
+  fill: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.nowDot,
+.hoverDot {
+  fill: var(--pool-color);
+  stroke: var(--card);
+  stroke-width: 2;
+}
+
+.emptyLabel {
+  fill: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 4px;
+}
+
+.emptyRing {
+  fill: var(--card);
+  stroke: var(--foreground);
+  stroke-width: 1.5;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-popover);
+}

@@ -1,0 +1,647 @@
+@use '../../../styles/mixins' as *;
+
+/* Model rules editors (excluded models and model aliases).
+ * Layout: provider rail on the left (filter and add entry), content on the right. */
+
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@mixin focus-ring($offset: 2px) {
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: $offset;
+  }
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  min-width: 0;
+  /* Room for the floating save bar */
+  padding-bottom: calc(
+    var(--config-action-bar-height, 0px) + var(--space-4) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+/* ---------- Header ---------- */
+
+.headerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+// Feature-local back link: PageHeader has no back slot.
+.back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-h-sm);
+  margin-left: calc(var(--space-2) * -1);
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  @include focus-ring;
+
+  &:hover {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+}
+
+.meta {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Workspace: rail + stage ---------- */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.workspaceWide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* ---------- Provider rail ---------- */
+
+.rail,
+.railSkeleton {
+  position: sticky;
+  top: var(--space-3);
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: calc(100vh - 120px);
+}
+
+.railList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.railItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  text-align: left;
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  @include focus-ring(-2px);
+
+  &:hover:not(.railItemActive) {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+}
+
+.railItemIdle .railIcon {
+  opacity: 0.6;
+}
+
+.railItemActive {
+  color: var(--foreground);
+  font-weight: 500;
+  background: var(--accent);
+
+  .railIcon {
+    opacity: 1;
+  }
+}
+
+.railIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+
+  img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+}
+
+.railLabel {
+  flex: 1;
+  min-width: 0;
+  @include text-ellipsis;
+}
+
+.railCount {
+  flex-shrink: 0;
+  min-width: 16px;
+  text-align: right;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.railDirty,
+.groupDirty {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.railCustom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-h);
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--foreground);
+
+    &::placeholder {
+      font-family: var(--font-sans);
+      font-size: var(--text-base);
+      color: var(--faint-foreground);
+    }
+
+    &:focus {
+      outline: none;
+    }
+  }
+
+  &:focus-within {
+    border-color: var(--ring);
+    color: var(--foreground);
+  }
+}
+
+/* ---------- Provider panel ---------- */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.groupIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+
+  img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+}
+
+.groupTitle {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+.groupSummary {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  @include text-ellipsis;
+}
+
+.groupActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.groupBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.groupBody :global(.hint) {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.groupFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.groupHint {
+  flex: 1 1 280px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.fieldLabel {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.fieldHint {
+  margin: -4px 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* ---------- Alias ledger ---------- */
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  --ledger-columns: minmax(0, 1fr) 16px minmax(0, 1fr) 96px 28px;
+}
+
+.ledgerHead,
+.row {
+  display: grid;
+  grid-template-columns: var(--ledger-columns);
+  align-items: center;
+  column-gap: var(--space-2);
+  padding-inline: var(--space-2);
+}
+
+.ledgerHead {
+  height: 32px;
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted-foreground);
+
+  /* Align with the text inside the inputs */
+  > span:first-child,
+  > span:nth-child(3) {
+    padding-left: var(--space-2);
+  }
+}
+
+.ledgerHeadFork {
+  text-align: center;
+}
+
+.row {
+  position: relative;
+  padding-block: 2px;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.rowInvalid {
+  background: var(--destructive-surface);
+}
+
+.cell {
+  min-width: 0;
+  margin-bottom: 0;
+
+  /* The column headings explain each cell; labels stay for screen readers */
+  label {
+    @include visually-hidden;
+  }
+}
+
+/* Inline inputs read as text at rest and show their field on hover and focus */
+.cell .cellInput {
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+
+  &::placeholder {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    color: var(--faint-foreground);
+  }
+
+  &:hover:not(:focus):not(:disabled) {
+    border-color: var(--input);
+  }
+
+  &:focus {
+    border-color: var(--ring);
+    background: var(--background);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+.rowInvalid .cellInput[aria-invalid='true']:not(:focus) {
+  border-color: var(--destructive);
+}
+
+.arrow {
+  text-align: center;
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+  user-select: none;
+}
+
+.rowFork {
+  display: flex;
+  justify-content: center;
+}
+
+.forkLabel {
+  display: none;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.rowRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  @include focus-ring;
+
+  &:hover:not(:disabled) {
+    color: var(--destructive-foreground);
+    background: var(--destructive-surface);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+.rowIssue {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--destructive-foreground);
+}
+
+/* ---------- Ledger search ---------- */
+
+.stageBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 320px;
+
+  > :global(.form-group) {
+    flex: 1;
+    margin-bottom: 0;
+  }
+}
+
+/* ---------- Diagram ---------- */
+
+.graph {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.graphBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.graphHint {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.graphCanvas {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+/* ---------- Narrow screens: horizontal rail, mapping rows fold onto two lines ---------- */
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .rail,
+  .railSkeleton {
+    position: static;
+  }
+
+  .railSkeleton {
+    display: none;
+  }
+
+  .rail {
+    flex-direction: row;
+    align-items: center;
+    max-height: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .railList {
+    flex-direction: row;
+    overflow: visible;
+  }
+
+  .railItem {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .railLabel {
+    flex: none;
+    overflow: visible;
+  }
+
+  .railCustom {
+    flex: 0 0 168px;
+    margin-top: 0;
+  }
+}
+
+@include mobile {
+  .page {
+    gap: var(--space-4);
+  }
+
+  .ledgerHead {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto 28px;
+    row-gap: 2px;
+    padding-block: var(--space-2);
+  }
+
+  .row > .cell {
+    grid-column: 1 / -1;
+  }
+
+  .arrow {
+    display: none;
+  }
+
+  /* Once stacked, a hooked arrow keeps the source → alias direction */
+  .cellAlias {
+    position: relative;
+    padding-left: 18px;
+
+    &::before {
+      content: '↳';
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: var(--text-base);
+      color: var(--muted-foreground);
+    }
+  }
+
+  .rowFork {
+    grid-column: 1 / 3;
+    justify-content: flex-start;
+    padding-left: var(--space-2);
+  }
+
+  .forkLabel {
+    display: inline;
+  }
+
+  .stageBar {
+    max-width: none;
+  }
+}

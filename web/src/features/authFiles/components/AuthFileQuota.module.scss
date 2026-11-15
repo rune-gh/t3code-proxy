@@ -1,0 +1,271 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Quota block inside an expanded Accounts row.
+ *
+ * Contract: the quota bodies look up every class in QUOTA_CLASS_KEYS
+ * (features/quota/types.ts) through bindQuotaClasses; a missing name throws
+ * at module load. Keep the names; restyle freely.
+ * ============================================================ */
+
+.quotaSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--text-sm);
+}
+
+.quotaMessage {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.quotaError {
+  font-size: var(--text-sm);
+  color: var(--destructive-foreground);
+  overflow-wrap: anywhere;
+}
+
+.quotaCardActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Quota rows ---------- */
+
+.quotaRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quotaRowHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quotaModel {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+.claudeExtraUsageTitle {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+
+  .quotaModel {
+    width: auto;
+  }
+}
+
+.claudeExtraUsageStatus {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.quotaMeta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.quotaPercent {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.quotaReset {
+  color: var(--muted-foreground);
+}
+
+.quotaResetRelative {
+  color: var(--muted-foreground);
+
+  &::before {
+    content: '·';
+    margin: 0 4px;
+  }
+}
+
+.quotaResetRelativeSoon {
+  color: var(--warning-foreground);
+}
+
+.quotaAmount {
+  font-family: $font-mono;
+  font-weight: 500;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* ---------- Progress bar ---------- */
+
+.quotaBar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  overflow: hidden;
+}
+
+.quotaBarFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width var(--duration) var(--ease-out);
+}
+
+.quotaBarFillHigh {
+  background: var(--success);
+}
+
+.quotaBarFillMedium {
+  background: var(--warning);
+}
+
+.quotaBarFillLow {
+  background: var(--destructive);
+}
+
+/* ---------- Plan chips ---------- */
+
+.codexPlan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.codexPlanItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.codexPlanLabel {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.codexPlanValue,
+.premiumPlanValue,
+.elitePlanValue {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+/* ---------- Antigravity groups ---------- */
+
+.antigravityQuotaGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  & + & {
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.antigravityQuotaGroupHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.antigravityQuotaGroupTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.antigravityQuotaGroupDescription {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* ---------- Codex reset credits ---------- */
+
+.codexResetCredits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.codexResetCreditsTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.codexResetCreditRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  font-size: var(--text-sm);
+}
+
+.codexResetCreditRowSoon {
+  padding: 2px 6px;
+  margin: 0 -6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--warning-surface);
+}
+
+.codexResetCreditLabel {
+  min-width: 0;
+  color: var(--muted-foreground);
+  @include text-ellipsis;
+}
+
+.codexResetCreditTime {
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.codexResetCreditsError {
+  font-size: var(--text-sm);
+  color: var(--destructive-foreground);
+  overflow-wrap: anywhere;
+}
+
+@include mobile {
+  .quotaRowHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .quotaModel {
+    width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}

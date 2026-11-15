@@ -1,0 +1,35 @@
+.results {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+
+.result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.identity {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.success {
+  color: var(--success-foreground);
+}
+
+.failure {
+  color: var(--destructive-foreground);
+}
+
+.error {
+  width: 100%;
+  margin: 0;
+  color: var(--muted-foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

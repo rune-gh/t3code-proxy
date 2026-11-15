@@ -1,0 +1,236 @@
+/**
+ * Theme tokens (CSS custom properties).
+ *
+ * Canonical tokens follow the T3 Code theme: --background, --foreground,
+ * --card, --popover, --sidebar, --muted, --muted-foreground, --accent,
+ * --border, --input, --primary, --ring and the status tokens. Light is the
+ * base; dark applies via [data-theme='dark'] or, when no explicit choice is
+ * stored, via prefers-color-scheme. index.html sets data-theme before first
+ * paint, so there is no flash of the wrong theme.
+ *
+ * The "Legacy aliases" block maps names that older feature stylesheets still
+ * consume onto the canonical tokens. Do not use them in new code; see
+ * web/DESIGN.md.
+ */
+
+@mixin light-tokens {
+  color-scheme: light;
+
+  --background: oklch(99.2% 0 0);
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --sidebar: #fafafa;
+  --muted: #fafafa;
+  --muted-foreground: #71717a;
+  --faint-foreground: #a1a1aa;
+  --accent: #f4f4f5;
+  --accent-foreground: var(--foreground);
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --input: #d4d4d8;
+  --primary: oklch(0.488 0.217 264);
+  --primary-foreground: #ffffff;
+  --ring: var(--primary);
+  --overlay: rgb(0 0 0 / 0.32);
+
+  --success: #10b981;
+  --success-foreground: #047857;
+  --warning: #f59e0b;
+  --warning-foreground: #b45309;
+  --destructive: #ef4444;
+  --destructive-foreground: #b91c1c;
+  --info: #3b82f6;
+  --info-foreground: #1d4ed8;
+  --tint: 8%;
+
+  --shadow-popover: 0 8px 24px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+
+  // Solid fills for legacy surfaces that must not be translucent
+  --solid-accent: #f4f4f5;
+  --solid-accent-hover: #e4e4e7;
+}
+
+@mixin dark-tokens {
+  color-scheme: dark;
+
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --card: color-mix(in srgb, #0a0a0a 97%, #ffffff);
+  --card-foreground: var(--foreground);
+  --popover: color-mix(in srgb, #0a0a0a 97%, #ffffff);
+  --popover-foreground: var(--foreground);
+  --sidebar: color-mix(in srgb, #0a0a0a 97%, #ffffff);
+  --muted: rgb(255 255 255 / 3%);
+  --muted-foreground: #a3a3a3;
+  --faint-foreground: #737373;
+  --accent: rgb(255 255 255 / 4%);
+  --accent-foreground: var(--foreground);
+  --border: rgb(255 255 255 / 8%);
+  --border-strong: rgb(255 255 255 / 14%);
+  --input: rgb(255 255 255 / 11%);
+  --primary: oklch(0.571 0.21 264);
+  --primary-foreground: #ffffff;
+  --ring: var(--primary);
+  --overlay: rgb(0 0 0 / 0.6);
+
+  --success: #10b981;
+  --success-foreground: #34d399;
+  --warning: #f59e0b;
+  --warning-foreground: #fbbf24;
+  --destructive: #ef4444;
+  --destructive-foreground: #f87171;
+  --info: #3b82f6;
+  --info-foreground: #60a5fa;
+  --tint: 16%;
+
+  --shadow-popover: 0 8px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+
+  --solid-accent: color-mix(in srgb, #0a0a0a 92%, #ffffff);
+  --solid-accent-hover: color-mix(in srgb, #0a0a0a 86%, #ffffff);
+}
+
+:root {
+  @include light-tokens;
+
+  // Theme-independent tokens
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-display: 32px;
+
+  --radius: 0.5rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --control-h-sm: 28px;
+  --control-h: 32px;
+  --control-h-lg: 36px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration: 160ms;
+}
+
+[data-theme='dark'] {
+  @include dark-tokens;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    @include dark-tokens;
+  }
+}
+
+/* Status tints, derived so they follow --tint per theme */
+:root,
+[data-theme] {
+  --success-surface: color-mix(in srgb, var(--success) var(--tint), transparent);
+  --warning-surface: color-mix(in srgb, var(--warning) var(--tint), transparent);
+  --destructive-surface: color-mix(in srgb, var(--destructive) var(--tint), transparent);
+  --info-surface: color-mix(in srgb, var(--info) var(--tint), transparent);
+  --primary-surface: color-mix(in srgb, var(--primary) var(--tint), transparent);
+
+  /* ---------------------------------------------------------------------
+   * Legacy aliases. Older feature stylesheets read these names; they map
+   * onto the canonical tokens above. Do not use them in new code.
+   * ------------------------------------------------------------------- */
+  --bg-secondary: var(--background);
+  --bg-primary: var(--card);
+  --bg-tertiary: var(--solid-accent);
+  --bg-hover: var(--solid-accent-hover);
+  --bg-quinary: var(--muted);
+  --bg-error-light: var(--destructive-surface);
+  --floating-surface: var(--popover);
+  --floating-shadow: var(--shadow-popover);
+
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-tertiary: var(--muted-foreground);
+  --text-quaternary: var(--faint-foreground);
+  --text-muted: var(--muted-foreground);
+
+  --border-color: var(--border);
+  --border-secondary: var(--border);
+  --border-primary: var(--input);
+  --border-hover: var(--border-strong);
+
+  --primary-color: var(--primary);
+  --primary-hover: color-mix(in srgb, var(--primary) 90%, var(--foreground));
+  --primary-active: color-mix(in srgb, var(--primary) 82%, var(--foreground));
+  --primary-contrast: var(--primary-foreground);
+  --primary-8: color-mix(in srgb, var(--primary) 8%, transparent);
+  --primary-10: color-mix(in srgb, var(--primary) 10%, transparent);
+  --primary-30: color-mix(in srgb, var(--primary) 30%, transparent);
+  --focus-ring-color: var(--ring);
+  --accent-color: var(--primary);
+
+  --success-color: var(--success);
+  --warning-color: var(--warning);
+  --error-color: var(--destructive);
+  --danger-color: var(--destructive);
+  --destructive-color: var(--destructive);
+  --info-color: var(--info);
+  --quota-medium-color: var(--warning);
+
+  --warning-bg: var(--warning-surface);
+  --warning-border: color-mix(in srgb, var(--warning) 32%, transparent);
+  --warning-text: var(--warning-foreground);
+  --amber-color: var(--warning);
+  --amber-text: var(--warning-foreground);
+  --amber-10: var(--warning-surface);
+  --amber-30: color-mix(in srgb, var(--warning) 32%, transparent);
+  --destructive-10: var(--destructive-surface);
+  --destructive-30: color-mix(in srgb, var(--destructive) 32%, transparent);
+
+  --success-badge-bg: var(--success-surface);
+  --success-badge-text: var(--success-foreground);
+  --success-badge-border: color-mix(in srgb, var(--success) 32%, transparent);
+  --failure-badge-bg: var(--destructive-surface);
+  --failure-badge-text: var(--destructive-foreground);
+  --failure-badge-border: color-mix(in srgb, var(--destructive) 32%, transparent);
+  --count-badge-bg: var(--solid-accent);
+  --count-badge-text: var(--muted-foreground);
+
+  --muted-bg: var(--muted);
+  --accent-bg: var(--accent);
+
+  /* Cards no longer cast shadows; a zero shadow keeps lists like
+     `box-shadow: var(--shadow), 0 0 0 3px ...` valid. */
+  --shadow: 0 0 #0000;
+  --shadow-lg: var(--shadow-popover);
+
+  /* Blur and glass are gone: these resolve to plain surfaces. */
+  --glass-backdrop-filter: none;
+  --glass-filter: none;
+  --glass-bg: var(--popover);
+  --glass-border: var(--border);
+
+  /* Chart series for success/failure counts */
+  --viz-success: var(--success);
+  --viz-failure: var(--destructive);
+
+  --ease-out-strong: var(--ease-out);
+  --dur-press: var(--duration-fast);
+  --dur-hover: var(--duration);
+}

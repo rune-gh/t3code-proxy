@@ -1,0 +1,31 @@
+# t3code-proxy as a node managed by a CLIProxyAPIHome control plane.
+# Copy .env.cluster.example to .env and set HOME_JWT, then:
+#   docker compose -f docker-compose.cluster.yml up -d
+services:
+  t3code-proxy:
+    image: ${T3CODE_PROXY_IMAGE:-ghcr.io/rune-oai/t3code-proxy:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    container_name: t3code-proxy-cluster
+    user: "${T3CODE_PROXY_UID:-10001}:${T3CODE_PROXY_GID:-10001}"
+    environment:
+      HOME_JWT: ${HOME_JWT:-}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8317:8317"
+    volumes:
+      - ${T3CODE_PROXY_DATA:-./data}:/data
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        if [ -z "$$HOME_JWT" ]; then
+          echo "HOME_JWT is required" >&2
+          exit 1
+        fi
+        exec /usr/local/bin/t3code-proxy -home-jwt "$$HOME_JWT"
+    restart: unless-stopped

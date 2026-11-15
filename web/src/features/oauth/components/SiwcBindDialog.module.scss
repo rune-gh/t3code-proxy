@@ -1,0 +1,176 @@
+@use '../../../styles/mixins' as *;
+
+/*
+ * Parts specific to the SIWC binding dialog: the account picker and the locked summary.
+ * Shell, steps, buttons and status come from OAuthFlowDialog.module.scss and the ui primitives.
+ */
+
+.picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+/* One bordered list with dividers rather than a stack of cards. */
+.options {
+  display: flex;
+  flex-direction: column;
+  max-height: 264px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overscroll-behavior: contain;
+}
+
+.option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  @include interactive-transition;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+
+  &:hover,
+  &[data-checked] {
+    background: var(--accent);
+  }
+
+  &:has(.radioInput:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+}
+
+/* Visually hidden; keeps native radio keyboard and screen reader behaviour. */
+.radioInput {
+  @include sr-only;
+}
+
+.radio {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--input);
+  border-radius: 50%;
+  background: var(--background);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0;
+  }
+}
+
+.option[data-checked] .radio {
+  border-color: var(--primary);
+
+  &::after {
+    opacity: 1;
+  }
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionName {
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+.optionNameMono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.optionMeta {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  @include text-ellipsis;
+}
+
+.skeletonRow {
+  display: block;
+  height: 48px;
+  background: var(--muted);
+  animation: siwc-pulse 1.2s ease-in-out infinite;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@keyframes siwc-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+
+.summaryLabel {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.summaryName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonRow {
+    animation: none;
+  }
+}

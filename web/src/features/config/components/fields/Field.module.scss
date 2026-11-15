@@ -1,0 +1,286 @@
+@use '../../../../styles/mixins' as *;
+
+/* Setting rows: one column, label and one-line help on the left, the control on a fixed
+   right-hand column so every control in the page starts on the same vertical line. */
+
+.fieldsRoot {
+  :global(.form-group) {
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  :global(textarea.input) {
+    min-height: 96px;
+  }
+}
+
+/* ---------- Setting list ---------- */
+
+.group {
+  container: setting-list / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.groupHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.groupDescription {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+/* ---------- Setting row ---------- */
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--setting-control-col, 320px);
+  align-items: center;
+  gap: 8px 24px;
+  min-width: 0;
+  padding: 12px 16px;
+  scroll-margin-top: var(--settings-sticky-offset, 96px);
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+
+  &:first-child {
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+  }
+
+  &:last-child {
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
+}
+
+/* Block editor row: copy on top, the editor spans the row below. */
+.rowBlock {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Blocks that bring their own heading (API keys). */
+.rowCell {
+  display: block;
+}
+
+.rowCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowLabel {
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* Switches only need their own width; the copy takes the rest of the row. */
+.rowToggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.rowToggle .rowLabel {
+  cursor: pointer;
+}
+
+.rowDescription {
+  max-width: 72ch;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rowError {
+  color: var(--destructive-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.rowNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--warning-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+}
+
+.rowControl {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rowControl > :global(.input),
+.rowControl > .controlGrow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Short numeric / duration inputs keep their width and sit at the end of the column. */
+.size_sm > .rowControl > :global(.input) {
+  flex: 0 0 128px;
+}
+
+.rowBlock .rowControl {
+  display: block;
+}
+
+.selectControl {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.restartBadge {
+  flex-shrink: 0;
+}
+
+.blockBadge {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.inputWithAdornment {
+  padding-right: 72px !important;
+}
+
+.adornment {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Secret input with inline reveal and copy buttons. */
+.secret {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+
+  :global(.input) {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--font-mono);
+  }
+}
+
+@container setting-list (max-width: 560px) {
+  .row:not(.rowToggle) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .row:not(.rowToggle) .rowControl {
+    justify-content: flex-start;
+  }
+
+  .size_sm > .rowControl > :global(.input) {
+    flex: 1 1 auto;
+  }
+}
+
+/* ---------- Search anchors and jump highlight ---------- */
+
+.fieldAnchor {
+  display: block;
+  min-width: 0;
+  scroll-margin-top: var(--settings-sticky-offset, 96px);
+}
+
+.fieldHighlightActive {
+  background-color: var(--primary-surface);
+  transition: background-color var(--duration) var(--ease-out);
+}
+
+/* ---------- Layout helpers inside block editors ---------- */
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+
+  @include mobile {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fieldShell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.fieldHint {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}

@@ -1,0 +1,76 @@
+.badge {
+  --badge-fg: var(--muted-foreground);
+  --badge-bg: var(--accent);
+  --badge-dot: var(--faint-foreground);
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.neutral {
+  --badge-fg: var(--muted-foreground);
+  --badge-bg: var(--accent);
+  --badge-dot: var(--faint-foreground);
+}
+
+.primary {
+  --badge-fg: var(--primary);
+  --badge-bg: var(--primary-surface);
+  --badge-dot: var(--primary);
+}
+
+.success {
+  --badge-fg: var(--success-foreground);
+  --badge-bg: var(--success-surface);
+  --badge-dot: var(--success);
+}
+
+.warning {
+  --badge-fg: var(--warning-foreground);
+  --badge-bg: var(--warning-surface);
+  --badge-dot: var(--warning);
+}
+
+.destructive {
+  --badge-fg: var(--destructive-foreground);
+  --badge-bg: var(--destructive-surface);
+  --badge-dot: var(--destructive);
+}
+
+.info {
+  --badge-fg: var(--info-foreground);
+  --badge-bg: var(--info-surface);
+  --badge-dot: var(--info);
+}
+
+.outline {
+  background: transparent;
+  border-color: var(--border);
+}
+
+.dot,
+.statusDot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge-dot);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+}

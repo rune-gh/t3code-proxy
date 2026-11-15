@@ -1,0 +1,121 @@
+@use '../../styles/mixins' as *;
+
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wrapFullWidth {
+  width: 100%;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  @include interactive-transition;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible,
+  &[aria-expanded='true'] {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.triggerSm {
+  height: var(--control-h-sm);
+  padding: 0 6px 0 8px;
+  font-size: var(--text-sm);
+}
+
+.triggerText {
+  @include text-ellipsis;
+}
+
+.placeholder {
+  color: var(--faint-foreground);
+}
+
+.triggerIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: transform var(--duration-fast) ease-out;
+
+  [aria-expanded='true'] > & {
+    transform: rotate(180deg);
+  }
+}
+
+.dropdown {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 280px;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+}
+
+.option {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--accent);
+  }
+}
+
+.optionActive {
+  background: var(--primary-surface);
+  font-weight: 500;
+
+  &:hover {
+    background: var(--primary-surface);
+  }
+}
+
+.optionHighlighted {
+  background: var(--accent);
+}

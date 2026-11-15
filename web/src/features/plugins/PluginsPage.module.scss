@@ -1,0 +1,84 @@
+@use '../../styles/mixins' as *;
+
+/* Plugins page shell: header with view tabs, page notices, toolbar, view panels.
+ * Rows, lists, the sheet and dialogs are styled in components/. */
+
+.page {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+
+  @include mobile {
+    gap: var(--space-4);
+  }
+}
+
+.updateDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  vertical-align: middle;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--warning-surface);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--warning-foreground);
+  }
+}
+
+[role='toolbar'] :global(.form-group) {
+  margin: 0;
+}
+
+.search:global(.input) {
+  width: 280px;
+  max-width: 100%;
+  height: var(--control-h-sm);
+}
+
+.summary {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  :global(.mono) {
+    font-size: var(--text-xs);
+  }
+}
+
+// One column on narrow screens either way; the choice only matters with room for a grid.
+.layoutSwitch {
+  @include mobile {
+    display: none;
+  }
+}
+
+.panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+
+  &[hidden] {
+    display: none;
+  }
+}

@@ -1,0 +1,70 @@
+@use '../../styles/mixins' as *;
+
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.labelLeft {
+  .label {
+    order: -1;
+  }
+}
+
+.disabled {
+  cursor: not-allowed;
+}
+
+.root input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.track {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: $radius-full;
+  background: var(--border-strong);
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+// The hidden native checkbox keeps focus; draw the ring on the track.
+.root input:focus-visible + .track {
+  @include focus-ring;
+}
+
+.disabled .track {
+  opacity: 0.5;
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: $radius-full;
+  background: #ffffff;
+  box-shadow: $shadow-sm;
+  transition: transform var(--duration-fast) ease-out;
+}
+
+.root input:checked + .track {
+  background: var(--primary);
+}
+
+.root input:checked + .track .thumb {
+  transform: translateX(14px);
+}
+
+.label {
+  color: var(--foreground);
+  font-size: var(--text-base);
+}

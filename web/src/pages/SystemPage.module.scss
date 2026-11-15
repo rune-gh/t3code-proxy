@@ -1,0 +1,156 @@
+/* System page: facts list, maintenance actions and the model table. */
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.fact {
+  display: contents;
+
+  dt,
+  dd {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+    margin: 0;
+    padding: 6px 16px;
+    font-size: var(--text-base);
+    overflow-wrap: anywhere;
+  }
+
+  dt {
+    color: var(--muted-foreground);
+  }
+
+  dd {
+    color: var(--foreground);
+  }
+
+  & + & dt,
+  & + & dd {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+.note {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.inlineError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.actionCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actionLabel {
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.actionHint {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.search {
+  min-width: 220px;
+}
+
+.count {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.skeletonRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 600px) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fact {
+    dt {
+      min-height: 0;
+      padding-bottom: 0;
+    }
+
+    dd {
+      min-height: 0;
+      padding-top: 2px;
+    }
+
+    & + & dd {
+      border-top: 0;
+    }
+  }
+
+  .action {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .search {
+    min-width: 0;
+    width: 100%;
+  }
+}

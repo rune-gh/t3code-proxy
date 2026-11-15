@@ -1,0 +1,166 @@
+@use '../../styles/mixins' as *;
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.textButton {
+  @include button-reset;
+  border-radius: var(--radius-sm);
+  color: var(--primary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.input,
+.readout {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-h-lg);
+  padding: 0 10px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--text-base);
+}
+
+.input {
+  @include interactive-transition;
+
+  &::placeholder {
+    color: var(--faint-foreground);
+  }
+
+  &:hover:not(:focus) {
+    border-color: var(--border-strong);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent);
+  }
+
+  &[aria-invalid='true'] {
+    border-color: var(--destructive);
+  }
+}
+
+.readout {
+  display: flex;
+  align-items: center;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.readoutText {
+  @include text-ellipsis;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputWithAction {
+  padding-right: 40px;
+}
+
+.iconButton {
+  position: absolute;
+  right: 4px;
+}
+
+.options {
+  display: flex;
+  align-items: center;
+}
+
+.checkboxLabel {
+  color: var(--muted-foreground);
+  font-size: var(--text-base);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.submit {
+  font-weight: 500;
+
+  // Busy and success states are disabled but should not look inactive.
+  &[data-state] {
+    opacity: 1;
+  }
+}
+
+.submitContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.successIcon {
+  flex-shrink: 0;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--destructive-surface);
+  color: var(--destructive-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+}

@@ -1,0 +1,140 @@
+@use '../../../styles/mixins' as *;
+
+/*
+ * Optional login proxy: a quiet disclosure above the provider tiles. While a value is set the
+ * collapsed row keeps showing it (masked), so an active proxy is never forgotten.
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.toggle {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-2);
+  max-width: 100%;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  @include interactive-transition;
+
+  &:hover {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+
+  /* Inset ring: the page transition layer clips anything drawn outside the content edge. */
+  &:focus-visible {
+    outline-offset: -2px;
+  }
+}
+
+.toggleIcon,
+.chevron {
+  flex-shrink: 0;
+}
+
+.toggleLabel {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.toggleStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statusText {
+  @include text-ellipsis;
+  min-width: 0;
+}
+
+.root[data-active] .statusText {
+  font-family: var(--font-mono);
+}
+
+.statusDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chevron {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.toggle[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+}
+
+.root[data-active] .toggleStatus {
+  color: var(--success-foreground);
+}
+
+.root[data-invalid] .toggleStatus {
+  color: var(--destructive-foreground);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 560px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+
+  &[aria-invalid='true'] {
+    border-color: var(--destructive);
+  }
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--destructive-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

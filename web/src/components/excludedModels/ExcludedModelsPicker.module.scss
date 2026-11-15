@@ -1,0 +1,477 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  min-width: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Trigger: summary plus a meter, instead of a count in the placeholder          */
+/* -------------------------------------------------------------------------- */
+
+.trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration) var(--ease-out),
+    background-color var(--duration) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+
+  /* A full-width element only needs a 0.99 press scale. */
+  &:active:not(:disabled) {
+    transform: scale(0.99);
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--ring);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      border-color: var(--border-strong);
+    }
+  }
+}
+
+.triggerText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triggerSpinner {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  animation: excluded-spin 900ms linear infinite;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.triggerOpen .chevron {
+  transform: rotate(180deg);
+}
+
+/* Hairline meter on the bottom edge: how much of the catalog is excluded. */
+.meter {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  background: var(--muted-foreground);
+  transition: width var(--duration) var(--ease-out);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inline expand via grid 0fr -> 1fr. Filtering changes the height on every       */
+/* keystroke; the grid track resolves it without measuring.                       */
+/* -------------------------------------------------------------------------- */
+
+.disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  /* Exit is faster and accelerates; there is no ease-in token, so use the keyword. */
+  transition: grid-template-rows 120ms ease-in;
+}
+
+.disclosureOpen {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration) var(--ease-out);
+}
+
+.disclosureInner {
+  /* Required: grid items default to min-height: auto and would not collapse. */
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  background: var(--background);
+  transform-origin: top;
+  animation: excluded-panel-in var(--duration) var(--ease-out) both;
+}
+
+/* Only `from` is set; the element's resting style defines the end state. */
+@keyframes excluded-panel-in {
+  from {
+    opacity: 0;
+    /* 0.98, not 0.95: on a wide panel 0.95 would shift it by ~30px. */
+    transform: scale(0.98);
+  }
+}
+
+@keyframes excluded-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Search                                                                      */
+/* -------------------------------------------------------------------------- */
+
+.searchRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 18px;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  padding: 6px 10px 6px 32px;
+  border: 1px solid var(--border);
+  border-radius: $radius-sm;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--ring);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* List                                                                        */
+/* -------------------------------------------------------------------------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: 7px 8px;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+}
+
+.rowHighlighted {
+  background: var(--accent);
+}
+
+.rowExcluded .checkbox {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--card);
+}
+
+/* Matched only by a rule: dimmed and not toggleable, but focusable and announced. */
+.rowLocked {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.checkbox {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: $radius-sm;
+  background: var(--card);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rowId {
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowDisplayName,
+.rowReason {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: $radius-full;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.badgeMuted {
+  border-style: dotted;
+  color: var(--muted-foreground);
+}
+
+.noResults {
+  margin: 0;
+  padding: $spacing-lg $spacing-sm;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sticky summary                                                              */
+/* -------------------------------------------------------------------------- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.footerCount {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footerButton {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background-color var(--duration) var(--ease-out),
+    color var(--duration) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background: var(--accent);
+      color: var(--foreground);
+    }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* No-catalog fallback and rule editor                                         */
+/* -------------------------------------------------------------------------- */
+
+.catalogNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.retryButton {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: $radius-sm;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out);
+
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+.chipsMore {
+  align-self: center;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.ruleEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ruleLabel {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ruleMatches {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+  }
+
+  code {
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+  }
+}
+
+/* Zero matches is a warning, not an error: a rule may target a model outside the catalog. */
+.ruleMatchNone {
+  color: var(--warning-foreground);
+}
+
+.ruleWarning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning-foreground);
+  font-size: 11px;
+}
+
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure,
+  .disclosureOpen {
+    transition: none;
+  }
+
+  .panel {
+    animation: none;
+  }
+
+  .trigger,
+  .chevron,
+  .meterFill,
+  .row,
+  .checkbox,
+  .footerButton,
+  .retryButton {
+    transition: none;
+  }
+
+  .triggerSpinner {
+    animation: none;
+  }
+
+  .trigger:active:not(:disabled),
+  .footerButton:active:not(:disabled),
+  .retryButton:active {
+    transform: none;
+  }
+}

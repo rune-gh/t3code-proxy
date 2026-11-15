@@ -1,0 +1,175 @@
+@use '../../../styles/mixins' as *;
+
+/* Provider choice. Brand identity lives only in the icon; status uses a Badge (text + dot). */
+
+.primary,
+.compact {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  @include interactive-transition;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &:has(.main:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.primary {
+  gap: var(--space-4);
+  min-height: 84px;
+  padding: var(--space-4);
+}
+
+.compact {
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.primary .glyph {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+}
+
+.glyphImage {
+  display: block;
+  object-fit: contain;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The button's ::after covers the whole tile, so the full surface is clickable. */
+.main {
+  @include button-reset;
+  @include text-ellipsis;
+  display: block;
+  max-width: 100%;
+  text-align: left;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--foreground);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  /* The tile draws the ring (see :has above). */
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.primary .main {
+  font-size: var(--text-md);
+}
+
+.caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.compact .caption {
+  flex-direction: row;
+  align-items: center;
+}
+
+.description {
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+.captionLine,
+.captionText {
+  min-width: 0;
+  @include text-ellipsis;
+}
+
+.captionLine {
+  display: flex;
+  align-items: center;
+}
+
+/* Looks like a secondary button; the real click target is the tile. */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  @include interactive-transition;
+}
+
+.primary:hover .cta {
+  background: var(--accent);
+}
+
+.trail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  @include interactive-transition;
+}
+
+.compact:hover .trail {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+@include mobile {
+  .primary {
+    gap: var(--space-3);
+    min-height: 72px;
+    padding: var(--space-3);
+  }
+
+  .cta {
+    display: none;
+  }
+}

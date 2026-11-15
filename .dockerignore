@@ -1,0 +1,42 @@
+# Version control and CI
+.git
+.github
+
+# Container and build tooling that the image does not need
+docker-compose*.yml
+.dockerignore
+Dockerfile
+dist
+bin
+
+# Built web panel and its dependencies (rebuilt in the web stage)
+web/node_modules
+web/dist
+internal/managementasset/embedded/management.html
+
+# Runtime data (mounted as a volume instead)
+data
+auths
+logs
+conv
+config.yaml
+.env
+
+# Documentation
+docs
+README_CN.md
+README_JA.md
+
+# Editors and agents
+.vscode
+.idea
+.claude
+.codex
+.codex-worktrees
+.gemini
+.serena
+.agent
+.agents
+.opencode
+.junie
+.worktrees

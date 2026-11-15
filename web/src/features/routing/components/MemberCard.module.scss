@@ -1,0 +1,261 @@
+@use '../../../styles/mixins' as *;
+
+/* One schedulable member: drag handle, brand mark, name/kind, share or state chip, menu. */
+
+.card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  height: 48px;
+  padding: 0 6px 0 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  cursor: grab;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:focus-within {
+    border-color: var(--border-strong);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    border-color: var(--border-strong);
+  }
+
+  .card:hover .handle {
+    color: var(--muted-foreground);
+  }
+}
+
+.card:focus-within .handle {
+  color: var(--muted-foreground);
+}
+
+.serving {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+}
+
+.muted {
+  opacity: 0.5;
+}
+
+.dragging {
+  opacity: 0.35;
+  transform: scale(0.98);
+}
+
+.locked {
+  cursor: default;
+
+  &:active {
+    cursor: default;
+  }
+}
+
+.handle {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--faint-foreground);
+  cursor: inherit;
+  transition: color var(--duration-fast) var(--ease-out);
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+
+  img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.name {
+  @include text-ellipsis;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.kind {
+  @include text-ellipsis;
+  font-size: 11.5px;
+  line-height: 1.2;
+  color: var(--muted-foreground);
+}
+
+.weight {
+  color: var(--muted-foreground);
+}
+
+.share {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--success-foreground);
+}
+
+.chip {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: $radius-full;
+  background: var(--accent);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.menuWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menuButton {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+
+  &[aria-expanded='true'] {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menuButton:hover {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: $z-dropdown;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  max-width: 240px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  box-shadow: var(--shadow-popover);
+  cursor: default;
+  transform-origin: top right;
+  animation: menuIn var(--duration-fast) var(--ease-out);
+
+  button {
+    @include button-reset;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    text-align: left;
+    color: var(--foreground);
+    cursor: pointer;
+
+    &:disabled {
+      color: var(--faint-foreground);
+      cursor: not-allowed;
+    }
+
+    &:focus-visible {
+      outline: none;
+      background: var(--accent);
+    }
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover:not(:disabled) {
+    background: var(--accent);
+  }
+}
+
+.menuNote {
+  margin: 0;
+  padding: 6px 10px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .handle,
+  .menuButton {
+    transition: none;
+  }
+
+  .menu {
+    animation: none;
+  }
+}

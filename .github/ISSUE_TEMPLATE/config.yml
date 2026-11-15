@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/rune-oai/t3code-proxy/tree/main/docs
+    about: Setup guides and configuration reference.
+  - name: Report a security vulnerability
+    url: https://github.com/rune-oai/t3code-proxy/security/policy
+    about: Please follow SECURITY.md and report privately instead of opening a public issue.

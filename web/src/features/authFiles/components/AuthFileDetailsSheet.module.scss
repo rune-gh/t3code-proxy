@@ -1,0 +1,100 @@
+/* Account settings sheet body. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 0;
+  justify-content: center;
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+}
+
+.error {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--destructive-foreground);
+  background: var(--destructive-surface);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+.jsonWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground);
+  background: var(--muted);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -1px;
+  }
+}
+
+.textareaInvalid {
+  border-color: var(--destructive) !important;
+}
+
+.invalidPreview {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settingsLink {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}

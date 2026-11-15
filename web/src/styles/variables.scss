@@ -1,0 +1,55 @@
+/**
+ * SCSS compile-time constants.
+ *
+ * Runtime colours live in themes.scss as CSS custom properties; prefer those
+ * (`var(--foreground)`, `var(--border)`, ...) in new code. The SCSS colours
+ * below exist only for Sass colour functions and for legacy feature styles.
+ * See web/DESIGN.md.
+ */
+
+// Colours (static approximations of the CSS tokens, for Sass functions only)
+$primary-color: #346bf1;
+$success-color: #10b981;
+$warning-color: #f59e0b;
+$error-color: #ef4444;
+
+// Spacing scale (4px grid)
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+$spacing-2xl: 48px;
+
+// Radius
+$radius-sm: 4px;
+$radius-md: 6px;
+$radius-lg: 8px;
+$radius-xl: 12px;
+$radius-full: 9999px;
+
+// Shadows: popovers, dialogs and toasts only
+$shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.06);
+$shadow-lg:
+  0 8px 24px -4px rgb(0 0 0 / 0.16),
+  0 2px 6px -2px rgb(0 0 0 / 0.08);
+
+// Motion
+$transition-fast: 120ms ease-out;
+$transition-normal: 160ms ease-out;
+
+// Breakpoints
+$breakpoint-mobile: 768px;
+$breakpoint-tablet: 1024px;
+
+// Z-index
+$z-dropdown: 1000;
+$z-modal: 2000;
+$z-notification: 3000;
+
+// Fonts
+$font-family:
+  -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+
+$font-mono:
+  ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;

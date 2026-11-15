@@ -1,0 +1,59 @@
+@use '../../styles/mixins' as *;
+
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.input {
+  @include sr-only;
+}
+
+.box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--primary-foreground);
+  @include interactive-transition;
+}
+
+.root:hover:not(.disabled) .box {
+  border-color: var(--border-strong);
+}
+
+.input:focus-visible + .box {
+  @include focus-ring;
+}
+
+.boxChecked,
+.root:hover:not(.disabled) .boxChecked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.boxChecked svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.5;
+}
+
+.label {
+  color: var(--foreground);
+  font-size: var(--text-base);
+}

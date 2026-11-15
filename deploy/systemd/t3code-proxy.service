@@ -1,0 +1,39 @@
+# systemd user unit for the t3code-proxy hub.
+#
+# Install (scripts/install.sh does all of this):
+#   cp t3code-proxy.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now t3code-proxy
+#   sudo loginctl enable-linger "$USER"   # keep running after logout and at boot
+#
+# Paths assume the default install dir ~/.local/share/t3code-proxy (%h is $HOME).
+# Logs: journalctl --user -u t3code-proxy -f
+
+[Unit]
+Description=t3code-proxy hub
+Documentation=https://github.com/rune-oai/t3code-proxy
+Wants=network-online.target
+After=network-online.target
+# Never give up restarting.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/t3code-proxy
+ExecStart=%h/.local/share/t3code-proxy/t3code-proxy -config %h/.local/share/t3code-proxy/config.yaml
+Restart=always
+RestartSec=5
+# Secrets and tokens stay private to the user.
+UMask=0077
+
+# Hardening that works in user units without extra privileges. Nothing here
+# hides or makes read-only the home directory: the auth dir, config, and quota
+# history live there and must stay writable.
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,223 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Plugin config sheet: settings-style grouped list. One rounded group per section,
+ * hairlines between rows; fields have no frames of their own.
+ * ============================================================ */
+
+.form,
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+}
+
+.section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.sectionTitle {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.group {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: $radius-lg;
+  background: var(--muted);
+  overflow: hidden;
+
+  > * + * {
+    border-top: 1px solid var(--border);
+  }
+}
+
+// ─── Rows ───────────────────────────────────────────────
+
+.switchRow,
+.fieldRow,
+.detailRow,
+.emptyRow,
+.skeletonRow {
+  min-width: 0;
+  padding: 12px $spacing-md;
+}
+
+.switchRow {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+.switchText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  :global(.form-group) {
+    margin: 0;
+  }
+
+  :global(.form-group label) {
+    font-size: var(--text-md);
+    overflow-wrap: anywhere;
+  }
+
+  :global(.form-group .hint) {
+    font-size: var(--text-sm);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+}
+
+.rowLabel {
+  color: var(--foreground);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.rowDescription {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.textarea {
+  min-height: 148px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: $radius-md;
+  padding: 10px 12px;
+  background: var(--card);
+  color: var(--foreground);
+  font-family: $font-mono;
+  font-size: var(--text-base);
+  line-height: 1.5;
+
+  &:focus-visible {
+    border-color: var(--ring);
+    outline: 1px solid var(--ring);
+    outline-offset: 0;
+  }
+}
+
+.fieldError {
+  padding: 8px 10px;
+  border-radius: $radius-sm;
+  background: var(--destructive-surface);
+  color: var(--destructive-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.emptyRow {
+  color: var(--muted-foreground);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+.skeletonRow {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+// ─── Details ────────────────────────────────────────────
+
+.details {
+  font-size: var(--text-base);
+  line-height: 1.45;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: $spacing-md;
+  padding-top: 10px;
+  padding-bottom: 10px;
+
+  dt {
+    color: var(--muted-foreground);
+  }
+
+  dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--foreground);
+    overflow-wrap: anywhere;
+  }
+
+  @include mobile {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+.mono {
+  font-family: $font-mono;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  transition: text-decoration-color var(--duration-fast) ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      text-decoration-color: currentColor;
+    }
+  }
+}
+
+// ─── Footer ─────────────────────────────────────────────
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+
+  @include mobile {
+    width: 100%;
+    flex-direction: column-reverse;
+
+    :global(.btn) {
+      width: 100%;
+    }
+  }
+}

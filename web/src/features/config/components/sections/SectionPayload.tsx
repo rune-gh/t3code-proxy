@@ -1,0 +1,131 @@
+import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Collapsible } from '@/components/ui/Collapsible';
+import type { PayloadFilterRule, PayloadRule } from '@/types/visualConfig';
+import type { ConfigSectionProps } from '../../types';
+import { SettingsSection } from '../SettingsSection';
+import { FieldAnchor, FieldStack } from '../fields/FieldPrimitives';
+import { PayloadFilterRulesEditor } from '../blocks/PayloadFilterRulesEditor';
+import { PayloadRulesEditor } from '../blocks/PayloadRulesEditor';
+
+export type SectionPayloadProps = ConfigSectionProps & {
+  /** With payload validation errors the groups remount open so the errors are visible. */
+  hasPayloadValidationErrors: boolean;
+};
+
+/** Payload rules: default, raw default, override, raw override and filter rule groups. */
+export function SectionPayload({
+  values,
+  disabled,
+  hasPayloadValidationErrors,
+  onChange,
+}: SectionPayloadProps) {
+  const { t } = useTranslation();
+  const payloadValidationKey = hasPayloadValidationErrors ? 'payload-errors' : 'payload-ok';
+
+  const handlePayloadDefaultRulesChange = useCallback(
+    (payloadDefaultRules: PayloadRule[]) => onChange({ payloadDefaultRules }),
+    [onChange]
+  );
+  const handlePayloadDefaultRawRulesChange = useCallback(
+    (payloadDefaultRawRules: PayloadRule[]) => onChange({ payloadDefaultRawRules }),
+    [onChange]
+  );
+  const handlePayloadOverrideRulesChange = useCallback(
+    (payloadOverrideRules: PayloadRule[]) => onChange({ payloadOverrideRules }),
+    [onChange]
+  );
+  const handlePayloadOverrideRawRulesChange = useCallback(
+    (payloadOverrideRawRules: PayloadRule[]) => onChange({ payloadOverrideRawRules }),
+    [onChange]
+  );
+  const handlePayloadFilterRulesChange = useCallback(
+    (payloadFilterRules: PayloadFilterRule[]) => onChange({ payloadFilterRules }),
+    [onChange]
+  );
+
+  return (
+    <SettingsSection id="payload">
+      <FieldStack>
+        <FieldAnchor fieldId="payloadDefaultRules">
+          <Collapsible
+            key={`payloadDefaultRules-${payloadValidationKey}`}
+            label={t('config_management.visual.sections.payload.default_rules')}
+            hint={t('config_management.visual.sections.payload.default_rules_desc')}
+            defaultOpen={hasPayloadValidationErrors}
+          >
+            <PayloadRulesEditor
+              value={values.payloadDefaultRules}
+              disabled={disabled}
+              onChange={handlePayloadDefaultRulesChange}
+            />
+          </Collapsible>
+        </FieldAnchor>
+
+        <FieldAnchor fieldId="payloadDefaultRawRules">
+          <Collapsible
+            key={`payloadDefaultRawRules-${payloadValidationKey}`}
+            label={t('config_management.visual.sections.payload.default_raw_rules')}
+            hint={t('config_management.visual.sections.payload.default_raw_rules_desc')}
+            defaultOpen={hasPayloadValidationErrors}
+          >
+            <PayloadRulesEditor
+              value={values.payloadDefaultRawRules}
+              disabled={disabled}
+              rawJsonValues
+              onChange={handlePayloadDefaultRawRulesChange}
+            />
+          </Collapsible>
+        </FieldAnchor>
+
+        <FieldAnchor fieldId="payloadOverrideRules">
+          <Collapsible
+            key={`payloadOverrideRules-${payloadValidationKey}`}
+            label={t('config_management.visual.sections.payload.override_rules')}
+            hint={t('config_management.visual.sections.payload.override_rules_desc')}
+            defaultOpen={hasPayloadValidationErrors}
+          >
+            <PayloadRulesEditor
+              value={values.payloadOverrideRules}
+              disabled={disabled}
+              protocolFirst
+              onChange={handlePayloadOverrideRulesChange}
+            />
+          </Collapsible>
+        </FieldAnchor>
+
+        <FieldAnchor fieldId="payloadOverrideRawRules">
+          <Collapsible
+            key={`payloadOverrideRawRules-${payloadValidationKey}`}
+            label={t('config_management.visual.sections.payload.override_raw_rules')}
+            hint={t('config_management.visual.sections.payload.override_raw_rules_desc')}
+            defaultOpen={hasPayloadValidationErrors}
+          >
+            <PayloadRulesEditor
+              value={values.payloadOverrideRawRules}
+              disabled={disabled}
+              protocolFirst
+              rawJsonValues
+              onChange={handlePayloadOverrideRawRulesChange}
+            />
+          </Collapsible>
+        </FieldAnchor>
+
+        <FieldAnchor fieldId="payloadFilterRules">
+          <Collapsible
+            key={`payloadFilterRules-${payloadValidationKey}`}
+            label={t('config_management.visual.sections.payload.filter_rules')}
+            hint={t('config_management.visual.sections.payload.filter_rules_desc')}
+            defaultOpen={hasPayloadValidationErrors}
+          >
+            <PayloadFilterRulesEditor
+              value={values.payloadFilterRules}
+              disabled={disabled}
+              onChange={handlePayloadFilterRulesChange}
+            />
+          </Collapsible>
+        </FieldAnchor>
+      </FieldStack>
+    </SettingsSection>
+  );
+}

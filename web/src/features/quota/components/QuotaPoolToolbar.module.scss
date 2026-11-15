@@ -1,0 +1,30 @@
+.triggerInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menuLabel {
+  padding: 6px 8px 2px;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.range {
+  min-width: 112px;
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.flip {
+  transform: scaleX(-1);
+}

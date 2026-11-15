@@ -1,0 +1,107 @@
+/* Accounts table under a pool. Meters are neutral; status shows as text too. */
+
+.table {
+  min-width: 720px;
+
+  td {
+    white-space: nowrap;
+  }
+}
+
+.accountCell {
+  max-width: 320px;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+}
+
+.plan {
+  color: var(--muted-foreground);
+}
+
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.track {
+  position: relative;
+  width: 56px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--muted-foreground);
+
+  &[data-level='low'] {
+    background: var(--warning);
+  }
+
+  &[data-level='empty'] {
+    background: var(--destructive);
+  }
+}
+
+.meterValue {
+  min-width: 34px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.none,
+.muted {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.reset {
+  span {
+    display: block;
+    line-height: 1.35;
+  }
+}
+
+.credits {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.creditCount {
+  min-width: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Disabled rows fade; exhausted rows keep full contrast and carry a badge. */
+.disabledRow td {
+  color: var(--muted-foreground);
+
+  .label,
+  .meterValue {
+    color: var(--muted-foreground);
+  }
+
+  .track {
+    opacity: 0.5;
+  }
+}

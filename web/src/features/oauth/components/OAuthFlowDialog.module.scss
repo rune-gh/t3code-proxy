@@ -1,0 +1,420 @@
+@use '../../../styles/mixins' as *;
+
+/*
+ * Sign-in dialog (also used by the Vertex import and SIWC binding dialogs): provider heading,
+ * a plain explanation, numbered steps, and a live status line in the footer.
+ */
+
+:global(.modal).dialog {
+  :global(.modal-footer) {
+    display: block;
+    padding: 0;
+  }
+}
+
+/* ---------- Heading ---------- */
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.headingGlyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.headingImage {
+  display: block;
+  object-fit: contain;
+}
+
+.headingText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.headingTitle {
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--foreground);
+  @include text-ellipsis;
+}
+
+.headingCaption {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+/* ---------- Body ---------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.explain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--foreground);
+}
+
+.how {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.proxyNote {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.proxyValue {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.alert {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--destructive-surface);
+  color: var(--destructive-foreground);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Steps ---------- */
+
+.steps {
+  counter-reset: oauth-step;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  counter-increment: oauth-step;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.stepIndex {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+
+  &::before {
+    content: counter(oauth-step);
+  }
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 20px;
+}
+
+.stepTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+.stepHint {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Sign-in link ---------- */
+
+.urlField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 2px 0 var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+
+.urlText {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1;
+  @include text-ellipsis;
+}
+
+.urlHost {
+  color: var(--foreground);
+}
+
+.urlRest {
+  color: var(--muted-foreground);
+}
+
+.urlSkeleton {
+  flex: 1;
+  height: 8px;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  animation: oauth-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes oauth-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ---------- Device code ---------- */
+
+.codeRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.code {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--foreground);
+  user-select: all;
+}
+
+/* ---------- Callback ---------- */
+
+.callbackRow {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.callbackInput {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.feedbackError,
+.feedbackSuccess {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.feedbackError {
+  color: var(--destructive-foreground);
+}
+
+.feedbackSuccess {
+  color: var(--success-foreground);
+}
+
+.spinning {
+  animation: oauth-spin 0.8s linear infinite;
+}
+
+@keyframes oauth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Footer status ---------- */
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
+}
+
+.statusText {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--foreground);
+}
+
+.statusLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.statusBar[data-tone='error'] .statusText {
+  color: var(--destructive-foreground);
+}
+
+/* Bare dot for dialogs that do not use StatusDot. */
+.statusDot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--info);
+}
+
+.pulse,
+.statusDot {
+  animation: oauth-pulse 1.6s ease-in-out infinite;
+}
+
+.statusAside {
+  flex-shrink: 0;
+  padding-right: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  text-align: right;
+}
+
+/* ---------- Success ---------- */
+
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  text-align: center;
+}
+
+.successMark {
+  margin-bottom: var(--space-2);
+  color: var(--success);
+}
+
+.resultTitle {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.resultHint {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.resultActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* ---------- Narrow screens ---------- */
+
+@include mobile {
+  .statusBar {
+    padding-left: var(--space-4);
+  }
+
+  .statusAside {
+    display: none;
+  }
+
+  .callbackRow {
+    flex-direction: column;
+  }
+
+  .callbackInput {
+    flex: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .urlSkeleton,
+  .pulse,
+  .statusDot {
+    animation: none;
+  }
+
+  .spinning {
+    animation-duration: 1.6s;
+  }
+}

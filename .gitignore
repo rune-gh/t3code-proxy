@@ -1,0 +1,74 @@
+# Binaries
+cli-proxy-api
+t3code-proxy
+/dist/
+*.exe
+
+# Configuration
+config.yaml
+.env
+
+# Generated content
+bin/*
+/logs
+conv/*
+temp/*
+refs/*
+plugins/*
+examples/plugin/bin/*
+
+# Storage backends
+pgstore/*
+gitstore/*
+objectstore/*
+
+# Static assets
+static/*
+
+# Authentication data
+auths/*
+/auths
+!auths/.gitkeep
+
+# Agent instruction overrides
+GEMINI.md
+AGENTS.override.md
+
+# Tooling metadata
+.vscode/*
+.worktrees/
+.codex/*
+.claude/*
+.claude
+.gemini/*
+.serena/*
+.agent/*
+.agents
+.pi
+.agents/*
+.opencode/*
+.idea/*
+.beads/*
+.bmad/*
+_bmad/*
+_bmad-output/*
+.gocache/
+.gitnexus/
+
+# macOS
+.DS_Store
+._*
+
+# docker
+docker-compose.override.yml
+
+
+# Local LLM Wiki vault
+.llm-wiki
+
+# Example plugin build outputs
+examples/plugin/*/go/go
+
+# Management panel embedded at build time (copied from web/dist/index.html)
+internal/managementasset/embedded/management.html
+examples/realtime-openai-go/realtime-openai-go

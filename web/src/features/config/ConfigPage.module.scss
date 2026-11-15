@@ -1,0 +1,130 @@
+@use '../../styles/mixins' as *;
+
+/* Settings page shell: navigation column plus one column of sections. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
+}
+
+.statusError {
+  max-width: 360px;
+  color: var(--destructive-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.loadError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: 32px;
+  min-width: 0;
+}
+
+.aside {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+}
+
+.asideInner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+  max-width: 880px;
+}
+
+.advanced {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.advancedSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-sm);
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::before {
+    content: '';
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    margin-right: 2px;
+    border-right: 1.5px solid var(--muted-foreground);
+    border-bottom: 1.5px solid var(--muted-foreground);
+    transform: translateY(-2px) rotate(-45deg);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.advanced[open] > .advancedSummary::before {
+  transform: translateY(-3px) rotate(45deg);
+}
+
+.advancedTitle {
+  color: var(--foreground);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.advancedHint {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding-top: 24px;
+}
+
+.skeletonSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .aside {
+    position: static;
+  }
+}

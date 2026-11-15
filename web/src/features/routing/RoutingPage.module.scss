@@ -1,0 +1,648 @@
+@use '../../styles/mixins' as *;
+
+/* ============================================================
+ * Routing: settings sections, then the priority tier ladder.
+ * ============================================================ */
+
+// One vertical axis: the rail runs through the centre of every tier index.
+$tier-pad: 12px;
+$index-size: 20px;
+$rail-x: $tier-pad + 1px + 10px; // tier border + padding + half the index
+$label-x: $tier-pad + 1px + $index-size + 8px; // where tier names begin
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  min-width: 0;
+  /* While the save bar is up, leave room to scroll the last row above it. */
+  padding-bottom: calc(
+    var(--routing-action-bar-height, 0px) + var(--space-4) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.inlineError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.mutedText {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.srOnly {
+  @include sr-only;
+}
+
+/* ---------- strategy ---------- */
+
+.strategyList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.strategyOption,
+.strategyOptionActive {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+
+  &[data-disabled] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  &:has(:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .strategyOption:not([data-disabled]):hover {
+    border-color: var(--border-strong);
+  }
+}
+
+.strategyOptionActive {
+  border-color: var(--primary);
+  background: var(--primary-surface);
+}
+
+.strategyRadio {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+  cursor: inherit;
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.strategyText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.strategyName {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.strategyDesc {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.srfDetails {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.srfBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.subTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.ruleList {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+
+  li + li {
+    margin-top: var(--space-1);
+  }
+}
+
+.orderGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+.orderProvider {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.orderRankCol {
+  width: 72px;
+}
+
+.orderAccount {
+  display: block;
+  max-width: 260px;
+  @include text-ellipsis;
+}
+
+/* ---------- affinity and retries ---------- */
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6) var(--space-8);
+  align-items: start;
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--control-h);
+}
+
+.switchLabel {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.narrowField {
+  max-width: 320px;
+
+  :global(.form-group) {
+    margin-bottom: 0;
+  }
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+
+  :global(.form-group) {
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 1200px) {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 320px;
+  }
+
+  @include mobile {
+    max-width: none;
+  }
+}
+
+/* ---------- priority and weights ---------- */
+
+.strategyNote {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.footnote {
+  max-width: 72ch;
+  margin: 0;
+  padding-left: $label-x;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+
+  @include mobile {
+    padding-left: 0;
+  }
+}
+
+/* ---------- ladder ---------- */
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry,
+.exhausted {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--control-h);
+  padding-left: $label-x;
+}
+
+/* Pinned to the first line so the dot stays on the rail when the picker wraps below. */
+.entryDot,
+.exhaustedDot {
+  position: absolute;
+  left: $rail-x - 4px;
+  top: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.entryDot {
+  background: var(--success);
+}
+
+.exhaustedDot {
+  border: 1.5px solid var(--muted-foreground);
+  background: var(--background);
+}
+
+.entryLabel,
+.exhaustedText {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+}
+
+.entryLabel {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.entryControl {
+  flex: 1 1 240px;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.exhaustedText {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.modelPicker {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  width: min(100%, 320px);
+}
+
+.modelInput {
+  width: 100%;
+  margin: 0;
+}
+
+.modelField:global(.input) {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.modelProgress {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* Gaps carry the rail between tiers and open into drop zones while dragging. */
+
+.gap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 16px;
+  padding-left: $label-x;
+  transition: min-height var(--duration-fast) var(--ease-out);
+}
+
+.rail {
+  position: absolute;
+  left: $rail-x;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--border-strong);
+}
+
+.gapOpen {
+  min-height: 52px;
+}
+
+.gapDrop {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.gapHover .gapDrop {
+  border-color: var(--primary);
+  background: var(--primary-surface);
+  color: var(--foreground);
+}
+
+/* ---------- tier ---------- */
+
+.tier {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: $tier-pad;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.tierHover {
+  border-color: var(--primary);
+}
+
+.tierHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  min-height: $index-size;
+}
+
+.tierIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: $index-size;
+  height: $index-size;
+  border-radius: 50%;
+  background: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.tierName {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.tierPriority,
+.tierPriorityChanged {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.tierPriorityChanged {
+  color: var(--warning-foreground);
+}
+
+/* State reads as a quiet status line on the right; its dot carries the colour. */
+.tierState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--muted-foreground);
+
+  &::before {
+    content: '';
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  @include mobile {
+    flex-basis: 100%;
+    margin-left: $index-size + 8px;
+  }
+}
+
+.tierMembers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: $index-size + 8px;
+
+  @include mobile {
+    padding-left: 0;
+  }
+}
+
+.tierActive {
+  .tierIndex {
+    background: var(--success-surface);
+    color: var(--success-foreground);
+  }
+
+  .tierState {
+    color: var(--success-foreground);
+    font-weight: 500;
+  }
+}
+
+.tierStandby .tierState::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px currentColor;
+}
+
+.tierCooling .tierState {
+  color: var(--warning-foreground);
+}
+
+.tierUnknown .tierState {
+  color: var(--muted-foreground);
+}
+
+/* Skipped tiers recede by outline, not opacity, so their (already dimmed) cards stay legible. */
+.tierSkipped {
+  border-style: dashed;
+  background: transparent;
+
+  .tierIndex {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+  }
+
+  .tierState::before {
+    background: var(--faint-foreground);
+  }
+}
+
+/* ---------- dialogs ---------- */
+
+.dialogHint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.dialogNotice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.weightList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.weightRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+
+  input {
+    width: 110px;
+    height: var(--control-h);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--input);
+    border-radius: var(--radius-md);
+    background: var(--background);
+    font-size: var(--text-base);
+    font-variant-numeric: tabular-nums;
+    color: var(--foreground);
+    text-align: right;
+
+    &:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 1px;
+    }
+  }
+}
+
+.weightLabel {
+  @include text-ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.changeList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 50vh;
+  margin: 0;
+  padding: 0 0 0 18px;
+  overflow-y: auto;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gap,
+  .gapDrop,
+  .tier,
+  .strategyOption,
+  .strategyOptionActive {
+    transition: none;
+  }
+}

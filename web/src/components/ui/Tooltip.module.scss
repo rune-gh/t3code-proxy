@@ -1,0 +1,26 @@
+.anchor {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: $z-notification + 1;
+  max-width: 280px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  pointer-events: none;
+  animation: tooltip-in var(--duration-fast) ease-out;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+  }
+}

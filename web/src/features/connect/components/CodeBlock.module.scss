@@ -1,0 +1,56 @@
+.block {
+  min-width: 0;
+  max-width: 760px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 2px 4px 2px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.copyContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 2;
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+}
