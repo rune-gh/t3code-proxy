@@ -510,9 +510,31 @@ export function nextResetAfter(
   if (resetsAt === null) return null;
   if (resetsAt > t) return resetsAt;
   if (!periodHours || periodHours <= 0) return null;
+  if (isCalendarMonth(periodHours)) {
+    // A monthly window turns over on the calendar month, not every 720 hours.
+    let next = resetsAt;
+    while (next <= t) next = addUtcMonth(next);
+    return next;
+  }
   const periodMs = periodHours * HOUR_MS;
   const periods = Math.floor((t - resetsAt) / periodMs) + 1;
   return resetsAt + periods * periodMs;
+}
+
+/** A period the length of a calendar month (28 to 31 days). */
+const isCalendarMonth = (periodHours: number): boolean =>
+  periodHours >= 28 * 24 && periodHours <= 31 * 24;
+
+/** The same instant one UTC calendar month later, clamped to the last day of a shorter month. */
+function addUtcMonth(t: number): number {
+  const date = new Date(t);
+  const day = date.getUTCDate();
+  const next = new Date(t);
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next.getTime();
 }
 
 /* ---------------------------------------------------------------------------

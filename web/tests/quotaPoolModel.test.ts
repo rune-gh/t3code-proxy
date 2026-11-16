@@ -861,6 +861,20 @@ describe('percent of the heaviest plan (owner pools)', () => {
     expect(view.nextReset?.amount).toBeCloseTo(3);
   });
 
+  test('a monthly window steps by calendar month, not by its length in hours', () => {
+    const dec1 = Date.UTC(2026, 11, 1);
+    // Recorded in November (720 hours); December has 744.
+    expect(nextResetAfter(dec1, 720, dec1 + H)).toBe(Date.UTC(2027, 0, 1));
+    expect(nextResetAfter(dec1, 720, Date.UTC(2027, 0, 1) + H)).toBe(Date.UTC(2027, 1, 1));
+    // A reset on the 31st lands on the last day of a shorter month.
+    expect(nextResetAfter(Date.UTC(2027, 0, 31), 744, Date.UTC(2027, 1, 1))).toBe(
+      Date.UTC(2027, 1, 28)
+    );
+    // Weekly windows are untouched.
+    expect(nextResetAfter(dec1, 168, dec1 + H)).toBe(dec1 + 168 * H);
+    expect(nextResetAfter(dec1, 720, dec1 - H)).toBe(dec1);
+  });
+
   test('an unweighted pool stays N × 100%', () => {
     const view = ownerView('codex', [
       { id: 'a', plan: 'plus', weight: 1, used: 50 },
