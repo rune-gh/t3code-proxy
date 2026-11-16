@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -172,6 +173,24 @@ func (f *lossFixture) awaitCompleted() {
 	}
 }
 
+// closeLossUpstreamAndWait sends EOF and waits for the hub to invalidate and close
+// its connection. Returning from the fake upstream alone does not establish that order.
+func closeLossUpstreamAndWait(t *testing.T, c *websocket.Conn) {
+	t.Helper()
+	tcpConn, ok := c.UnderlyingConn().(*net.TCPConn)
+	if !ok {
+		t.Errorf("upstream connection = %T, want *net.TCPConn", c.UnderlyingConn())
+		return
+	}
+	if errClose := tcpConn.CloseWrite(); errClose != nil {
+		t.Errorf("half-close upstream: %v", errClose)
+		return
+	}
+	if n, errRead := tcpConn.Read(make([]byte, 1)); n != 0 || !errors.Is(errRead, io.EOF) {
+		t.Errorf("waiting for hub to close upstream: read %d bytes, error %v, want EOF", n, errRead)
+	}
+}
+
 // awaitProbeCompleted sends creates until one completes. Errors are accepted only for the
 // event_id of the probe just sent.
 func (f *lossFixture) awaitProbeCompleted() {
@@ -236,30 +255,59 @@ func TestResponsesWebsocketUpstreamLossKeepsDownstreamOpen(t *testing.T) {
 }
 
 func TestResponsesWebsocketIdleUpstreamEOFIsSilent(t *testing.T) {
-	closed := make(chan struct{})
+	eofProcessed := make(chan struct{})
 	f := newLossFixture(t, false, func(index int, c *websocket.Conn, read func() []byte) {
 		read()
 		_ = c.WriteMessage(websocket.TextMessage, []byte(lossCompleted))
 		if index == 1 {
-			close(closed)
+			closeLossUpstreamAndWait(t, c)
+			close(eofProcessed)
 			return
 		}
 		read()
 	})
 	f.create("")
 	f.awaitCompleted()
-	<-closed
-	// A read deadline would break the client conn for good, so silence is checked in order:
-	// awaitCompleted fails on any error frame, and a loss frame would precede the completion.
-	// The idle socket is gone: a continuation cannot resume it.
-	f.create(`,"previous_response_id":"r2"`)
-	if got := ojson.GetBytesNoCopy(f.nextError(), "error.code").String(); got != "previous_response_not_found" {
-		t.Fatalf("continuation after idle EOF = %s", got)
+	<-eofProcessed
+	// The hub has observed the idle EOF. The next frame must answer this continuation,
+	// so an unsolicited loss frame also fails the assertion without a silence timeout.
+	f.create(`,"previous_response_id":"r2","event_id":"c2"`)
+	p := f.next()
+	if ojson.GetBytesNoCopy(p, "type").String() != "error" ||
+		ojson.GetBytesNoCopy(p, "status").Int() != http.StatusConflict ||
+		ojson.GetBytesNoCopy(p, "error.code").String() != "previous_response_not_found" ||
+		ojson.GetBytesNoCopy(p, "error.event_id").String() != "c2" {
+		t.Fatalf("continuation after idle EOF = %s, want 409 previous_response_not_found for c2", p)
 	}
 	f.create("")
 	f.awaitCompleted()
 	if f.connections.Load() != 2 {
 		t.Fatalf("connections=%d, want 2", f.connections.Load())
+	}
+}
+
+func TestResponsesWebsocketContinuationInFlightAtUpstreamEOFReportsLoss(t *testing.T) {
+	f := newLossFixture(t, false, func(index int, c *websocket.Conn, read func() []byte) {
+		read()
+		_ = c.WriteMessage(websocket.TextMessage, []byte(lossCompleted))
+		read() // On connection 1, observe the continuation before sending EOF.
+	})
+	f.create("")
+	f.awaitCompleted()
+	f.create(`,"previous_response_id":"r2","event_id":"c2"`)
+	p := f.next()
+	if ojson.GetBytesNoCopy(p, "error.code").String() != "upstream_websocket_lost" ||
+		ojson.GetBytesNoCopy(p, "error.event_id").String() != "c2" {
+		t.Fatalf("in-flight continuation at EOF = %s, want upstream_websocket_lost for c2", p)
+	}
+	f.create(`,"previous_response_id":"r2"`)
+	if p := f.next(); ojson.GetBytesNoCopy(p, "error.code").String() != "previous_response_not_found" {
+		t.Fatalf("continuation after loss = %s, want previous_response_not_found", p)
+	}
+	f.create("")
+	f.awaitCompleted()
+	if f.connections.Load() != 2 || f.creates.Load() != 3 {
+		t.Fatalf("connections=%d creates=%d, want 2 and 3 (no replay)", f.connections.Load(), f.creates.Load())
 	}
 }
 
@@ -466,12 +514,7 @@ func TestResponsesWebsocketQueuedInputBeforeIdleEOFIsNotSent(t *testing.T) {
 			read() // response.interrupt sent after c2, proving c2 is already queued at epoch 0
 			_ = c.WriteMessage(websocket.TextMessage, []byte(lossCompleted))
 			<-turn2Reached
-			if tcpConn, ok := c.UnderlyingConn().(*net.TCPConn); ok {
-				_ = tcpConn.CloseWrite()
-			} else {
-				_ = c.Close()
-			}
-			_, _ = c.UnderlyingConn().Read(make([]byte, 1))
+			closeLossUpstreamAndWait(t, c)
 			close(eofProcessed)
 			return
 		}
@@ -553,12 +596,7 @@ func TestResponsesWebsocketQueuedContinuationBeforeIdleEOFIs409(t *testing.T) {
 			read() // response.interrupt sent after c2, proving c2 is already queued at epoch 0
 			_ = c.WriteMessage(websocket.TextMessage, []byte(lossCompleted))
 			<-turn2Reached
-			if tcpConn, ok := c.UnderlyingConn().(*net.TCPConn); ok {
-				_ = tcpConn.CloseWrite()
-			} else {
-				_ = c.Close()
-			}
-			_, _ = c.UnderlyingConn().Read(make([]byte, 1))
+			closeLossUpstreamAndWait(t, c)
 			close(eofProcessed)
 			return
 		}

@@ -493,6 +493,10 @@ func (s *Service) runHomeSubscriber(homeCtx context.Context, parentCtx context.C
 
 	var previousClient *home.Client
 	var retryBackoff homeSubscriberRetryBackoff
+	waitRetry := s.homeSubscriberRetryWait
+	if waitRetry == nil {
+		waitRetry = waitForHomeSubscriberRetry
+	}
 	registry := executionregistry.New()
 	cancelBound := atomic.Int64{}
 	cancelBound.Store(int64(internalconfig.CredentialConcurrencyConfig{}.WithDefaults().CPACancelBound))
@@ -626,7 +630,7 @@ func (s *Service) runHomeSubscriber(homeCtx context.Context, parentCtx context.C
 			} else {
 				log.Warnf("home config subscription lifetime ended; retrying in %s: %v", retryDelay, errRun)
 			}
-			if retryDelay > 0 && !waitForHomeSubscriberRetry(homeCtx, retryDelay) {
+			if retryDelay > 0 && !waitRetry(homeCtx, retryDelay) {
 				return
 			}
 			previousClient = client
