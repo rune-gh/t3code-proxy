@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Run the standalone Antigravity CLI (`agy acp`) as T3 Code's Antigravity runtime.
+
+Why: the standalone CLI honours AGY_LLM_GATEWAY_URL, so its model list and requests come from
+the home hub (t3code-proxy). T3 Code's bundled runtime ignores that setting.
+
+The only translation is the session mode names. T3 Code drives the runtime with the bundled
+runtime's names; the standalone CLI uses different ones:
+
+    T3 Code (bundled)   standalone agy
+    default             default
+    auto_edit           accept-edits
+    yolo                accept-edits   (T3 Code answers permission requests itself in Full access)
+
+Everything else passes through byte for byte. To stop using this, clear the Antigravity
+"Binary path" in T3 Code's provider settings.
+"""
+import json
+import os
+import subprocess
+import sys
+import threading
+
+TO_AGY = {"auto_edit": "accept-edits", "yolo": "accept-edits"}
+FROM_AGY = {"accept-edits": "auto_edit"}
+T3_MODES = [
+    {"value": "default", "name": "Default", "id": "default"},
+    {"value": "auto_edit", "name": "Accept edits", "id": "auto_edit"},
+    {"value": "yolo", "name": "Full access", "id": "yolo"},
+]
+
+
+def to_agent(message):
+    """Rewrite T3 Code's mode names in requests it sends to the CLI."""
+    params = message.get("params")
+    if not isinstance(params, dict):
+        return message
+    method = message.get("method")
+    if method == "session/set_mode" and params.get("modeId") in TO_AGY:
+        params["modeId"] = TO_AGY[params["modeId"]]
+    elif method == "session/set_config_option" and params.get("configId") == "mode" and params.get("value") in TO_AGY:
+        params["value"] = TO_AGY[params["value"]]
+    return message
+
+
+def fix_config_options(options):
+    if not isinstance(options, list):
+        return
+    for option in options:
+        if isinstance(option, dict) and (option.get("id") == "mode" or option.get("category") == "mode"):
+            option["options"] = [{"value": m["value"], "name": m["name"]} for m in T3_MODES]
+            option["currentValue"] = FROM_AGY.get(option.get("currentValue"), option.get("currentValue"))
+
+
+def fix_modes(modes):
+    if not isinstance(modes, dict):
+        return
+    modes["availableModes"] = [{"id": m["id"], "name": m["name"]} for m in T3_MODES]
+    modes["currentModeId"] = FROM_AGY.get(modes.get("currentModeId"), modes.get("currentModeId"))
+
+
+def to_client(message):
+    """Present the CLI's modes under the names T3 Code expects."""
+    result = message.get("result")
+    if isinstance(result, dict):
+        fix_config_options(result.get("configOptions"))
+        fix_modes(result.get("modes"))
+    params = message.get("params")
+    if isinstance(params, dict):
+        update = params.get("update")
+        if isinstance(update, dict):
+            fix_config_options(update.get("configOptions"))
+            if update.get("currentModeId") in FROM_AGY:
+                update["currentModeId"] = FROM_AGY[update["currentModeId"]]
+    return message
+
+
+def pump(source, sink, rewrite):
+    for raw in iter(source.readline, b""):
+        line = raw
+        stripped = raw.strip()
+        if stripped.startswith(b"{"):
+            try:
+                line = (json.dumps(rewrite(json.loads(stripped)), separators=(",", ":")) + "\n").encode()
+            except (ValueError, TypeError):
+                line = raw
+        sink.write(line)
+        sink.flush()
+    try:
+        sink.close()
+    except OSError:
+        pass
+
+
+def main():
+    agy = os.path.expanduser("~/.local/bin/agy")
+    child = subprocess.Popen([agy, "acp", *sys.argv[1:]], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    inbound = threading.Thread(target=pump, args=(sys.stdin.buffer, child.stdin, to_agent), daemon=True)
+    inbound.start()
+    pump(child.stdout, sys.stdout.buffer, to_client)
+    sys.exit(child.wait())
+
+
+if __name__ == "__main__":
+    main()

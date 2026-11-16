@@ -65,6 +65,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by plan weight instead of evenly.
 - New logo: a fox head in profile, white and silver on the black tile.
 
+### Added
+
+- `deploy/t3code/agy-acp`: runs the standalone Antigravity CLI as T3 Code's Antigravity runtime,
+  so T3 Code shows the hub's whole Antigravity catalogue. Setup in `docs/t3code.md`.
+
 ### Fixed
 
 - Two Mistral keys of one customer (a console key and a Vibe key) are recorded as one account,
