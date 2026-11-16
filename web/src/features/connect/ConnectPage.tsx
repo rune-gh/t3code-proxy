@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { IconCopy, IconEye, IconEyeOff } from '@/components/ui/icons';
+import { IconCopy, IconEye, IconEyeOff, IconShield } from '@/components/ui/icons';
 import { apiKeyNameFingerprint, readApiKeyNames } from '@/features/config/apiKeyNames';
 import { modelsApi } from '@/services/api/models';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
@@ -19,6 +19,11 @@ import {
   buildClaudeSettings,
   buildCodexConfig,
   buildCurlCheck,
+  buildGeminiCheck,
+  buildGeminiEnv,
+  buildMuseCodeCheck,
+  buildOpenAIEnv,
+  buildOpenCodeConfig,
   isLoopbackAddress,
   maskKey,
   normalizeHubAddress,
@@ -223,6 +228,13 @@ export function ConnectPage() {
           copyLabel={t('connect.copy_claude')}
         />
         <p className={styles.hint}>{t('connect.claude_merge_hint')}</p>
+        <div className={styles.rulesNote} role="note" aria-label={t('connect.rules_title')}>
+          <IconShield size={16} className={styles.rulesIcon} aria-hidden="true" />
+          <ul className={styles.rulesList}>
+            <li>{t('connect.rules_own_traffic')}</li>
+            <li>{t('connect.rules_claude_code')}</li>
+          </ul>
+        </div>
       </Section>
 
       <Section title={t('connect.codex_title')} description={t('connect.codex_description')}>
@@ -236,6 +248,61 @@ export function ConnectPage() {
         <p className={styles.hint}>
           <Trans i18nKey="connect.codex_websockets_hint" components={{ code }} />
         </p>
+      </Section>
+
+      <Section title={t('connect.openai_title')} description={t('connect.openai_description')}>
+        <CodeBlock
+          code={buildOpenAIEnv(shown)}
+          copyText={buildOpenAIEnv(real)}
+          label={t('connect.label_shell')}
+          copyLabel={t('connect.copy_openai')}
+        />
+        <p className={styles.hint}>
+          <Trans i18nKey="connect.openai_hint" components={{ code }} />
+        </p>
+      </Section>
+
+      <Section title={t('connect.opencode_title')} description={t('connect.opencode_description')}>
+        <CodeBlock
+          code={buildOpenCodeConfig(shown)}
+          copyText={buildOpenCodeConfig(real)}
+          label="~/.config/opencode/opencode.json"
+          path
+          copyLabel={t('connect.copy_opencode')}
+        />
+        <p className={styles.hint}>
+          <Trans i18nKey="connect.opencode_hint" components={{ code }} />
+        </p>
+      </Section>
+
+      <Section title={t('connect.gemini_title')} description={t('connect.gemini_description')}>
+        <CodeBlock
+          code={buildGeminiEnv(shown)}
+          copyText={buildGeminiEnv(real)}
+          label={t('connect.label_shell')}
+          copyLabel={t('connect.copy_gemini')}
+        />
+        <p className={styles.hint}>
+          <Trans i18nKey="connect.gemini_hint" components={{ code }} />
+        </p>
+        <CodeBlock
+          code={buildGeminiCheck(shown)}
+          copyText={buildGeminiCheck(real)}
+          label={t('connect.label_shell')}
+          copyLabel={t('connect.copy_gemini_check')}
+        />
+      </Section>
+
+      <Section title={t('connect.muse_title')} description={t('connect.muse_description')}>
+        <p className={styles.hint}>
+          <Trans i18nKey="connect.muse_hint" components={{ code }} />
+        </p>
+        <CodeBlock
+          code={buildMuseCodeCheck(shown)}
+          copyText={buildMuseCodeCheck(real)}
+          label={t('connect.label_shell')}
+          copyLabel={t('connect.copy_muse_check')}
+        />
       </Section>
 
       <Section title={t('connect.separate_title')} description={t('connect.separate_description')}>

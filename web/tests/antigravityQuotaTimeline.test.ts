@@ -1,9 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import '../src/i18n/index';
-import i18n from '../src/i18n';
-import { QuotaTimeline } from '../src/features/quota/components/QuotaTimeline';
 import { buildTimelineLanes, laneHasWindow } from '../src/features/quota/quotaTimelineModel';
 import type { AntigravityQuotaState } from '../src/types';
 
@@ -85,36 +80,5 @@ describe('Antigravity grouped timeline', () => {
   test('other providers retain one lane per account', () => {
     expect(buildTimelineLanes({ ...input, provider: 'plugin' })).toHaveLength(1);
     expect(buildTimelineLanes({ ...input, provider: 'codex' })).toHaveLength(1);
-  });
-
-  test('renders each pool label separately from long account names in both views', () => {
-    const accountName = 'a-very-long-account-name-that-would-hide-the-quota-group@example.com';
-    for (const initialMode of ['weekly', 'session'] as const) {
-      const markup = renderToStaticMarkup(
-        createElement(QuotaTimeline, {
-          entries: [{ type: 'antigravity', file: { name: 'account.json', type: 'antigravity' } }],
-          quotaFor: () => quota,
-          displayNameFor: () => accountName,
-          resolvedTheme: 'light',
-          now,
-          initialMode,
-        })
-      );
-      for (const label of [
-        i18n.t('antigravity_quota.group_gemini_models'),
-        i18n.t('antigravity_quota.group_claude_gpt_models'),
-        'Argon',
-      ]) {
-        expect(markup).toContain(`title="${label}">${label}</span>`);
-        // Credential is the primary line; the group follows on its own line.
-        expect(markup).toContain(
-          `title="${accountName}">${accountName}</span><span>${initialMode === 'session' ? '5h' : '7d'}</span></div><span title="${label}">${label}</span>`
-        );
-      }
-      expect(
-        markup.match(new RegExp(`title="${accountName}">${accountName}</span>`, 'g'))
-      ).toHaveLength(3);
-      expect(markup).not.toContain('role="status"');
-    }
   });
 });

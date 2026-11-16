@@ -1,0 +1,10 @@
+{
+  "config": {
+    "creditUsagePercent": "25",
+    "currentPeriod": {"type": "weekly", "start": "2026-11-13T00:00:00Z", "end": "2026-11-20T00:00:00Z"},
+    "monthlyLimit": {"val": 10000},
+    "used": {"val": 4500},
+    "billingPeriodStart": "2026-11-01T00:00:00Z",
+    "billingPeriodEnd": "2026-12-01T00:00:00Z"
+  }
+}

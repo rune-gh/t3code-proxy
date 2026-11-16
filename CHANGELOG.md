@@ -7,6 +7,67 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Mistral monthly API and Vibe Code budget history for API-key upstreams on `api.mistral.ai`,
+  with cached subscription plans and optional `budget` and `currency` window fields. These
+  usage-only windows use account weight 1.
+- Plan-aware routing and pooling. Each account's plan is resolved (Claude Pro, Max 5x, Max 20x;
+  Codex Plus, Pro, and so on) and given a capacity weight, overridable under
+  `routing.plan-weights` and readable at `GET /v8/management/routing/plan-weights`.
+  `soonest-reset-first` spreads new conversations by plan weight where accounts are otherwise
+  equal, and `routing.plan-headroom-reserve` keeps new conversations off accounts whose 5-hour
+  window is nearly used while another account has room.
+- Quota history and `soonest-reset-first` ranking for xAI, Antigravity, Kimi, Meta, Devin and
+  quota plugins, next to Claude and Codex. With `quota-history.enabled: true`, an upgraded hub now
+  polls the usage endpoints of all of these providers by default; `quota-history.providers`
+  limits which ones.
+- Web panel: the same pool card for every provider that reports renewing limits (from recorded
+  history, or from the latest live read when the recorder does not sample that provider), with
+  pooled figures in percent of the heaviest plan in the pool ("38% of 120%" for Max 5x + Pro),
+  plan weights saved on the hub, a group picker for providers with many windows such as
+  Antigravity, and Connect snippets for OpenAI-compatible tools, OpenCode, Gemini clients and
+  Muse Code.
+- Web panel Overview: a **Pools** / **Resets** switch. Resets is a calendar of every account
+  window across providers (current, upcoming and elapsed windows with what was left unspent at
+  each reset, banked Codex reset expiries with **Use reset**, monthly windows on the calendar
+  month), with a **Next resets** list of the soonest resets and their unspent allowance, a window
+  filter, and the Pools view's span controls. It replaces the old "Quota windows" timeline.
+- Web panel: Mistral, read by the hub with an API key and present only in the quota history, gets
+  a tab, a pool and calendar lanes; windows with a budget read in money beside percent.
+- `scripts/migrate-windows.ps1`, which replaces a running CLIProxyAPI Scheduled Task with
+  t3code-proxy: verified backup, detached switch, authenticated checks, automatic rollback, and a
+  named-backup rollback. `t3code-proxy doctor -check-config` validates a config without starting
+  a server.
+- Guides for every provider, for T3 Code environments over Tailscale (including Windows with
+  WSL 2), and an agent-readable box-setup checklist.
+
+### Changed
+
+- Web panel Overview: account cards are gone. Each row of an accounts table opens that account's
+  full read in place (windows and resets, plan details, Claude extra usage, Codex banked resets
+  and credit overage, xAI usage breakdown and pay-as-you-go, Antigravity groups, errors, and the
+  per-account actions); accounts without a renewing window list in the same table form. The plan
+  shares caption under the pool headline is removed (the weight editor stays behind the card's
+  sliders button), and account emails are shown by default with a **Hide emails** toggle.
+
+- A conversation bound by session affinity moves to another account before sending when the hub
+  already knows a window governing that model is spent on the bound account.
+- `soonest-reset-first` skips an account when any window governing the model is spent, and
+  response headers newer than a recorded reading overrule it.
+- Behavior change for hubs already on `soonest-reset-first`: the 5-hour headroom guard is on by
+  default (`routing.plan-headroom-reserve: 10`; `0` turns it off), and tied accounts are spread
+  by plan weight instead of evenly.
+- New logo: a fox head in profile, white and silver on the black tile.
+
+### Fixed
+
+- `soonest-reset-first` no longer sends new work to an account it knows is spent while the
+  account with allowance left is only on a short hold. Seen on a live hub: one "overloaded"
+  answer put the usable Codex account on a five-minute hold and the next conversations were
+  refused by the spent account with "usage limit reached", valid for two days. The hub now
+  answers with a cooldown error and the short wait.
+
 ## [0.1.0]
 
 First release as t3code-proxy. The code base starts from CLIProxyAPI v8.0.72; see

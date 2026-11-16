@@ -124,6 +124,69 @@ export function buildCurlCheck({ hub, key }: SnippetInput): string {
   return `curl -s ${shellQuote(url)} -H ${shellQuote(header)} | head -c 300`;
 }
 
+/** POSIX `export` lines; values are shell-quoted. */
+const exportLines = (vars: Array<[string, string]>) =>
+  vars.map(([name, value]) => `export ${name}=${shellQuote(value)}`).join('\n');
+
+/**
+ * OpenAI SDKs and tools that read the standard variables. The hub serves the
+ * OpenAI API (`/v1/chat/completions`, `/v1/responses`, `/v1/models`) under `/v1`.
+ */
+export function buildOpenAIEnv({ hub, key }: SnippetInput): string {
+  return exportLines([
+    ['OPENAI_BASE_URL', `${hubOr(hub)}/v1`],
+    ['OPENAI_API_KEY', keyOr(key)],
+  ]);
+}
+
+export const OPENCODE_PROVIDER_ID = 't3code-proxy';
+export const OPENCODE_MODEL_PLACEHOLDER = '<model id>';
+
+/** `~/.config/opencode/opencode.json`: an OpenAI-compatible provider pointed at `/v1`. */
+export function buildOpenCodeConfig({ hub, key }: SnippetInput): string {
+  const config = {
+    $schema: 'https://opencode.ai/config.json',
+    provider: {
+      [OPENCODE_PROVIDER_ID]: {
+        npm: '@ai-sdk/openai-compatible',
+        name: OPENCODE_PROVIDER_ID,
+        options: {
+          baseURL: `${hubOr(hub)}/v1`,
+          apiKey: keyOr(key),
+        },
+        models: { [OPENCODE_MODEL_PLACEHOLDER]: {} },
+      },
+    },
+  };
+  return JSON.stringify(config, null, 2);
+}
+
+/**
+ * Gemini API clients (Gemini CLI, Google GenAI SDKs). They append `/v1beta`
+ * themselves; the hub serves the Gemini API there and accepts the key in
+ * `x-goog-api-key`.
+ */
+export function buildGeminiEnv({ hub, key }: SnippetInput): string {
+  return exportLines([
+    ['GOOGLE_GEMINI_BASE_URL', hubOr(hub)],
+    ['GEMINI_API_KEY', keyOr(key)],
+  ]);
+}
+
+/** Check of the Gemini-style model list with the Gemini key header. */
+export function buildGeminiCheck({ hub, key }: SnippetInput): string {
+  const url = `${hubOr(hub)}/v1beta/models`;
+  const header = `x-goog-api-key: ${keyOr(key)}`;
+  return `curl -s ${shellQuote(url)} -H ${shellQuote(header)} | head -c 300`;
+}
+
+/** Check of the Muse Code model list the hub generates under `/muse-code`. */
+export function buildMuseCodeCheck({ hub, key }: SnippetInput): string {
+  const url = `${hubOr(hub)}/muse-code/models`;
+  const header = `Authorization: Bearer ${keyOr(key)}`;
+  return `curl -s ${shellQuote(url)} -H ${shellQuote(header)} | head -c 300`;
+}
+
 export const SEPARATE_INSTALL_COMMANDS = [
   'CLAUDE_CONFIG_DIR=~/.claude-hub claude',
   'CODEX_HOME=~/.codex-hub codex',

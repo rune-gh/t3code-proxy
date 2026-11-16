@@ -1,11 +1,17 @@
 # Documentation
 
-These pages cover running a t3code-proxy hub, connecting clients to it, and working on the code.
+These pages cover a hub for your subscription and API-key providers, plan-aware pooled limits,
+and T3 Code environments that reach the hub over Tailscale.
 
 ## Run a hub
 
 - [Setup guide](setup.md): pick the hub machine, install, sign accounts in, publish it over
   Tailscale and point Claude Code and Codex at it.
+- [Providers](providers.md) covers all subscription logins, API-key providers, Google AI Studio/Vertex
+  and OpenAI-compatible upstreams, with current quota and routing coverage.
+- [Environments](environments.md) covers remote T3 Code machines, their services and pairing,
+  and Windows plus WSL 2 as two environments.
+- [Set up a box](box-setup.md) gives an ordered checklist for an agent with SSH access to a new box.
 - [Guide for coding agents](agents.md): for an agent doing the setup on someone's behalf.
 - [T3 Code](t3code.md): use the hub from T3 Code and see pooled limits there.
 - [Routing](routing.md): how the hub picks an account for each request.

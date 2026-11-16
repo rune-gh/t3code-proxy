@@ -1019,6 +1019,25 @@ func (m *Manager) transientlyUnavailableSessionAffinityAuthIDs(ctx context.Conte
 	return authIDs
 }
 
+// coolingCandidates lists the accounts in pool (every account that could serve
+// the request, including ones this request already tried) that are kept out of
+// this pick only for a while (a quota cooldown or the hold after a transient upstream error
+// such as "overloaded"), with the time each one is back. Callers hold m.mu.
+func (m *Manager) coolingCandidates(ctx context.Context, pool []*Auth, routeModel string, now time.Time, clientHeaders ...http.Header) []coolingCandidate {
+	var cooling []coolingCandidate
+	for _, candidate := range pool {
+		if candidate == nil {
+			continue
+		}
+		checkModel := m.selectionModelForAuth(candidate, routeModel)
+		blocked, reason, next := isAuthBlockedForModelForRequest(ctx, candidate, checkModel, now, clientHeaders...)
+		if blocked && reason != blockReasonDisabled && next.After(now) {
+			cooling = append(cooling, coolingCandidate{auth: candidate, until: next})
+		}
+	}
+	return cooling
+}
+
 func restoreModelCooldownErrorModel(err error, requestedModel string) error {
 	if err == nil || requestedModel == "" {
 		return err
@@ -2329,7 +2348,7 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		_, weighted = affinitySelector.fallback.(*WeightedRoundRobinSelector)
 	}
 	trackPinnedAccounting := pinnedAuthID != "" && weighted
-	var accountingCandidates, affinityCandidates []*Auth
+	var accountingCandidates, affinityCandidates, heldPool []*Auth
 	if trackTransientAffinity {
 		affinityCandidates = make([]*Auth, 0, len(m.auths))
 	}
@@ -2357,6 +2376,10 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		if trackTransientAffinity {
 			affinityCandidates = append(affinityCandidates, candidate)
 		}
+		// Accounts this request already tried stay out of the pick, but one that is
+		// now on hold with allowance left is still a reason not to fall back to a
+		// spent account.
+		heldPool = append(heldPool, candidate)
 		if used {
 			continue
 		}
@@ -2391,6 +2414,7 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		accountingAuths = fullAvailable
 	}
 	transientAuthIDs := m.transientlyUnavailableSessionAffinityAuthIDs(ctx, selector, affinityCandidates, model, now, opts.Headers)
+	cooling := m.coolingCandidates(ctx, heldPool, model, now, opts.Headers)
 	m.mu.RUnlock()
 
 	selected, handled, excluded, errPick := m.pickViaPluginScheduler(ctx, pluginScheduler, provider, []string{provider}, model, opts, tried, available)
@@ -2426,10 +2450,12 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 				accountingAuths = nil
 			}
 			transientAuthIDs = m.transientlyUnavailableSessionAffinityAuthIDs(ctx, selector, affinityCandidates, model, now, opts.Headers)
+			cooling = m.coolingCandidates(ctx, heldPool, model, now, opts.Headers)
 			m.mu.RUnlock()
 		}
 		selectorCtx := selectorContextForAvailableAuths(ctx, selector, model)
 		selectorCtx = withSessionAffinityTransientAuthIDs(selectorCtx, transientAuthIDs)
+		selectorCtx = withCoolingCandidates(selectorCtx, cooling)
 		if accountingAuths != nil {
 			selectorCtx = context.WithValue(selectorCtx, weightedAccountingPoolKey{}, accountingAuths)
 		}
@@ -2817,7 +2843,7 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		_, weighted = affinitySelector.fallback.(*WeightedRoundRobinSelector)
 	}
 	trackPinnedAccounting := pinnedAuthID != "" && weighted
-	var accountingCandidates, affinityCandidates []*Auth
+	var accountingCandidates, affinityCandidates, heldPool []*Auth
 	if trackTransientAffinity {
 		affinityCandidates = make([]*Auth, 0, len(m.auths))
 	}
@@ -2855,6 +2881,10 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		if trackTransientAffinity {
 			affinityCandidates = append(affinityCandidates, candidate)
 		}
+		// Accounts this request already tried stay out of the pick, but one that is
+		// now on hold with allowance left is still a reason not to fall back to a
+		// spent account.
+		heldPool = append(heldPool, candidate)
 		if used {
 			continue
 		}
@@ -2889,6 +2919,7 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		accountingAuths = fullAvailable
 	}
 	transientAuthIDs := m.transientlyUnavailableSessionAffinityAuthIDs(ctx, selector, affinityCandidates, model, now, opts.Headers)
+	cooling := m.coolingCandidates(ctx, heldPool, model, now, opts.Headers)
 	m.mu.RUnlock()
 
 	selected, handled, excluded, errPick := m.pickViaPluginScheduler(ctx, pluginScheduler, "mixed", providers, model, opts, tried, available)
@@ -2924,10 +2955,12 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 				accountingAuths = nil
 			}
 			transientAuthIDs = m.transientlyUnavailableSessionAffinityAuthIDs(ctx, selector, affinityCandidates, model, now, opts.Headers)
+			cooling = m.coolingCandidates(ctx, heldPool, model, now, opts.Headers)
 			m.mu.RUnlock()
 		}
 		selectorCtx := selectorContextForAvailableAuths(ctx, selector, model)
 		selectorCtx = withSessionAffinityTransientAuthIDs(selectorCtx, transientAuthIDs)
+		selectorCtx = withCoolingCandidates(selectorCtx, cooling)
 		if accountingAuths != nil {
 			selectorCtx = context.WithValue(selectorCtx, weightedAccountingPoolKey{}, accountingAuths)
 		}

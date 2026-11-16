@@ -74,6 +74,8 @@ type scopedWeeklyState struct {
 	exhausted  bool
 	reset      time.Time
 	observedAt time.Time
+	// scoped marks a cap that governs only some models.
+	scoped bool
 }
 
 // modelScopeTokens splits a model ID into lower-case alphanumeric tokens.

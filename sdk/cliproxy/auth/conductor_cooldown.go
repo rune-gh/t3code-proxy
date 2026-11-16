@@ -175,6 +175,7 @@ func (m *Manager) setConfigSnapshotLocked(cfg *internalconfig.Config) bool {
 		m.homeSessionAliases.clear()
 	}
 	m.runtimeConfig.Store(cfg)
+	applyPlanRoutingConfig(cfg)
 	clearedCooldowns := m.clearDisabledCooldownStates(cfg)
 	if clearedCooldowns && oldCooldownStore != nil {
 		m.mu.Lock()
@@ -1080,6 +1081,11 @@ func (m *Manager) ResetQuota(ctx context.Context, authID string) (*Auth, []strin
 		m.mu.Unlock()
 		return nil, nil, nil
 	}
+	// A manual reset also drops recorded "spent" readings, so routing does not
+	// keep avoiding the account until the next poll.
+	ForgetQuotaWindows(authID)
+	ForgetScopedWeeklyWindows(authID)
+	ForgetShortWindowUsage(authID)
 
 	var cooldownRecordsBefore []CooldownStateRecord
 	trackCooldownState := m.cooldownStore != nil

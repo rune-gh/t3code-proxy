@@ -38,6 +38,9 @@ export function createResetCreditsFixture(now: number) {
       ],
     ],
     ['x2', [credit('cr_x2_a', 24 * 12)]],
+    // Owner pool (`&pool=owner`): the empty Plus account has one banked reset.
+    ['o-x1', [credit('cr_ox1_a', 24 * 9)]],
+    ['o-x2', []],
   ]);
   const redeemed = new Set<string>();
 

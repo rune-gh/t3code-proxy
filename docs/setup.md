@@ -1,10 +1,18 @@
 # Setup guide
 
-At the end of this guide you have one always-on machine at home running t3code-proxy with your
-Claude and Codex accounts signed in, reachable from your other machines over Tailscale, and
-Claude Code and Codex on those machines sending their requests through it.
+At the end of this guide you have one always-on machine at home running t3code-proxy, reachable
+from your other machines over Tailscale, with your chosen provider accounts and keys. Claude
+Code and Codex on those machines send requests through it. The examples start with Claude and
+Codex. [Providers](providers.md) covers every supported subscription login, API-key provider,
+AI Studio/Vertex and OpenAI-compatible upstream.
+
+The panel offers plan-aware pooled limits for supported providers. Check the
+[capability table](providers.md#capability-table) for current coverage and [routing](routing.md)
+for account selection.
 
 If a coding agent is doing the setup for you, point it at the [guide for agents](agents.md).
+Use [environments](environments.md) to run T3 Code on other machines and [box setup](box-setup.md)
+for the ordered SSH checklist.
 
 ## Before you start: risks and rules
 
@@ -233,6 +241,10 @@ docker compose exec t3code-proxy t3code-proxy -config /data/config.yaml -claude-
 Repeat each login once per account. Each OAuth login ends in a browser where you sign in to that
 account.
 
+For Antigravity, Kimi.com, Kimi.ai, xAI, Devin and Meta, follow
+[subscription logins](providers.md#subscription-logins). That page gives each callback or device
+flow and the matching client settings. API keys and Vertex imports are covered there too.
+
 ### Headless hub: tunnel the callback
 
 The Claude login redirects your browser to `http://localhost:54545/callback` on the machine
@@ -314,7 +326,9 @@ CODEX_HOME=~/.codex-hub codex
 
 Here `~/.claude-hub/settings.json` and `~/.codex-hub/config.toml` hold the hub settings.
 
-For T3 Code, see [T3 Code](t3code.md).
+For T3 Code, see [T3 Code](t3code.md). Configure these files on the machine running the
+[environment](environments.md), including when it is a remote home or cloud box. On Windows
+and WSL 2, configure the two users' homes separately.
 
 ## 8. Verify
 

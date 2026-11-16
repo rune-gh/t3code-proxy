@@ -122,6 +122,12 @@ func TestQuotaHistoryEndpoints(t *testing.T) {
 	}
 	sample := samples[0].(map[string]any)
 	window := sample["windows"].(map[string]any)["five_hour"].(map[string]any)
+	if _, exists := window["budget"]; exists {
+		t.Fatalf("legacy window gained a budget: %v", window)
+	}
+	if _, exists := window["currency"]; exists {
+		t.Fatalf("legacy window gained a currency: %v", window)
+	}
 	if sample["auth_index"] != "idx-1" || sample["error"] != "" || window["used_percent"] != 12.5 || window["resets_at"] != 1731610000000.0 || window["period_hours"] != 5.0 {
 		t.Fatalf("sample = %v", sample)
 	}

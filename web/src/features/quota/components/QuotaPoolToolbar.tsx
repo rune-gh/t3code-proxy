@@ -4,18 +4,18 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { Button, IconButton } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/DropdownMenu';
-import { IconChevronLeft, IconSlidersHorizontal } from '@/components/ui/icons';
+import { IconSlidersHorizontal } from '@/components/ui/icons';
 import { SegmentedControl } from '@/components/ui/Tabs';
 import { Toolbar } from '@/components/ui/Toolbar';
 import type { FutureUsage } from '../poolModel';
-import { formatMonthDay } from '../poolFormat';
 import type { PoolChartMode } from './PoolChart';
+import { SpanNav } from './SpanNav';
 import styles from './QuotaPoolToolbar.module.scss';
 
 export const BURN_WINDOWS = [1, 3, 6] as const;
@@ -124,31 +124,14 @@ export function QuotaPoolToolbar(props: QuotaPoolToolbarProps) {
         value={mode}
         onChange={onModeChange}
       />
-      <div className={styles.nav} role="group" aria-label={t('quota_pool.range_label')}>
-        <IconButton
-          size="sm"
-          aria-label={t('quota_pool.previous_span')}
-          icon={<IconChevronLeft size={16} />}
-          onClick={() => onShift(-1)}
-        />
-        <span className={styles.range}>
-          {t('quota_pool.range', {
-            start: formatMonthDay(spanStart, locale),
-            end: formatMonthDay(spanEnd, locale),
-          })}
-        </span>
-        <IconButton
-          size="sm"
-          aria-label={t('quota_pool.next_span')}
-          icon={<IconChevronLeft size={16} className={styles.flip} />}
-          onClick={() => onShift(1)}
-        />
-        {!isToday && (
-          <Button variant="ghost" size="sm" onClick={onToday}>
-            {t('quota_pool.today')}
-          </Button>
-        )}
-      </div>
+      <SpanNav
+        spanStart={spanStart}
+        spanEnd={spanEnd}
+        isToday={isToday}
+        onShift={onShift}
+        onToday={onToday}
+        locale={locale}
+      />
     </Toolbar>
   );
 }

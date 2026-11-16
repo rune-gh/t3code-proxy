@@ -10,7 +10,7 @@
   min-width: 0;
 }
 
-/* Account labels (emails / filenames) stay blurred until "Show emails". */
+/* "Hide emails" blurs account labels (emails / filenames). */
 .hideEmails [data-sensitive] {
   filter: blur(5px);
   user-select: none;
@@ -20,6 +20,26 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Provider tabs with the Pools / Resets switch at their end. */
+.tabsRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  flex-wrap: wrap-reverse;
+  min-width: 0;
+}
+
+.providerTabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.viewSwitch {
+  flex: 0 0 auto;
+  padding-bottom: 6px;
 }
 
 .tabIcon {
@@ -146,15 +166,6 @@
   }
 }
 
-/* ---------- card grid ---------- */
-
-.grid {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  align-items: stretch;
-}
-
 /* ---------- pagination ---------- */
 
 .pagination {
@@ -170,4 +181,59 @@
   font-variant-numeric: tabular-nums;
   color: var(--muted-foreground);
   white-space: nowrap;
+}
+
+/* One-time offer to move this browser's old plan weights to the hub. */
+.migration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--info-surface);
+}
+
+.migrationText {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.migrationActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Providers without a pool: one section each, headed like the pool cards. */
+.stockArea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.stockTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stockIcon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.stockMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  flex-wrap: wrap;
 }

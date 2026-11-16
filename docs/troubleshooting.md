@@ -7,6 +7,10 @@ finds most setup problems and prints a fix for each:
 t3code-proxy doctor -config ~/.local/share/t3code-proxy/config.yaml
 ```
 
+The hub serves subscription and API-key providers with different quota capabilities. Check
+[providers](providers.md) for the login and client API you are using. [Environments](environments.md)
+covers T3 Code service and pairing setup. [Box setup](box-setup.md) gives the checks in order.
+
 ## Codex returns 401 `token_invalidated`
 
 The account's OAuth grant is dead. Refreshing cannot bring it back, and restarting the hub does
@@ -103,3 +107,51 @@ the access key, not the management secret.
 
 Conversations are moving between accounts. See
 [check that affinity works](routing.md#check-that-affinity-works).
+
+## A provider works but has no pooled chart or reset rank
+
+Per-account quota, recorded pool charts and soonest-reset-first ranking have different provider
+coverage. Compare the [capability table](providers.md#capability-table), then check
+[quota history](quota-history.md) and [routing](routing.md). For plan-aware pool charts, set the
+plan weights to match your subscriptions. A missing plan weight counts as one account.
+
+T3 Code's Limits view has its own [provider coverage](t3code.md#what-appears-under-limits).
+Seeing an account in the hub's Accounts page establishes that the hub loaded its credentials.
+Check a real client request and the relevant quota view as separate verification steps.
+
+## T3 Code works locally but the remote environment is offline
+
+On the machine that runs the environment, inspect its service and Serve target.
+
+```sh
+t3 service status
+t3 status
+tailscale serve status
+```
+
+Confirm the local port matches the Tailscale Serve target, and that the machine is awake. A
+foreground `t3 serve` exits with its terminal. Linux services need linger. The macOS launchd
+agent and Windows task need their user logged in. Follow [environments](environments.md) for
+the platform-specific checks and a fresh pairing link. The hosted web client needs HTTPS.
+
+If using T3 Connect, `t3 connect status` tests that route. `t3 status --json` only reads settings.
+
+## T3 Code calls the provider directly on another machine
+
+Edit the Claude Code and Codex settings on the machine that owns the thread's environment.
+Check its service user and provider config directory, then start a fresh provider session.
+Choose **Use existing CLI** for Codex. Follow [T3 Code](t3code.md) and
+[the client settings](providers.md#point-clients-at-the-hub).
+
+## Windows and WSL show the wrong environment or stop after closing terminals
+
+Use separate provider installations, user homes and T3 listener ports. Check Windows' Serve
+target for the Linux port before pairing. Microsoft documents that systemd services alone do
+not keep WSL running. Check the Windows task that launches the Linux foreground server and
+verify `wsl --list --verbose` after closing the terminals.
+
+For a hub on the same Windows PC, default WSL NAT has separate loopback. Use the hub's Tailscale
+HTTPS URL or the documented mirrored-network path. Tailscale also documents failures when both
+Windows and WSL carry nested Tailscale traffic. Follow the full
+[Windows and WSL 2 section](environments.md#windows-and-wsl-2-as-two-environments) before changing
+network settings.

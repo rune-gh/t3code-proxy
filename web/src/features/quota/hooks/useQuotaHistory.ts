@@ -11,8 +11,11 @@ import { apiClient, quotaHistoryApi, type QuotaHistory } from '@/services/api';
 import { HOUR_MS } from '../poolModel';
 
 export const QUOTA_HISTORY_POLL_MS = 60_000;
-/** Always cover the longest burn window, even when the span starts later. */
-const LOOKBACK_MS = 7 * HOUR_MS;
+/**
+ * History is always fetched this far back, whatever span is on screen: the burn estimate reads
+ * up to seven days, so a shorter fetch after paging forward would change the forecast.
+ */
+const LOOKBACK_MS = 7 * 24 * HOUR_MS;
 
 export type QuotaHistoryStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 

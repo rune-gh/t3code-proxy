@@ -11,16 +11,22 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
-t3code-proxy is a hub for your own Claude and Codex subscriptions. You run it on one machine at
-home that stays on. It holds every account login, keeps the tokens fresh, and exposes one
-OpenAI- and Claude-compatible API on port 8317. Your other machines reach it over Tailscale, and
-Claude Code, Codex and the T3 Code app use it through their normal config files. Nothing on the
-client side is patched. The setup follows the one Theo Browne describes in his
+t3code-proxy is a hub for your own AI subscriptions and API-key providers. You run it on one
+machine at home that stays on. It holds account logins, keeps OAuth tokens fresh, and exposes
+OpenAI-, Claude-, Gemini- and Codex-compatible APIs on port 8317. It serves Claude, Codex,
+Antigravity, Kimi, xAI, Devin and Meta accounts, Google API keys and OpenAI-compatible upstreams.
+Your other machines reach it over Tailscale. Claude Code, Codex and T3 Code use their normal
+client configuration. The panel pools supported limits with plan-aware weights. See
+[providers](docs/providers.md) for current coverage. The setup follows Theo Browne's
 [token maxing video](https://www.youtube.com/watch?v=D8PikZ1KhUo) and
-[gist](https://gist.github.com/t3dotgg/59a521d2ee8d70aaf90e280c175072af); his own hub is private,
-and this project is an open-source implementation of it.
+[gist](https://gist.github.com/t3dotgg/59a521d2ee8d70aaf90e280c175072af). His own hub is private.
+This project is an open-source implementation of it.
 
 This project is not affiliated with or endorsed by T3, Anthropic or OpenAI.
+
+**Using subscriptions this way may violate provider terms and can get accounts suspended or
+banned. Never serve other people's traffic with your subscriptions. Use Claude subscriptions
+only through Claude Code.** Read the [risks and rules](#risks-and-rules) before signing in.
 
 ## How it works
 
@@ -43,11 +49,12 @@ flowchart LR
   hub --- auth
   hub --> anthropic["Anthropic"]
   hub --> openai["OpenAI"]
+  hub --> others["Google, Kimi, xAI, Devin, Meta<br/>and compatible upstreams"]
 ```
 
 The hub listens on loopback only. `tailscale serve` publishes it to your tailnet over HTTPS, so
-only devices on your tailnet can reach it. Every request to Anthropic and OpenAI leaves from the
-hub's home connection.
+only devices on your tailnet can reach it. Provider requests leave from the hub's home connection.
+T3 Code can run agents on any connected home or cloud [environment](docs/environments.md).
 
 ## Features
 
@@ -60,7 +67,9 @@ hub's home connection.
 - **Codex over WebSockets.** Codex clients that set `supports_websockets = true` use the
   WebSocket transport through the hub.
 - **Quota history.** The hub records each Claude and Codex account's quota windows over time.
-  See [quota history](docs/quota-history.md).
+  The panel's pooled charts support editable plan weights, so accounts on different plans can
+  contribute different capacity. See [quota history](docs/quota-history.md) and the
+  [provider capability table](docs/providers.md#capability-table).
 - **Web panel.** A management panel is compiled into the binary and served at
   `/management.html`: pooled limits and banked Codex reset credits, accounts, sign-in, routing,
   activity, providers, logs and settings, plus a Connect page with ready-to-paste client config
@@ -115,6 +124,9 @@ second config directory that leaves your normal client setup untouched.
 ## Documentation
 
 - [Setup guide](docs/setup.md): pick a hub, install, sign in, connect clients.
+- [Providers](docs/providers.md) covers every login, API-key upstream and current quota capability.
+- [Environments](docs/environments.md) covers T3 Code on other machines, including Windows and WSL 2.
+- [Set up a box](docs/box-setup.md) gives an ordered agent checklist for a new execution machine.
 - [Guide for coding agents](docs/agents.md): for an agent doing the setup on someone's behalf.
 - [T3 Code](docs/t3code.md): providers, usage provider and limits.
 - [Routing](docs/routing.md): strategies, soonest-reset-first, session affinity, retries.

@@ -1,0 +1,14 @@
+{
+  "groups": [
+    {"displayName": "Gemini Models", "buckets": [
+      {"bucketId": "gemini-weekly", "window": "weekly", "remainingFraction": "0.25", "resetTime": "2026-11-20T00:00:00.123456789Z"},
+      {"bucket_id": "gemini-5h", "window": "five_hour", "remaining_fraction": 70, "reset_time": "2026-11-15T04:00:00Z"}
+    ]},
+    {"display_name": "Claude Models", "buckets": [
+      {"bucketId": "claude-weekly", "window": "week", "remainingFraction": 0, "resetTime": "2026-11-19T00:00:00Z"}
+    ]},
+    {"displayName": "Unknown Pool", "buckets": [
+      {"bucketId": "opaque", "window": "unknown", "remainingFraction": 1}
+    ]}
+  ]
+}

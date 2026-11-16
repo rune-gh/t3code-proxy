@@ -1,0 +1,7 @@
+{
+  "subscription": {"plan": "Fixture Plan"},
+  "groups": [{"displayName": "Account", "buckets": [
+    {"window": "weekly", "remainingFraction": 0.25, "resetTime": "2026-11-20T00:00:00Z"},
+    {"window": "5h", "remainingFraction": 0.5, "resetTime": "2026-11-15T04:00:00Z"}
+  ]}]
+}

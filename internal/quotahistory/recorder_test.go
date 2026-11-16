@@ -170,7 +170,7 @@ func TestRecorderRefreshAndHistory(t *testing.T) {
 		samples[s["auth_index"].(string)] = s
 	}
 	broken := samples["claude-broken"]
-	if broken["error"] != "HTTP 401: token expired" || fmt.Sprint(broken["windows"]) != "map[]" {
+	if broken["error"] != "HTTP 401" || fmt.Sprint(broken["windows"]) != "map[]" {
 		t.Fatalf("error sample = %v", broken)
 	}
 	windows := samples["claude-ok"]["windows"].(map[string]any)

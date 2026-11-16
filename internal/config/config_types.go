@@ -602,6 +602,18 @@ type RoutingConfig struct {
 	//     keep the binding and return the error (or retry the same credential) instead.
 	// Ignored when SessionAffinity is false.
 	SessionAffinityRebindOn string `yaml:"session-affinity-rebind-on,omitempty" json:"session-affinity-rebind-on,omitempty"`
+
+	// PlanWeights overrides the built-in plan capacity weights, keyed by provider and then
+	// by plan (for example claude: {max_20x: 20}). A weight is capacity relative to the
+	// provider's base paid plan (1.0). Entries replace the matching built-in value; plans
+	// not listed keep their built-in weight. See docs/routing.md.
+	PlanWeights map[string]map[string]float64 `yaml:"plan-weights,omitempty" json:"plan-weights,omitempty"`
+
+	// PlanHeadroomReserve is the plan-weighted short-window (5-hour) headroom, in base-plan
+	// percent, below which soonest-reset-first does not start a new conversation on an
+	// account while another eligible account has more. Headroom is weight x remaining
+	// percent. Omitted means DefaultPlanHeadroomReserve; 0 disables the guard.
+	PlanHeadroomReserve *float64 `yaml:"plan-headroom-reserve,omitempty" json:"plan-headroom-reserve,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.

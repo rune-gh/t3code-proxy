@@ -1,0 +1,9 @@
+{
+  "userStatus": {"planStatus": {
+    "planInfo": {"planName": "Fixture Pro"},
+    "dailyQuotaRemainingPercent": "54",
+    "weeklyQuotaRemainingPercent": 77,
+    "dailyQuotaResetAtUnix": "1794787200",
+    "weeklyQuotaResetAtUnix": 1795132800
+  }}
+}

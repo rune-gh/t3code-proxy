@@ -4,11 +4,14 @@
  * Registered in App.tsx only when `import.meta.env.DEV` is true, outside the
  * auth guard, so it can be opened without a backend or real accounts:
  *   http://localhost:5173/#/__preview/quota-tiers
- * Renders the real QuotaCard with mocked quota states. Copy is intentionally
- * not localized — this page never ships.
+ * Renders the real QuotaCard with mocked quota states, then the Overview's
+ * account detail rows (AccountDetail) for richer states: Claude extra usage,
+ * Codex banked resets, xAI usage breakdown with pay-as-you-go off, Antigravity
+ * groups and a failed read. Copy is intentionally not localized — this page
+ * never ships.
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useThemeStore } from '@/stores';
 import type {
   AntigravityQuotaState,
@@ -22,10 +25,19 @@ import type {
   XaiQuotaState,
 } from '@/types';
 import { HOUR_MS, DAY_MS } from '@/utils/time/durations';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/Table';
+import { AccountDetail } from '../components/AccountDetail';
 import { QuotaCard } from '../components/QuotaCard';
+import tableStyles from '../components/PoolAccountsTable.module.scss';
 import type { QuotaFileEntry } from '../logic';
 import type { QuotaCardState } from '../providers';
-import pageStyles from '../QuotaPage.module.scss';
 import styles from './QuotaTierPreview.module.scss';
 
 interface MockAccount {
@@ -151,6 +163,79 @@ const claudeQuota = (planType: string, used: [number, number]): ClaudeQuotaState
   ],
 });
 
+const buildDetailAccounts = (): MockAccount[] => [
+  {
+    entry: {
+      type: 'claude',
+      file: file('claude-max5.json', 'claude', { email: 'max@example.com' }),
+    },
+    quota: {
+      ...claudeQuota('plan_max5', [12, 40]),
+      extraUsage: {
+        isEnabled: true,
+        monthlyLimit: 5000,
+        usedCredits: 1240,
+        utilization: 25,
+        currency: 'USD',
+        disabledReason: null,
+        userDisabled: false,
+        spendLimitReached: false,
+      },
+    } as ClaudeQuotaState,
+  },
+  {
+    entry: { type: 'codex', file: file('codex-plus.json', 'codex', { email: 'plus@example.com' }) },
+    quota: {
+      ...codexQuota('plus', [12, 100]),
+      rateLimitResetCreditsAvailableCount: 2,
+      rateLimitResetCredits: [
+        {
+          id: 'credit-1',
+          status: 'available',
+          grantedAt: new Date(Date.now() - 3 * DAY_MS).toISOString(),
+          expiresAt: new Date(Date.now() + 9 * DAY_MS).toISOString(),
+        },
+        {
+          id: 'credit-2',
+          status: 'available',
+          grantedAt: new Date(Date.now() - DAY_MS).toISOString(),
+          expiresAt: new Date(Date.now() + 13 * DAY_MS).toISOString(),
+        },
+      ],
+    } as CodexQuotaState,
+  },
+  {
+    entry: { type: 'xai', file: file('grok.json', 'xai', { email: 'grok@example.com' }) },
+    quota: {
+      status: 'success',
+      billing: {
+        ...xaiBilling('SuperGrok', 'premium', 0, 0),
+        periodType: 'weekly',
+        usagePercent: 10,
+        periodEnd: new Date(Date.now() + 5 * DAY_MS).toISOString(),
+        resetAtMs: Date.now() + 5 * DAY_MS,
+        periodHours: 168,
+        onDemandCapCents: 0,
+        productUsage: [
+          { product: 'GrokBot', usagePercent: 7 },
+          { product: 'GrokBuild', usagePercent: 3 },
+        ],
+      },
+    } as XaiQuotaState,
+  },
+  {
+    entry: {
+      type: 'antigravity',
+      file: file('antigravity.json', 'antigravity', { email: 'gemini@example.com' }),
+    },
+    quota: antigravityQuota('pro', [1, 0.99]),
+  },
+  {
+    entry: { type: 'codex', file: file('codex-team.json', 'codex', { email: 'team@example.com' }) },
+    quota: { status: 'error', windows: [], error: 'HTTP 401' } as CodexQuotaState,
+  },
+];
+
 const buildAccounts = (): MockAccount[] => [
   ...['Allegro', 'Allegretto', 'Moderato', 'Andante'].map((planName): MockAccount => ({
     entry: { type: 'kimi', file: file(`kimi-${planName.toLowerCase()}.json`, 'kimi') },
@@ -239,6 +324,7 @@ export function QuotaTierPreview() {
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const setTheme = useThemeStore((state) => state.setTheme);
   const [accounts] = useState(buildAccounts);
+  const [detailAccounts] = useState(buildDetailAccounts);
   const [refreshing, setRefreshing] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
 
@@ -289,7 +375,7 @@ export function QuotaTierPreview() {
       </header>
 
       <section className={styles.section}>
-        <div key={replayKey} className={pageStyles.grid}>
+        <div key={replayKey} className={styles.grid}>
           {accounts.map((account, index) => (
             <QuotaCard
               key={account.entry.file.name}
@@ -308,6 +394,37 @@ export function QuotaTierPreview() {
             />
           ))}
         </div>
+      </section>
+
+      <section className={styles.section} id="account-detail">
+        <Table aria-label="Account detail">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Account</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {detailAccounts.map((account) => (
+              <Fragment key={account.entry.file.name}>
+                <TableRow className={tableStyles.openRow}>
+                  <TableCell>{account.entry.file.email}</TableCell>
+                </TableRow>
+                <tr className={tableStyles.detailRow}>
+                  <td>
+                    <AccountDetail
+                      entry={account.entry}
+                      quota={account.quota}
+                      canRefresh
+                      resetting={false}
+                      onRefresh={simulateRefresh}
+                      onReset={() => undefined}
+                    />
+                  </td>
+                </tr>
+              </Fragment>
+            ))}
+          </TableBody>
+        </Table>
       </section>
     </div>
   );

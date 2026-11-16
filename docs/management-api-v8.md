@@ -135,6 +135,7 @@ retain the corresponding business operation's fields.
 | `/server/latest-version` | GET | Get latest release information. |
 | `/requests/api-call` | POST | Make an authenticated upstream call. |
 | `/routing/cooldown/reset` | POST | Clear credential cooldown. |
+| `/routing/plan-weights` | GET | Read plan capacity weights. See [plan weights](#plan-weights). |
 | `/routing/model-definitions/<channel>` | GET | Get model definitions. |
 | `/observability/logs` | GET, DELETE | Read or clear application logs. |
 | `/observability/logs/errors` | GET | List error-log files. |
@@ -143,7 +144,7 @@ retain the corresponding business operation's fields.
 | `/observability/usage/api-keys` | GET | Get API-key usage. |
 | `/observability/usage/queue` | GET | Get queued usage events. |
 | `/quota-history` | GET | Read recorded quota samples (`since`/`until` in Unix ms). See [quota history](quota-history.md). |
-| `/quota-history/refresh` | POST | Poll every Claude and Codex account now. |
+| `/quota-history/refresh` | POST | Poll every enabled, selected account with quota-history support. |
 | `/credentials` | GET, POST, DELETE | List, upload, or delete credential files. |
 | `/credentials/models` | GET | Get credential models. |
 | `/credentials/download` | GET | Download a credential file. |
@@ -163,6 +164,38 @@ retain the corresponding business operation's fields.
 | `/plugins/store` | GET | List the plugin store (supports optional `?refresh=true` to bypass cached release checks). |
 | `/plugins/store/<id>/install` | POST | Install or update a plugin. |
 | `/plugins/<id>/quota` | GET, POST, DELETE | Read, fetch, or reset plugin quota. |
+
+## Plan weights
+
+`GET /v8/management/routing/plan-weights` returns the plan capacity weights
+that routing uses (see [routing](routing.md#plan-capacity)). Each table is keyed
+by provider and then plan, with normalized lower-case names:
+
+```json
+{
+  "defaults": {
+    "claude": {"max": 5, "max_20x": 20, "max_5x": 5, "pro": 1, "team": 1},
+    "codex": {"business": 1, "edu": 1, "enterprise": 1, "plus": 1, "pro": 20, "prolite": 5, "promax": 50, "team": 1},
+    "xai": {"supergrok": 1, "supergrok_heavy": 10}
+  },
+  "configured": {"codex": {"pro": 10}},
+  "effective": {
+    "claude": {"max": 5, "max_20x": 20, "max_5x": 5, "pro": 1, "team": 1},
+    "codex": {"business": 1, "edu": 1, "enterprise": 1, "plus": 1, "pro": 10, "prolite": 5, "promax": 50, "team": 1},
+    "xai": {"supergrok": 1, "supergrok_heavy": 10}
+  }
+}
+```
+
+`defaults` is the built-in table, `configured` is `routing.plan-weights`
+(`{}` when unset), and `effective` is the defaults with the configured values
+applied. Plans whose weight comes from a `max_<N>x` tier name are resolved on
+demand and are not listed. There is no separate write endpoint: change the
+overrides through the configuration paths, for example
+`PUT /v8/management/config/routing/plan-weights` with
+`{"codex": {"pro": 10}}`, or `PUT /v8/management/config/routing/plan-headroom-reserve`
+with `5`. Invalid values (not a number greater than 0 and at most 1000 for a
+weight, or outside 0 to 1000 for the reserve) are rejected with 422.
 
 ## OAuth
 
