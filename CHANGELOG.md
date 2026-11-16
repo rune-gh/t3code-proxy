@@ -67,9 +67,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   answer put the usable Codex account on a five-minute hold and the next conversations were
   refused by the spent account with "usage limit reached", valid for two days. The hub now
   answers with a cooldown error and the short wait.
-- Taken from upstream CLIProxyAPI (after v8.0.74): a request on a persistent Responses
-  WebSocket that is refused for quota or auth before any output now fails over to another
-  account instead of surfacing the refusal.
 
 ## [0.1.0]
 
