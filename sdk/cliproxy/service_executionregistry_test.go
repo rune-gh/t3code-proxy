@@ -1239,6 +1239,7 @@ func TestServiceKeepsRegistryAcrossHeartbeatFailoverAndExposesOnlyAfterNewACK(t 
 	cfg.Home.Port = port
 	cfg.Home.DisableClusterDiscovery = true
 	service := &Service{cfg: cfg}
+	retries := controlHomeSubscriberRetries(t, service)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	service.startHomeSubscriber(ctx)
@@ -1254,11 +1255,9 @@ func TestServiceKeepsRegistryAcrossHeartbeatFailoverAndExposesOnlyAfterNewACK(t 
 	}
 
 	close(loseFirst)
-	select {
-	case <-secondSubscribe:
-	case <-time.After(3 * homeSubscriberRetryInitial):
-		t.Fatal("second subscription did not start after heartbeat loss and backoff")
-	}
+	retry := awaitHomeSubscriberRetry(t, retries, homeSubscriberRetryInitial)
+	close(retry.resume)
+	awaitRebalanceEvent(t, secondSubscribe)
 	service.homeMu.Lock()
 	exposedRegistry := service.homeRegistry
 	exposedClient := service.homeClient
@@ -1285,7 +1284,7 @@ func TestServicePreservesActiveScopeDuringPreACKFailoverRetries(t *testing.T) {
 	firstAck := make(chan struct{})
 	loseFirst := make(chan struct{})
 	resourceClosed := make(chan struct{})
-	preAckAttempts := make(chan time.Time, 2)
+	preAckAttempts := make(chan struct{}, 2)
 	finalSubscribe := make(chan struct{})
 	allowFinalAck := make(chan struct{})
 	stop := make(chan struct{})
@@ -1310,6 +1309,7 @@ func TestServicePreservesActiveScopeDuringPreACKFailoverRetries(t *testing.T) {
 	})
 
 	service := newRegistryTestService(t, listener)
+	retries := controlHomeSubscriberRetries(t, service)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	service.startHomeSubscriber(ctx)
@@ -1334,22 +1334,21 @@ func TestServicePreservesActiveScopeDuringPreACKFailoverRetries(t *testing.T) {
 		t.Fatal(errBind)
 	}
 
+	t.Cleanup(func() { scope.End("test cleanup") })
 	close(loseFirst)
-	select {
-	case <-resourceClosed:
-		t.Fatal("heartbeat failover drained the active scope")
-	case <-time.After(50 * time.Millisecond):
+	for _, ceiling := range []time.Duration{homeSubscriberRetryInitial, 2 * homeSubscriberRetryInitial, 4 * homeSubscriberRetryInitial} {
+		retry := awaitHomeSubscriberRetry(t, retries, ceiling)
+		select {
+		case <-resourceClosed:
+			t.Fatal("failover retry drained the active scope")
+		default:
+		}
+		close(retry.resume)
+		if ceiling < 4*homeSubscriberRetryInitial {
+			awaitRebalanceEvent(t, preAckAttempts)
+		}
 	}
-	firstPreAck := <-preAckAttempts
-	secondPreAck := <-preAckAttempts
-	if retryDelay := secondPreAck.Sub(firstPreAck); retryDelay < homeSubscriberRetryInitial {
-		t.Fatalf("pre-ACK retry delay = %v, want at least %s after the prior published failure", retryDelay, homeSubscriberRetryInitial)
-	}
-	select {
-	case <-finalSubscribe:
-	case <-time.After(5 * homeSubscriberRetryInitial):
-		t.Fatal("subscriber did not retry after pre-ACK rejections")
-	}
+	awaitRebalanceEvent(t, finalSubscribe)
 	service.homeMu.Lock()
 	exposedRegistry := service.homeRegistry
 	exposedClient := service.homeClient
@@ -1411,6 +1410,9 @@ func TestServiceHeartbeatFailoverDoesNotDrainBlockingScope(t *testing.T) {
 	cfg.Home.Port = port
 	cfg.Home.DisableClusterDiscovery = true
 	service := &Service{cfg: cfg}
+	retries := controlHomeSubscriberRetries(t, service)
+	forwarder := &rebalanceAdmissionForwarder{bound: make(chan *home.Client, 4), detached: make(chan *home.Client, 4)}
+	service.homeLogForwarder = forwarder
 	serviceCtx, cancelService := context.WithCancel(context.Background())
 	t.Cleanup(cancelService)
 	service.homeMu.Lock()
@@ -1423,6 +1425,7 @@ func TestServiceHeartbeatFailoverDoesNotDrainBlockingScope(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("first subscription was not acknowledged")
 	}
+	awaitRebalanceEvent(t, forwarder.bound)
 	registry := waitForServiceRegistry(t, service, time.Second)
 	pending, errBegin := registry.BeginDispatch()
 	if errBegin != nil {
@@ -1434,6 +1437,10 @@ func TestServiceHeartbeatFailoverDoesNotDrainBlockingScope(t *testing.T) {
 	}
 	started := make(chan struct{})
 	release := make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+		scope.End("test cleanup")
+	})
 	if errBind := scope.Bind(func() error {
 		close(started)
 		<-release
@@ -1443,16 +1450,14 @@ func TestServiceHeartbeatFailoverDoesNotDrainBlockingScope(t *testing.T) {
 	}
 
 	close(loseFirst)
+	retry := awaitHomeSubscriberRetry(t, retries, homeSubscriberRetryInitial)
 	select {
 	case <-started:
 		t.Fatal("heartbeat failover started draining the blocking scope")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
-	select {
-	case <-secondSubscribe:
-	case <-time.After(time.Second):
-		t.Fatal("new subscription did not start while the old scope remained active")
-	}
+	close(retry.resume)
+	awaitRebalanceEvent(t, secondSubscribe)
 	service.homeMu.Lock()
 	exposedRegistry := service.homeRegistry
 	service.homeMu.Unlock()
@@ -1460,17 +1465,18 @@ func TestServiceHeartbeatFailoverDoesNotDrainBlockingScope(t *testing.T) {
 		t.Fatal("registry was exposed before the replacement ACK")
 	}
 	close(allowSecondAck)
+	awaitRebalanceEvent(t, forwarder.bound)
 	if nextRegistry := waitForServiceRegistry(t, service, time.Second); nextRegistry != registry {
 		t.Fatal("heartbeat failover replaced the registry containing the active scope")
 	}
 	select {
-	case <-serviceCtx.Done():
-		t.Fatal("heartbeat failover canceled the service run")
-	case <-time.After(50 * time.Millisecond):
+	case <-started:
+		t.Fatal("replacement subscription drained the blocking scope")
+	default:
 	}
-
-	close(release)
-	scope.End("test cleanup")
+	if serviceCtx.Err() != nil {
+		t.Fatal("heartbeat failover canceled the service run")
+	}
 }
 
 func TestServiceShutdownDrainsDetachedRegistryDuringRetry(t *testing.T) {
@@ -1616,6 +1622,7 @@ func TestServiceAmbiguousDispatchDrainsRegistryBeforeRetry(t *testing.T) {
 	})
 
 	service := newRegistryTestService(t, listener)
+	retries := controlHomeSubscriberRetries(t, service)
 	serviceCtx, cancelService := context.WithCancel(context.Background())
 	t.Cleanup(cancelService)
 	service.homeMu.Lock()
@@ -1658,11 +1665,9 @@ func TestServiceAmbiguousDispatchDrainsRegistryBeforeRetry(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("ambiguous dispatch did not drain the active registry")
 	}
-	select {
-	case <-secondSubscribe:
-	case <-time.After(3 * homeSubscriberRetryInitial):
-		t.Fatal("subscriber did not retry after ambiguous dispatch drain and backoff")
-	}
+	retry := awaitHomeSubscriberRetry(t, retries, homeSubscriberRetryInitial)
+	close(retry.resume)
+	awaitRebalanceEvent(t, secondSubscribe)
 	service.homeMu.Lock()
 	exposedRegistry := service.homeRegistry
 	service.homeMu.Unlock()
@@ -1675,10 +1680,8 @@ func TestServiceAmbiguousDispatchDrainsRegistryBeforeRetry(t *testing.T) {
 	if nextRegistry == registry {
 		t.Fatal("ambiguous dispatch reused the drained execution registry")
 	}
-	select {
-	case <-serviceCtx.Done():
+	if serviceCtx.Err() != nil {
 		t.Fatal("successful ambiguous dispatch recovery canceled the service run")
-	case <-time.After(50 * time.Millisecond):
 	}
 }
 
@@ -1687,7 +1690,7 @@ func TestServiceBacksOffAfterRepeatedPreAckFailures(t *testing.T) {
 	if errListen != nil {
 		t.Fatalf("listen: %v", errListen)
 	}
-	attempts := make(chan time.Time, 8)
+	attempts := make(chan struct{}, 8)
 	serverDone := make(chan struct{})
 	go func() {
 		defer close(serverDone)
@@ -1719,20 +1722,27 @@ func TestServiceBacksOffAfterRepeatedPreAckFailures(t *testing.T) {
 	cfg.Home.Port = port
 	cfg.Home.DisableClusterDiscovery = true
 	service := &Service{cfg: cfg}
+	retries := controlHomeSubscriberRetries(t, service)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	service.startHomeSubscriber(ctx)
 
-	firstAttempt := <-attempts
-	secondAttempt := <-attempts
-	if retryDelay := secondAttempt.Sub(firstAttempt); retryDelay < homeSubscriberRetryInitial/2 {
-		t.Fatalf("pre-ACK retry delay = %v, want at least %s", retryDelay, homeSubscriberRetryInitial/2)
-	}
-	cancel()
+	awaitRebalanceEvent(t, attempts)
+	retry := awaitHomeSubscriberRetry(t, retries, homeSubscriberRetryInitial)
 	select {
-	case thirdAttempt := <-attempts:
-		t.Fatalf("pre-ACK retry continued after cancellation at %v", thirdAttempt)
-	case <-time.After(150 * time.Millisecond):
+	case <-attempts:
+		t.Fatal("pre-ACK retry continued before the backoff completed")
+	default:
+	}
+	close(retry.resume)
+	awaitRebalanceEvent(t, attempts)
+	awaitHomeSubscriberRetry(t, retries, 2*homeSubscriberRetryInitial)
+	cancel()
+	awaitRebalanceEvent(t, service.homeSupervisor.done)
+	select {
+	case <-attempts:
+		t.Fatal("pre-ACK retry continued after cancellation")
+	default:
 	}
 }
 
@@ -1768,6 +1778,7 @@ func TestServiceHeartbeatLossCancelsBlockedConfigFinalizationWithoutDrainingRegi
 	})
 
 	service := newRegistryTestService(t, listener)
+	retries := controlHomeSubscriberRetries(t, service)
 	service.cfg.Home.NodeID = "node-1"
 	service.homePluginSyncKey = homePluginSyncKey(service.cfg)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1797,16 +1808,15 @@ func TestServiceHeartbeatLossCancelsBlockedConfigFinalizationWithoutDrainingRegi
 	case <-time.After(time.Second):
 		t.Fatal("updated config did not enter blocked finalization")
 	}
+	t.Cleanup(func() { scope.End("test cleanup") })
+	retry := awaitHomeSubscriberRetry(t, retries, homeSubscriberRetryInitial)
 	select {
 	case <-resourceClosed:
 		t.Fatal("heartbeat loss drained the active execution")
-	case <-time.After(200 * time.Millisecond):
+	default:
 	}
-	select {
-	case <-secondConfig:
-	case <-time.After(3 * homeSubscriberRetryInitial):
-		t.Fatal("subscriber did not retry after heartbeat loss and backoff")
-	}
+	close(retry.resume)
+	awaitRebalanceEvent(t, secondConfig)
 	service.homeMu.Lock()
 	currentRegistry := service.homeRegistry
 	currentClient := service.homeClient
@@ -1998,6 +2008,47 @@ func writeRegistryTestConfig(conn net.Conn, payload string) {
 
 func writeRegistryTestMessage(conn net.Conn, payload string) {
 	_, _ = io.WriteString(conn, fmt.Sprintf("*3\r\n$7\r\nmessage\r\n$6\r\nconfig\r\n$%d\r\n%s\r\n", len(payload), payload))
+}
+
+type homeSubscriberRetryAttempt struct {
+	delay  time.Duration
+	resume chan struct{}
+}
+
+// controlHomeSubscriberRetries holds each retry until the test completes its assertions.
+func controlHomeSubscriberRetries(t *testing.T, service *Service) <-chan homeSubscriberRetryAttempt {
+	t.Helper()
+	retries := make(chan homeSubscriberRetryAttempt)
+	service.homeSubscriberRetryWait = func(ctx context.Context, delay time.Duration) bool {
+		retry := homeSubscriberRetryAttempt{delay: delay, resume: make(chan struct{})}
+		select {
+		case retries <- retry:
+		case <-ctx.Done():
+			return false
+		}
+		select {
+		case <-retry.resume:
+			return ctx.Err() == nil
+		case <-ctx.Done():
+			return false
+		}
+	}
+	t.Cleanup(func() {
+		if supervisor := service.homeSupervisor; supervisor != nil {
+			supervisor.cancel()
+			awaitRebalanceEvent(t, supervisor.done)
+		}
+	})
+	return retries
+}
+
+func awaitHomeSubscriberRetry(t *testing.T, retries <-chan homeSubscriberRetryAttempt, ceiling time.Duration) homeSubscriberRetryAttempt {
+	t.Helper()
+	retry := awaitRebalanceEvent(t, retries)
+	if retry.delay < ceiling/2 || retry.delay >= ceiling {
+		t.Fatalf("subscriber retry delay = %s, want [%s, %s)", retry.delay, ceiling/2, ceiling)
+	}
+	return retry
 }
 
 func newRegistryTestService(t *testing.T, listener net.Listener) *Service {
@@ -2386,7 +2437,7 @@ func servePreACKReplacementConnection(conn net.Conn, configRequests *atomic.Int3
 	}
 }
 
-func serveSuccessChainHomeConnection(conn net.Conn, configMu *sync.Mutex, configRequests *int, firstAck chan struct{}, loseFirst chan struct{}, preAckAttempts chan time.Time, finalSubscribe chan struct{}, allowFinalAck chan struct{}, stop chan struct{}) {
+func serveSuccessChainHomeConnection(conn net.Conn, configMu *sync.Mutex, configRequests *int, firstAck chan struct{}, loseFirst chan struct{}, preAckAttempts chan struct{}, finalSubscribe chan struct{}, allowFinalAck chan struct{}, stop chan struct{}) {
 	defer func() { _ = conn.Close() }()
 	reader := bufio.NewReader(conn)
 	for {
@@ -2405,7 +2456,7 @@ func serveSuccessChainHomeConnection(conn net.Conn, configMu *sync.Mutex, config
 			request := *configRequests
 			configMu.Unlock()
 			if request == 2 || request == 3 {
-				preAckAttempts <- time.Now()
+				preAckAttempts <- struct{}{}
 				_, _ = io.WriteString(conn, "-ERR unavailable\r\n")
 				return
 			}
@@ -2642,7 +2693,7 @@ func serveRegistryTestHomeConnection(conn net.Conn, subscriptionMu *sync.Mutex, 
 	}
 }
 
-func servePreAckFailureConnection(conn net.Conn, attempts chan<- time.Time) {
+func servePreAckFailureConnection(conn net.Conn, attempts chan<- struct{}) {
 	defer func() { _ = conn.Close() }()
 	reader := bufio.NewReader(conn)
 	for {
@@ -2656,7 +2707,7 @@ func servePreAckFailureConnection(conn net.Conn, attempts chan<- time.Time) {
 				return
 			}
 		case len(args) >= 2 && strings.EqualFold(args[0], "GET") && args[1] == "config":
-			attempts <- time.Now()
+			attempts <- struct{}{}
 			_, _ = io.WriteString(conn, "-ERR unavailable\r\n")
 			return
 		default:
