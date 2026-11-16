@@ -41,21 +41,43 @@ signs in directly and does not go through the hub.
 
 ## Antigravity (Gemini)
 
-T3 Code's Antigravity provider runs the Antigravity CLI (`agy`). Its enterprise model gateway
-mode discovers models from the hub and sends requests through the hub's Antigravity accounts.
-This needs a recent `agy` release with gateway support.
+The hub can serve a Google account's whole Antigravity catalogue (Gemini, and the Claude and
+GPT-OSS models Google offers) to T3 Code's Antigravity provider. Two pieces make that work.
 
-1. Open **Settings → Providers → Antigravity**.
-2. Set the sign-in method to **Gemini API key** and enter a hub access key.
-3. Add these provider environment variables. Mark the access key as sensitive.
+- **The Antigravity-only endpoint.** The Antigravity CLI's gateway mode takes its model list from
+  the endpoint it is pointed at. `https://<hub>/provider/antigravity` lists only the hub's
+  Antigravity accounts, so the CLI never offers your Claude or Codex subscription models.
+- **The standalone CLI.** T3 Code's bundled Antigravity runtime ignores gateway mode and always
+  offers its own fixed Gemini list. The standalone `agy` CLI (1.5.9 or later) honours it.
+  [`deploy/t3code/agy-acp`](../deploy/t3code/agy-acp) starts `agy acp` for T3 Code and renames
+  the session modes between the two runtimes (`auto_edit` and `yolo` become `accept-edits`);
+  everything else passes through unchanged.
+
+Setup on the machine running T3 Code:
+
+1. Install the standalone CLI so `~/.local/bin/agy` exists.
+2. Copy `deploy/t3code/agy-acp` to a folder of its own, for example `~/.local/share/t3-hub/`,
+   and link T3 Code's `localharness_external` next to it (T3 Code checks for it before it accepts
+   a custom runtime):
+
+   ```sh
+   ln -s ~/.t3/tools/antigravity-acp/<platform>/versions/<version>/localharness_external \
+     ~/.local/share/t3-hub/localharness_external
+   ```
+
+3. In **Settings → Providers → Antigravity**: sign-in method **Gemini API key** with a hub access
+   key, **Binary path** set to the copied `agy-acp`, and these environment variables (mark the
+   key as sensitive):
 
    ```text
    AGY_LLM_GATEWAY_URL=https://<hub>/provider/antigravity
    AGY_LLM_GATEWAY_API_KEY=<hub access key>
+   GOOGLE_GEMINI_BASE_URL=https://<hub>/provider/antigravity
    ```
 
-The model list comes from the hub and contains the models served by its Antigravity accounts.
-The Google account sign-in method connects directly to Google.
+4. Start one Antigravity thread. T3 Code fills the model picker from the first session.
+
+Clearing the binary path returns to T3 Code's bundled runtime and its fixed Gemini list.
 
 ## Mistral (OpenCode and Vibe)
 
