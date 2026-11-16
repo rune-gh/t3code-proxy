@@ -119,6 +119,35 @@ func readServerTunnelBinary(t *testing.T, conn *websocket.Conn) wstunnel.DataFra
 	return view
 }
 
+// waitForTunnelServers blocks until every listed server UUID is registered in
+// the apiKey realm. The hub commits a server peer only after the WebSocket
+// handshake response is written, so a successful Dial does not mean the server
+// is visible yet. A short-lived probe client observes the registration through
+// its initial server_list or later server_online events.
+func waitForTunnelServers(t *testing.T, baseURL, apiKey string, uuids ...string) {
+	t.Helper()
+	pending := make(map[string]struct{}, len(uuids))
+	for _, uuid := range uuids {
+		pending[uuid] = struct{}{}
+	}
+	probe := dialServerTunnel(t, baseURL, apiKey, wstunnel.RoleClient, "registration-probe-"+apiKey, "Registration Probe")
+	initial := readServerTunnelJSON(t, probe)
+	if initial.Get("type").String() != wstunnel.ControlTypeServerList {
+		t.Fatalf("probe initial message = %s, want server_list", initial.Raw)
+	}
+	for _, server := range initial.Get("servers").Array() {
+		delete(pending, server.Get("uuid").String())
+	}
+	for len(pending) > 0 {
+		event := readServerTunnelJSON(t, probe)
+		if event.Get("type").String() != wstunnel.ControlTypeServerOnline {
+			t.Fatalf("probe received %s while waiting for servers %v", event.Raw, pending)
+		}
+		delete(pending, event.Get("server.uuid").String())
+	}
+	_ = probe.Close()
+}
+
 func TestServerWebsocketTunnel_EndToEndAndTenantIsolation(t *testing.T) {
 	cfg := &config.Config{
 		SDKConfig: config.SDKConfig{
@@ -148,6 +177,10 @@ func TestServerWebsocketTunnel_EndToEndAndTenantIsolation(t *testing.T) {
 
 	srvA1 := dialServerTunnelWithType(t, httpSrv.URL, "tenant-a", wstunnel.RoleServer, "srv-a1", "Server A1", "cpa-desktop")
 	_ = dialServerTunnelWithType(t, httpSrv.URL, "tenant-b", wstunnel.RoleServer, "srv-b1", "Server B1", "cpa-cloud")
+	// Both servers must be registered before cliA subscribes, so the initial
+	// snapshot is deterministic and srv-b1's absence actually proves isolation.
+	waitForTunnelServers(t, httpSrv.URL, "tenant-a", "srv-a1")
+	waitForTunnelServers(t, httpSrv.URL, "tenant-b", "srv-b1")
 
 	cliA := dialServerTunnel(t, httpSrv.URL, "tenant-a", wstunnel.RoleClient, "cli-a1", "Client A1")
 	initList := readServerTunnelJSON(t, cliA)
@@ -367,6 +400,7 @@ func TestServerWebsocketTunnel_HotReloadRevokesRemovedKeyOnly(t *testing.T) {
 	t.Cleanup(httpSrv.Close)
 
 	srvKeep := dialServerTunnel(t, httpSrv.URL, "key-keep", wstunnel.RoleServer, "s-keep", "Keep Server")
+	waitForTunnelServers(t, httpSrv.URL, "key-keep", "s-keep")
 	cliKeep := dialServerTunnel(t, httpSrv.URL, "key-keep", wstunnel.RoleClient, "c-keep", "Keep Client")
 	_ = readServerTunnelJSON(t, cliKeep)
 
