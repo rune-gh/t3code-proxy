@@ -53,17 +53,7 @@ func (s *SoonestResetFirstSelector) Pick(ctx context.Context, provider, model st
 	available = preferCodexWebsocketAuths(ctx, provider, available)
 	// Skip accounts whose governing allowance for this model is spent. When every account
 	// is spent, keep them all so ranking picks the one whose cap resets first.
-	scoped := make(map[*Auth]scopedWeeklyState)
-	usable := make([]*Auth, 0, len(available))
-	for _, auth := range available {
-		state, ok := governingQuotaWindowFor(auth, model, now)
-		if ok {
-			scoped[auth] = state
-		}
-		if !ok || !state.exhausted {
-			usable = append(usable, auth)
-		}
-	}
+	usable, scoped := authsWithGoverningAllowance(available, model, now)
 	if len(usable) > 0 {
 		available = usable
 	} else if wait, ok := waitForCoolingSibling(ctx, scoped, model, now); ok {
@@ -134,6 +124,23 @@ func (s *SoonestResetFirstSelector) Pick(ctx context.Context, provider, model st
 type coolingCandidate struct {
 	auth  *Auth
 	until time.Time
+}
+
+// authsWithGoverningAllowance keeps quota filtering consistent between selection
+// and read-only replay-target checks.
+func authsWithGoverningAllowance(available []*Auth, model string, now time.Time) ([]*Auth, map[*Auth]scopedWeeklyState) {
+	scoped := make(map[*Auth]scopedWeeklyState)
+	usable := make([]*Auth, 0, len(available))
+	for _, auth := range available {
+		state, ok := governingQuotaWindowFor(auth, model, now)
+		if ok {
+			scoped[auth] = state
+		}
+		if !ok || !state.exhausted {
+			usable = append(usable, auth)
+		}
+	}
+	return usable, scoped
 }
 
 type coolingCandidatesKey struct{}

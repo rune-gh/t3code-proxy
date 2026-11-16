@@ -20,7 +20,7 @@ import (
 func TestQuotaHistoryMistralAPIKeyEndpoint(t *testing.T) {
 	budget := `{"vibe_budget":{"usage_percentage":0.0,"initial_budget":150.0,"currency":"USD","reset_at":"2026-12-01T00:00:00Z","payg_enabled":false},"api_budget":{"usage_percentage":2.59892596,"initial_budget":15.0,"currency":"USD","reset_at":"2026-12-01T00:00:00Z","payg_enabled":false},"usage_percentage":2.59892596,"initial_budget":15.0,"currency":"USD","reset_at":"2026-12-01T00:00:00Z"}`
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != "GET" || req.Host != "api.mistral.ai" || req.Header.Get("Authorization") != "Bearer fixture-mistral-key" {
+		if req.Method != "GET" || (req.Host != "api.mistral.ai" && req.Host != "console.mistral.ai") || req.Header.Get("Authorization") != "Bearer fixture-mistral-key" {
 			t.Error("billing request must use the upstream's own Bearer key and host")
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -31,6 +31,8 @@ func TestQuotaHistoryMistralAPIKeyEndpoint(t *testing.T) {
 			_, _ = w.Write([]byte(budget))
 		case "/v1/billing/subscription":
 			_, _ = w.Write([]byte(`{"plan_name":"EDU","payg_enabled":false,"vibe_payg_enabled":false,"enterprise":false}`))
+		case "/api/vibe/whoami":
+			_, _ = w.Write([]byte(`{"customer_id":"fixture-customer"}`))
 		default:
 			t.Errorf("unexpected billing path %q", req.URL.Path)
 			w.WriteHeader(http.StatusNotFound)

@@ -207,7 +207,11 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 	ctx = WithCodexClientRequest(ctx, isOpenAIImageExecutionOptions(opts) || IsCodexClientRequest(ctx, opts.Headers))
 	ctx = coreusage.CaptureIdentity(ctx)
 	ctx = contextWithInFlightScope(ctx, scope)
-	normalized := m.normalizeProviders(providers)
+	if provider := ProviderScopeFromContext(ctx); provider != "" {
+		opts.EnsureMetadata()
+		opts.Metadata[cliproxyexecutor.ProviderScopeMetadataKey] = provider
+	}
+	normalized := m.normalizeProviders(scopedProviders(ctx, providers))
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -289,7 +293,11 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 	ctx = WithCodexClientRequest(ctx, IsCodexClientRequest(ctx, opts.Headers))
 	ctx = coreusage.CaptureIdentity(ctx)
 	ctx = contextWithInFlightScope(ctx, scope)
-	normalized := m.normalizeProviders(providers)
+	if provider := ProviderScopeFromContext(ctx); provider != "" {
+		opts.EnsureMetadata()
+		opts.Metadata[cliproxyexecutor.ProviderScopeMetadataKey] = provider
+	}
+	normalized := m.normalizeProviders(scopedProviders(ctx, providers))
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -368,7 +376,11 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 			defer unlockSession()
 		}
 	}
-	normalized := m.normalizeProviders(providers)
+	if provider := ProviderScopeFromContext(ctx); provider != "" {
+		opts.EnsureMetadata()
+		opts.Metadata[cliproxyexecutor.ProviderScopeMetadataKey] = provider
+	}
+	normalized := m.normalizeProviders(scopedProviders(ctx, providers))
 	if len(normalized) == 0 {
 		return nil, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -1110,12 +1122,16 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	homeMode := m.HomeEnabled()
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
+	homeExcludedAuthIDs := make(map[string]struct{})
+	for _, authID := range homeExcludedAuthIDsFromMetadata(opts.Metadata) {
+		tried[authID] = struct{}{}
+		homeExcludedAuthIDs[authID] = struct{}{}
+	}
 	if !homeMode {
 		for authID := range m.requestRetryRoundExclusions(retryRound, defaultRequestRetry) {
 			tried[authID] = struct{}{}
 		}
 	}
-	homeExcludedAuthIDs := make(map[string]struct{})
 	homeSameAuthRetries := make(map[string]int)
 	lastHomeAuthID := ""
 	homeSameAuthRetryPending := false

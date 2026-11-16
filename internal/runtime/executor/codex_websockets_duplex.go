@@ -1032,7 +1032,7 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					credentialErr = streamErr
 				}
 				var status interface{ StatusCode() int }
-				if errors.As(credentialErr, &status) && (status.StatusCode() == http.StatusUnauthorized || status.StatusCode() == http.StatusForbidden || status.StatusCode() == http.StatusTooManyRequests) {
+				if errors.As(credentialErr, &status) && (status.StatusCode() == http.StatusUnauthorized || status.StatusCode() == http.StatusForbidden || status.StatusCode() == http.StatusTooManyRequests || isCodexOverloadBootstrapFailure(payload)) {
 					// Account health is independent of which queued request failed.
 					// The conductor records the original classification without replaying
 					// this already-started stream on another credential.

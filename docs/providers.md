@@ -13,6 +13,36 @@ Two hard rules apply throughout this page.
 Follow [setup](setup.md) for installation and keys. [Environments](environments.md) covers machines
 that run agents, and [box setup](box-setup.md) gives an ordered checklist.
 
+## Pin a client to one provider
+
+Use `https://<hub>/provider/<name>` as the client base URL. Provider names match registry keys
+and are case-insensitive, including configured `api-keys.openai-compatibility` names such as
+`mistral`. For example, set an OpenAI-compatible client's base URL to
+`https://<hub>/provider/mistral/v1`, or a Gemini client's base URL to
+`https://<hub>/provider/antigravity` when it appends `/v1beta` itself. Authenticate with a hub
+access key.
+
+The prefix supports these routes.
+
+- `GET /provider/<name>/v1/models` and `/v1/models/<model>` use the existing OpenAI or Anthropic
+  catalog shape selected by the client headers.
+- `GET /provider/<name>/v1beta/models` and `/v1beta/models/<model>` return Gemini model metadata.
+- `POST /provider/<name>/v1/chat/completions`, `/v1/completions`, `/v1/responses`, `/v1/messages`
+  and `/v1/messages/count_tokens` use the existing HTTP handlers, including streaming.
+- `POST /provider/<name>/v1beta/models/<model>:generateContent`, `:streamGenerateContent` and
+  `:countTokens` use the Gemini handlers.
+
+Catalogs contain that provider's registered models. Requests select credentials from that
+provider's accounts, including when another provider serves the same model ID. A model outside
+the scope gets the usual `model_not_found` error. An unknown provider returns HTTP 404.
+
+Configured public model aliases, credential prefixes and thinking suffixes keep their usual
+meaning within the selected provider. Keep any credential prefix in the model ID, such as
+`team/model-name`. The `auto` model selects from the scoped catalog. Session affinity bindings
+are isolated by provider scope. Scoped routes resolve through the registry and bypass plugin
+model routers. Payload rules and request interceptors still run through the existing execution
+pipeline.
+
 ## Capability table
 
 The table describes this checkout. **Text APIs** means the hub's translated Chat Completions,

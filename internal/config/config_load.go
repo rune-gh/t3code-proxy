@@ -151,7 +151,7 @@ func managementSecretKeyPath(data []byte) []string {
 	return []string{"remote-management", "secret-key"}
 }
 
-// LoadConfigOptional reads YAML from configFile.
+// LoadConfigOptional reads YAML from configFile. A required file must be nonempty.
 // If optional is true and the file is missing, it returns an empty Config.
 // If optional is true and the file is empty or invalid, it returns an empty Config.
 func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
@@ -170,8 +170,12 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// In cloud deploy mode (optional=true), if file is empty or contains only whitespace, return empty config.
-	if optional && len(bytes.TrimSpace(data)) == 0 {
+	// A concurrent save can leave the file empty between truncation and writing.
+	// Required loads must fail so hot reload keeps the current runtime config.
+	if len(bytes.TrimSpace(data)) == 0 {
+		if !optional {
+			return nil, fmt.Errorf("config file is empty: %s", configFile)
+		}
 		cfg := &Config{CredentialInFlight: DefaultCredentialInFlightConfig()}
 		cfg.NormalizePluginsConfig()
 		cfg.NormalizeClaudeConfig()

@@ -2734,13 +2734,21 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 // HasAlternativeTargetForModel reports whether at least one eligible credential
 // other than excludedAuthID can serve model across providers.
 func (m *Manager) HasAlternativeTargetForModel(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, excludedAuthID string) bool {
+	available, _ := m.CheckAlternativeTargetForModel(ctx, providers, model, opts, excludedAuthID)
+	return available
+}
+
+// CheckAlternativeTargetForModel checks replay availability without selecting an
+// account or changing affinity. A cooling sibling retains its allowance even
+// when excluded from replay, so a spent account cannot conceal a short cooldown.
+func (m *Manager) CheckAlternativeTargetForModel(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, excludedAuthID string) (bool, error) {
 	if m == nil {
-		return false
+		return false, nil
 	}
 	excludedAuthID = strings.TrimSpace(excludedAuthID)
 	opts = ensureRequestedModelMetadata(opts, model)
 	if m.HomeEnabled() {
-		return m.hasAlternativeHomeTargetForModel(ctx, model, opts, excludedAuthID)
+		return m.hasAlternativeHomeTargetForModel(ctx, model, opts, excludedAuthID), nil
 	}
 	normalized := m.normalizeProviders(providers)
 	providerSet := make(map[string]struct{}, len(normalized))
@@ -2755,7 +2763,7 @@ func (m *Manager) HasAlternativeTargetForModel(ctx context.Context, providers []
 		providerSet[p] = struct{}{}
 	}
 	if len(providerSet) == 0 {
-		return false
+		return false, nil
 	}
 	eligibility := authSelectionEligibilityForRequest(ctx, opts)
 	modelKey := canonicalModelKey(model)
@@ -2764,12 +2772,13 @@ func (m *Manager) HasAlternativeTargetForModel(ctx context.Context, providers []
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	candidates := make([]*Auth, 0, len(m.auths))
+	heldPool := make([]*Auth, 0, len(m.auths))
 	for _, candidate := range m.auths {
 		if candidate == nil || candidate.Disabled {
 			continue
 		}
 		candidateID := strings.TrimSpace(candidate.ID)
-		if candidateID == "" || candidateID == excludedAuthID {
+		if candidateID == "" {
 			continue
 		}
 		if !eligibility.allows(candidate) {
@@ -2788,13 +2797,34 @@ func (m *Manager) HasAlternativeTargetForModel(ctx context.Context, providers []
 		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
-		candidates = append(candidates, candidate)
+		heldPool = append(heldPool, candidate)
+		if candidateID != excludedAuthID {
+			candidates = append(candidates, candidate)
+		}
 	}
 	if len(candidates) == 0 {
-		return false
+		return false, nil
 	}
-	available, _, errAvailable := m.availableAuthsForSelector(ctx, m.selector, candidates, "mixed", model, time.Now(), false, opts.Headers)
-	return errAvailable == nil && len(available) > 0
+	now := time.Now()
+	_, available, errAvailable := m.availableAuthsForSelector(ctx, m.selector, candidates, "mixed", model, now, false, opts.Headers)
+	if errAvailable != nil {
+		return false, errAvailable
+	}
+	selector := m.selector
+	if affinity, ok := selector.(*SessionAffinitySelector); ok {
+		selector = affinity.fallback
+	}
+	if _, ok := selector.(*SoonestResetFirstSelector); ok {
+		available = preferCodexWebsocketAuths(ctx, "mixed", available)
+		usable, spent := authsWithGoverningAllowance(available, model, now)
+		cooling := m.coolingCandidates(ctx, heldPool, model, now, opts.Headers)
+		if len(usable) == 0 {
+			if wait, shouldWait := waitForCoolingSibling(withCoolingCandidates(ctx, cooling), spent, model, now); shouldWait {
+				return false, newModelCooldownError(model, "", wait)
+			}
+		}
+	}
+	return len(available) > 0, nil
 }
 
 func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, string, error) {

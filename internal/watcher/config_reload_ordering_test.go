@@ -180,3 +180,49 @@ func TestReloadConfigIfChangedReloadsAfterWriteBetweenHashAndLoad_Issue6631(t *t
 		t.Fatalf("applied request-retry values = %v, want %v", applied, want)
 	}
 }
+
+func TestReloadConfigIfChangedKeepsConfigDuringTruncatedWrite_Issue6559(t *testing.T) {
+	for _, content := range []string{"", " \n"} {
+		t.Run(fmt.Sprintf("content=%q", content), func(t *testing.T) {
+			configPath, authDir := newIssue6631ConfigFile(t)
+			if errWrite := writeIssue6631Config(configPath, authDir, 2); errWrite != nil {
+				t.Fatal(errWrite)
+			}
+			originalLoad := loadConfigFileFunc
+			t.Cleanup(func() { loadConfigFileFunc = originalLoad })
+			loadConfigFileFunc = func(path string) (*config.Config, error) {
+				// A management save truncates the file after the nonempty hash read,
+				// before LoadConfig opens it for the actual parse.
+				if errWrite := os.WriteFile(path, []byte(content), 0o600); errWrite != nil {
+					return nil, errWrite
+				}
+				return originalLoad(path)
+			}
+			initial := &config.Config{AuthDir: authDir, RequestRetry: 1}
+			applied := 0
+			w := &Watcher{
+				configPath: configPath,
+				authDir:    authDir,
+				config:     initial,
+				reloadCallback: func(*config.Config) {
+					applied++
+				},
+			}
+			w.ReloadConfigIfChanged()
+			if w.config != initial || applied != 0 || w.lastConfigHash != "" {
+				t.Fatalf("truncated write changed runtime config: request-retry=%d, callbacks=%d, hash=%q", w.config.RequestRetry, applied, w.lastConfigHash)
+			}
+
+			// The completed save must still reload, including when its bytes match
+			// the first read that preceded truncation.
+			loadConfigFileFunc = originalLoad
+			if errWrite := writeIssue6631Config(configPath, authDir, 2); errWrite != nil {
+				t.Fatal(errWrite)
+			}
+			w.ReloadConfigIfChanged()
+			if w.config.RequestRetry != 2 || applied != 1 {
+				t.Fatalf("completed save was not applied: request-retry=%d, callbacks=%d", w.config.RequestRetry, applied)
+			}
+		})
+	}
+}

@@ -1845,6 +1845,29 @@ func (r *ModelRegistry) GetAvailableModelsByProvider(provider string) []*ModelIn
 	return result
 }
 
+// GetAvailableModelsForProvider returns a provider's catalog in the requested API format.
+func (r *ModelRegistry) GetAvailableModelsForProvider(provider, handlerType string) []map[string]any {
+	infos := r.GetAvailableModelsByProvider(provider)
+	sort.Slice(infos, func(i, j int) bool { return infos[i].ID < infos[j].ID })
+	models := make([]map[string]any, 0, len(infos))
+	for _, info := range infos {
+		models = append(models, r.convertModelToMap(info, handlerType))
+	}
+	return models
+}
+
+// HasProvider reports whether any registered client supplies this provider, including suspended clients.
+func (r *ModelRegistry) HasProvider(provider string) bool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for _, registered := range r.clientProviders {
+		if strings.EqualFold(registered, provider) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetModelCount returns the number of available clients for a specific model
 // Parameters:
 //   - modelID: The model ID to check

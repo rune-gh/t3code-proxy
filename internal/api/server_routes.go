@@ -155,6 +155,8 @@ func (s *Server) setupRoutes() {
 		v1beta.GET("/models/*action", s.geminiGetHandler(geminiHandlers))
 	}
 
+	s.setupProviderRoutes(openaiHandlers, claudeCodeHandlers, openaiResponsesHandlers, geminiHandlers)
+
 	// Root endpoint
 	s.engine.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -659,7 +661,7 @@ func (s *Server) unifiedModelsHandler(openaiHandler *openai.OpenAIAPIHandler, cl
 		cfg := s.getConfig()
 		if _, ok := c.Request.URL.Query()["client_version"]; ok {
 			clientVersion := c.Query("client_version")
-			if cfg != nil && cfg.Home.Enabled {
+			if cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 				s.handleHomeCodexClientModels(c, clientVersion)
 				return
 			}
@@ -667,7 +669,7 @@ func (s *Server) unifiedModelsHandler(openaiHandler *openai.OpenAIAPIHandler, cl
 			return
 		}
 
-		if cfg != nil && cfg.Home.Enabled {
+		if cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 			s.handleHomeModels(c)
 			return
 		}
@@ -714,7 +716,9 @@ func grokModelsFromRegistryInfos(infos []*registry.ModelInfo) []grokbuild.ModelI
 
 func (s *Server) handleGrokModels(c *gin.Context) {
 	var models []grokbuild.ModelInfo
-	if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
+	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
+		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().GetAvailableModelsByProvider(scope))
+	} else if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
 		entries, ok := s.loadHomeModelEntries(c)
 		if !ok {
 			return
@@ -1025,7 +1029,7 @@ func (s *Server) loadMuseCodeHomeModels(c *gin.Context) ([]musecode.ModelInput, 
 
 func (s *Server) geminiModelsHandler(geminiHandler *gemini.GeminiAPIHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
+		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 			s.handleHomeGeminiModels(c)
 			return
 		}
@@ -1036,7 +1040,7 @@ func (s *Server) geminiModelsHandler(geminiHandler *gemini.GeminiAPIHandler) gin
 
 func (s *Server) geminiGetHandler(geminiHandler *gemini.GeminiAPIHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
+		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 			s.handleHomeGeminiModel(c)
 			return
 		}

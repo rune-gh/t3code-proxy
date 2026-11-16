@@ -1579,3 +1579,475 @@ func TestBuildResponsesWebsocketErrorPayloadSuppressesStaleRetryAfterWhenTrusted
 		t.Fatalf("headers.X-Request-Id = %q, want req-1 (%s)", got, payload)
 	}
 }
+
+func TestResponsesWebsocketSameSessionLaterCreate429FailoverToAlternativeCredential(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const quota429Frame = `{"type":"error","status":429,"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"team","resets_in_seconds":3600}}`
+
+	for _, buffering := range []bool{false, true} {
+		t.Run(fmt.Sprintf("buffering=%t", buffering), func(t *testing.T) {
+			var authACreates, authBCreates atomic.Int32
+			var authA429Next atomic.Bool
+
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+				if authHeader != "Bearer key-a" && authHeader != "Bearer key-b" {
+					t.Errorf("unexpected Authorization header: %q", authHeader)
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				c, errUpgrade := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+				if errUpgrade != nil {
+					t.Error(errUpgrade)
+					return
+				}
+				defer func() { _ = c.Close() }()
+				_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+				for {
+					_, payload, errRead := c.ReadMessage()
+					if errRead != nil {
+						return
+					}
+					if ojson.GetBytesNoCopy(payload, "type").String() != "response.create" {
+						continue
+					}
+					if authHeader == "Bearer key-a" {
+						turn := authACreates.Add(1)
+						if authA429Next.Load() {
+							if buffering {
+								_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.created","response":{"id":"resp-a-buffered","status":"in_progress","output":[]}}`))
+								_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.in_progress","response":{"id":"resp-a-buffered","status":"in_progress","output":[]}}`))
+							}
+							_ = c.WriteMessage(websocket.TextMessage, []byte(quota429Frame))
+							continue
+						}
+						respID := fmt.Sprintf("resp-a-%d", turn)
+						_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.created","response":{"id":%q,"status":"in_progress","output":[]}}`, respID)))
+						_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":%q,"status":"completed","output":[{"id":"msg-a-%d","type":"message","role":"assistant","content":[{"type":"output_text","text":"from-a"}]}]}}`, respID, turn)))
+						continue
+					}
+					turn := authBCreates.Add(1)
+					respID := fmt.Sprintf("resp-b-%d", turn)
+					_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.created","response":{"id":%q,"status":"in_progress","output":[]}}`, respID)))
+					_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":%q,"status":"completed","output":[{"id":"msg-b-%d","type":"message","role":"assistant","content":[{"type":"output_text","text":"from-b"}]}]}}`, respID, turn)))
+				}
+			}))
+			t.Cleanup(upstream.Close)
+
+			cfg := &config.Config{
+				DisableCooling:      false,
+				RequestRetry:        3,
+				MaxRetryCredentials: 0,
+				Codex: config.CodexConfig{
+					StreamBootstrapBuffering: buffering,
+				},
+			}
+			manager := coreauth.NewManager(nil, &coreauth.FillFirstSelector{}, nil)
+			manager.SetConfig(cfg)
+			manager.SetRetryConfig(cfg.RequestRetry, 0, cfg.MaxRetryCredentials)
+			manager.RegisterExecutor(runtimeexecutor.NewCodexAutoExecutor(cfg))
+
+			modelName := "codex-same-session-create-429-" + strings.ReplaceAll(t.Name(), "/", "-")
+			authAID := "auth-a-" + modelName
+			authBID := "auth-b-" + modelName
+			for _, spec := range []struct {
+				id       string
+				key      string
+				priority string
+			}{
+				{id: authAID, key: "key-a", priority: "4"},
+				{id: authBID, key: "key-b", priority: "3"},
+			} {
+				if _, errRegister := manager.Register(context.Background(), &coreauth.Auth{
+					ID:       spec.id,
+					Provider: "codex",
+					Status:   coreauth.StatusActive,
+					Attributes: map[string]string{
+						"api_key":    spec.key,
+						"base_url":   upstream.URL,
+						"websockets": "true",
+						"priority":   spec.priority,
+					},
+				}); errRegister != nil {
+					t.Fatal(errRegister)
+				}
+				registry.GetGlobalRegistry().RegisterClient(spec.id, "codex", []*registry.ModelInfo{{ID: modelName}})
+				id := spec.id
+				t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(id) })
+			}
+
+			base := handlers.NewBaseAPIHandlers(&cfg.SDKConfig, manager)
+			h := NewOpenAIResponsesAPIHandler(base)
+			router := gin.New()
+			router.GET("/v1/responses", h.ResponsesWebsocket)
+			downstream := httptest.NewServer(router)
+			t.Cleanup(downstream.Close)
+			wsURL := "ws" + strings.TrimPrefix(downstream.URL, "http") + "/v1/responses"
+
+			conn, resp, errDial := websocket.DefaultDialer.Dial(wsURL, nil)
+			if resp != nil && resp.Body != nil {
+				defer func() { _ = resp.Body.Close() }()
+			}
+			if errDial != nil {
+				t.Fatalf("dial downstream websocket: %v", errDial)
+			}
+			defer func() { _ = conn.Close() }()
+
+			// Turn 1: full response.create succeeds on auth-a and pins auth-a for the connection.
+			req1 := fmt.Sprintf(`{"type":"response.create","model":%q,"input":[{"type":"message","id":"msg-1","role":"user","content":"turn-1"}]}`, modelName)
+			if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(req1)); errWrite != nil {
+				t.Fatalf("write turn 1: %v", errWrite)
+			}
+			for {
+				_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+				_, frame, errRead := conn.ReadMessage()
+				if errRead != nil {
+					t.Fatalf("turn 1 read failed: %v", errRead)
+				}
+				if ojson.GetBytesNoCopy(frame, "type").String() == "response.completed" {
+					if got := ojson.GetBytesNoCopy(frame, "response.id").String(); got != "resp-a-1" {
+						t.Fatalf("turn 1 response.id = %q, want resp-a-1", got)
+					}
+					break
+				}
+			}
+
+			// Turn 2: on the same downstream websocket, auth-a is now quota-exhausted and returns
+			// a pre-content 429 usage_limit_reached. Another full response.create must fail over
+			// to auth-b without closing the downstream websocket or leaking frames from auth-a.
+			authA429Next.Store(true)
+			req2 := fmt.Sprintf(`{"type":"response.create","model":%q,"input":[{"type":"message","id":"msg-2","role":"user","content":"turn-2"}]}`, modelName)
+			if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(req2)); errWrite != nil {
+				t.Fatalf("write turn 2: %v", errWrite)
+			}
+			var turn2Completed []byte
+			for {
+				_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+				_, frame, errRead := conn.ReadMessage()
+				if errRead != nil {
+					t.Fatalf("turn 2 failed instead of failing over to auth-b: %v (authACreates=%d authBCreates=%d)", errRead, authACreates.Load(), authBCreates.Load())
+				}
+				if gotID := ojson.GetBytesNoCopy(frame, "response.id").String(); gotID == "resp-a-buffered" {
+					t.Fatalf("buffered frame from failed credential A leaked to downstream: %s", frame)
+				}
+				if ojson.GetBytesNoCopy(frame, "type").String() == "error" {
+					t.Fatalf("received error frame instead of failing over to auth-b: %s", frame)
+				}
+				if ojson.GetBytesNoCopy(frame, "type").String() == "response.completed" {
+					turn2Completed = frame
+					break
+				}
+			}
+			if got := ojson.GetBytesNoCopy(turn2Completed, "response.id").String(); got != "resp-b-1" {
+				t.Fatalf("turn 2 response.id = %q, want resp-b-1", got)
+			}
+			if authACreates.Load() != 2 || authBCreates.Load() != 1 {
+				t.Fatalf("after turn 2: authACreates=%d authBCreates=%d, want 2 and 1", authACreates.Load(), authBCreates.Load())
+			}
+
+			authA, okA := manager.GetByID(authAID)
+			if !okA || authA == nil || !authA.Quota.Exceeded {
+				t.Fatalf("expected auth-a quota exceeded cooldown to be recorded, got %+v (ok=%t)", authA, okA)
+			}
+
+			// Turn 3: continuation on the same downstream websocket must stay pinned to auth-b.
+			req3 := fmt.Sprintf(`{"type":"response.create","model":%q,"previous_response_id":"resp-b-1","input":[{"type":"message","id":"msg-3","role":"user","content":"turn-3"}]}`, modelName)
+			if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(req3)); errWrite != nil {
+				t.Fatalf("write turn 3: %v", errWrite)
+			}
+			for {
+				_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+				_, frame, errRead := conn.ReadMessage()
+				if errRead != nil {
+					t.Fatalf("turn 3 read failed: %v", errRead)
+				}
+				if ojson.GetBytesNoCopy(frame, "type").String() == "response.completed" {
+					if got := ojson.GetBytesNoCopy(frame, "response.id").String(); got != "resp-b-2" {
+						t.Fatalf("turn 3 response.id = %q, want resp-b-2", got)
+					}
+					break
+				}
+			}
+			if authACreates.Load() != 2 || authBCreates.Load() != 2 {
+				t.Fatalf("after turn 3: authACreates=%d authBCreates=%d, want 2 and 2", authACreates.Load(), authBCreates.Load())
+			}
+		})
+	}
+}
+
+func TestResponsesWebsocketSameSessionLaterCreate429DoesNotReplayAfterDownstreamCommit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const quota429Frame = `{"type":"error","status":429,"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"team","resets_in_seconds":3600}}`
+
+	var authACreates, authBCreates atomic.Int32
+	var authA429Next atomic.Bool
+	downstreamGotCreated := make(chan struct{})
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+		c, errUpgrade := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if errUpgrade != nil {
+			t.Error(errUpgrade)
+			return
+		}
+		defer func() { _ = c.Close() }()
+		_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+		for {
+			_, payload, errRead := c.ReadMessage()
+			if errRead != nil {
+				return
+			}
+			if ojson.GetBytesNoCopy(payload, "type").String() != "response.create" {
+				continue
+			}
+			if authHeader == "Bearer key-b" {
+				authBCreates.Add(1)
+				_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed","response":{"id":"resp-b-1","status":"completed","output":[]}}`))
+				continue
+			}
+			turn := authACreates.Add(1)
+			if authA429Next.Load() {
+				// Emit response.created before the 429 error while buffering is disabled so
+				// downstream observes a committed response frame before the error arrives.
+				_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.created","response":{"id":"resp-a-committed","status":"in_progress","output":[]}}`))
+				select {
+				case <-downstreamGotCreated:
+				case <-time.After(5 * time.Second):
+					t.Error("timed out waiting for downstream to receive response.created")
+					return
+				}
+				_ = c.WriteMessage(websocket.TextMessage, []byte(quota429Frame))
+				continue
+			}
+			respID := fmt.Sprintf("resp-a-%d", turn)
+			_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.created","response":{"id":%q,"status":"in_progress","output":[]}}`, respID)))
+			_ = c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"response.completed","response":{"id":%q,"status":"completed","output":[]}}`, respID)))
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	cfg := &config.Config{
+		DisableCooling:      false,
+		RequestRetry:        3,
+		MaxRetryCredentials: 0,
+		Codex: config.CodexConfig{
+			StreamBootstrapBuffering: false,
+		},
+	}
+	manager := coreauth.NewManager(nil, &coreauth.FillFirstSelector{}, nil)
+	manager.SetConfig(cfg)
+	manager.SetRetryConfig(cfg.RequestRetry, 0, cfg.MaxRetryCredentials)
+	manager.RegisterExecutor(runtimeexecutor.NewCodexAutoExecutor(cfg))
+
+	modelName := "codex-committed-no-replay-429"
+	authAID := "auth-a-" + modelName
+	authBID := "auth-b-" + modelName
+	for _, spec := range []struct {
+		id       string
+		key      string
+		priority string
+	}{
+		{id: authAID, key: "key-a", priority: "4"},
+		{id: authBID, key: "key-b", priority: "3"},
+	} {
+		if _, errRegister := manager.Register(context.Background(), &coreauth.Auth{
+			ID:       spec.id,
+			Provider: "codex",
+			Status:   coreauth.StatusActive,
+			Attributes: map[string]string{
+				"api_key":    spec.key,
+				"base_url":   upstream.URL,
+				"websockets": "true",
+				"priority":   spec.priority,
+			},
+		}); errRegister != nil {
+			t.Fatal(errRegister)
+		}
+		registry.GetGlobalRegistry().RegisterClient(spec.id, "codex", []*registry.ModelInfo{{ID: modelName}})
+		id := spec.id
+		t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(id) })
+	}
+
+	base := handlers.NewBaseAPIHandlers(&cfg.SDKConfig, manager)
+	h := NewOpenAIResponsesAPIHandler(base)
+	router := gin.New()
+	router.GET("/v1/responses", h.ResponsesWebsocket)
+	downstream := httptest.NewServer(router)
+	t.Cleanup(downstream.Close)
+	wsURL := "ws" + strings.TrimPrefix(downstream.URL, "http") + "/v1/responses"
+
+	conn, resp, errDial := websocket.DefaultDialer.Dial(wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	if errDial != nil {
+		t.Fatalf("dial downstream websocket: %v", errDial)
+	}
+	defer func() { _ = conn.Close() }()
+
+	req1 := fmt.Sprintf(`{"type":"response.create","model":%q,"input":[{"type":"message","id":"msg-1","role":"user","content":"turn-1"}]}`, modelName)
+	if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(req1)); errWrite != nil {
+		t.Fatalf("write turn 1: %v", errWrite)
+	}
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, frame, errRead := conn.ReadMessage()
+		if errRead != nil {
+			t.Fatalf("turn 1 failed: %v", errRead)
+		}
+		if ojson.GetBytesNoCopy(frame, "type").String() == "response.completed" {
+			break
+		}
+	}
+
+	authA429Next.Store(true)
+	req2 := fmt.Sprintf(`{"type":"response.create","model":%q,"input":[{"type":"message","id":"msg-2","role":"user","content":"turn-2"}]}`, modelName)
+	if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(req2)); errWrite != nil {
+		t.Fatalf("write turn 2: %v", errWrite)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, frame1, errRead1 := conn.ReadMessage()
+	if errRead1 != nil || ojson.GetBytesNoCopy(frame1, "type").String() != "response.created" {
+		t.Fatalf("turn 2 first frame = %s, err=%v; want committed response.created", frame1, errRead1)
+	}
+	close(downstreamGotCreated)
+	_, frame2, errRead2 := conn.ReadMessage()
+	if errRead2 != nil || ojson.GetBytesNoCopy(frame2, "type").String() != "error" || int(ojson.GetBytesNoCopy(frame2, "status").Int()) != http.StatusTooManyRequests {
+		t.Fatalf("turn 2 second frame = %s, err=%v; want terminal 429 error frame without replay", frame2, errRead2)
+	}
+	if authBCreates.Load() != 0 {
+		t.Fatalf("authBCreates = %d, want 0 (must not silently replay after downstream commit)", authBCreates.Load())
+	}
+}
+
+func TestResponsesWebsocketFailoverWaitsForCoolingAccountInsteadOfSpentOne(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, failOnFirst := range []bool{true, false} {
+		for _, refusal := range []string{
+			`{"type":"error","status":429,"error":{"type":"usage_limit_reached","message":"quota temporarily exhausted","resets_in_seconds":60}}`,
+			`{"type":"error","status":503,"error":{"code":"server_is_overloaded","message":"server_is_overloaded"}}`,
+		} {
+			for _, steering := range []bool{false, true} {
+				for _, continuation := range []bool{false, true} {
+					if failOnFirst && continuation {
+						continue
+					}
+					t.Run(fmt.Sprintf("initial=%t/status=%d/steering=%t/continuation=%t", failOnFirst, ojson.Get(refusal, "status").Int(), steering, continuation), func(t *testing.T) {
+						var createsA, createsB atomic.Int32
+						upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							conn, errUpgrade := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+							if errUpgrade != nil {
+								t.Error(errUpgrade)
+								return
+							}
+							defer func() { _ = conn.Close() }()
+							for {
+								_, payload, errRead := conn.ReadMessage()
+								if errRead != nil {
+									return
+								}
+								if ojson.GetBytesNoCopy(payload, "type").String() != "response.create" {
+									continue
+								}
+								if r.Header.Get("Authorization") == "Bearer key-b" {
+									createsB.Add(1)
+									_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"error","status":429,"error":{"type":"usage_limit_reached","message":"spent account refusal","resets_in_seconds":172800}}`))
+									continue
+								}
+								if turn := createsA.Add(1); failOnFirst || turn > 1 {
+									_ = conn.WriteMessage(websocket.TextMessage, []byte(refusal))
+									continue
+								}
+								_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.created","response":{"id":"resp-allowance","output":[]}}`))
+								_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed","response":{"id":"resp-allowance","status":"completed","output":[]}}`))
+							}
+						}))
+						t.Cleanup(upstream.Close)
+						cfg := &config.Config{Codex: config.CodexConfig{ResponseSteering: steering}}
+						cfg.CodexResponseSteering = steering
+						manager := coreauth.NewManager(nil, &coreauth.SoonestResetFirstSelector{}, nil)
+						manager.SetConfig(cfg)
+						manager.RegisterExecutor(runtimeexecutor.NewCodexAutoExecutor(cfg))
+						model := "cooling-replay-" + strings.ReplaceAll(t.Name(), "/", "-")
+						for _, key := range []string{"key-a", "key-b"} {
+							id := model + key
+							_, errRegister := manager.Register(context.Background(), &coreauth.Auth{
+								ID: id, Provider: "codex", Status: coreauth.StatusActive,
+								Attributes: map[string]string{"api_key": key, "base_url": upstream.URL, "websockets": "true"},
+							})
+							if errRegister != nil {
+								t.Fatal(errRegister)
+							}
+							registry.GetGlobalRegistry().RegisterClient(id, "codex", []*registry.ModelInfo{{ID: model}})
+							t.Cleanup(func() {
+								registry.GetGlobalRegistry().UnregisterClient(id)
+								coreauth.ForgetQuotaWindows(id)
+							})
+							used := 22.0
+							if key == "key-b" {
+								used = 100
+							}
+							now := time.Now()
+							coreauth.ObserveQuotaWindows(id, now, []coreauth.QuotaWindow{{Key: "seven_day", UsedPercent: used, ResetAt: now.Add(48 * time.Hour), Period: 7 * 24 * time.Hour}})
+						}
+						base := handlers.NewBaseAPIHandlers(&cfg.SDKConfig, manager)
+						h := NewOpenAIResponsesAPIHandler(base)
+						router := gin.New()
+						router.GET("/v1/responses", h.ResponsesWebsocket)
+						downstream := httptest.NewServer(router)
+						t.Cleanup(downstream.Close)
+						client, resp, errDial := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(downstream.URL, "http")+"/v1/responses", nil)
+						if resp != nil {
+							defer func() { _ = resp.Body.Close() }()
+						}
+						if errDial != nil {
+							t.Fatal(errDial)
+						}
+						defer func() { _ = client.Close() }()
+						lastTurn := 2
+						if failOnFirst {
+							lastTurn = 1
+						}
+						for turn := 1; turn <= lastTurn; turn++ {
+							previous := ""
+							if turn == 2 && continuation {
+								previous = `,"previous_response_id":"resp-allowance"`
+							}
+							payload := fmt.Sprintf(`{"type":"response.create","model":%q,"input":[]%s}`, model, previous)
+							if errWrite := client.WriteMessage(websocket.TextMessage, []byte(payload)); errWrite != nil {
+								t.Fatal(errWrite)
+							}
+							_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+							for {
+								_, frame, errRead := client.ReadMessage()
+								if errRead != nil {
+									t.Fatalf("turn %d closed without its result: %v", turn, errRead)
+								}
+								if turn < lastTurn && ojson.GetBytesNoCopy(frame, "type").String() == "response.completed" {
+									break
+								}
+								if turn == lastTurn {
+									if ojson.GetBytesNoCopy(frame, "error.code").String() != "model_cooldown" || ojson.GetBytesNoCopy(frame, "status").Int() != 429 {
+										t.Fatalf("want the hub cooldown, got %s", frame)
+									}
+									wait := ojson.GetBytesNoCopy(frame, "error.reset_seconds").Int()
+									if wait <= 0 || wait > 300 {
+										t.Fatalf("cooldown = %ds, want the short account hold: %s", wait, frame)
+									}
+									break
+								}
+							}
+						}
+						if createsA.Load() != int32(lastTurn) || createsB.Load() != 0 {
+							t.Fatalf("creates A=%d B=%d, want A=%d B=0", createsA.Load(), createsB.Load(), lastTurn)
+						}
+					})
+				}
+			}
+		}
+	}
+}
