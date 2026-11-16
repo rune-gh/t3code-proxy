@@ -3,12 +3,13 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestQuotaHistorySectionLoads(t *testing.T) {
-	data := []byte("config-version: 8\nquota-history:\n  enabled: true\n  interval: 15m\n  retention: 30d\n  path: qh.db\n")
+	data := []byte("config-version: 8\nquota-history:\n  enabled: true\n  interval: 15m\n  retention: 30d\n  path: qh.db\n  providers: [claude, kimi]\n")
 	if errValidate := ValidateV8Config(data); errValidate != nil {
 		t.Fatalf("quota-history must be a valid v8 section: %v", errValidate)
 	}
@@ -20,8 +21,8 @@ func TestQuotaHistorySectionLoads(t *testing.T) {
 	if errLoad != nil {
 		t.Fatal(errLoad)
 	}
-	want := QuotaHistoryConfig{Enabled: true, Interval: "15m", Retention: "30d", Path: "qh.db"}
-	if cfg.QuotaHistory != want {
+	want := QuotaHistoryConfig{Enabled: true, Interval: "15m", Retention: "30d", Path: "qh.db", Providers: []string{"claude", "kimi"}}
+	if !reflect.DeepEqual(cfg.QuotaHistory, want) {
 		t.Fatalf("QuotaHistory = %+v, want %+v", cfg.QuotaHistory, want)
 	}
 	after, errRead := os.ReadFile(path)

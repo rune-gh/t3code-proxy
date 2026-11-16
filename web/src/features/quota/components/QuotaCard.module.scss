@@ -1,35 +1,31 @@
 @use '../../../styles/mixins' as *;
 
 /* ============================================================
- * 额度卡片 — 继承凭证卡 statTile 配方（14px 圆角 / 1px 边框 / 82% 透感纸面）。
- * 提供商身份只由图标承载（混合网格下五色渐变卡底会互相打架，已退役）。
- * 遥测内容一律 mono + tabular-nums。
+ * Quota account card — the same surface as the pool panels on the Overview
+ * (card background, 1px border, large radius), so a card inside "Show account
+ * cards" or under "Other accounts" reads as part of the pool design.
+ * Provider identity is carried by the icon only. Telemetry is mono + tabular-nums.
  * ============================================================ */
 
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: 15px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
-  transition:
-    transform var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
-    border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
-    box-shadow var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .card:hover {
-    transform: translateY(-2px);
     border-color: var(--border-hover);
-    box-shadow: 0 12px 26px -14px rgb(0 0 0 / 0.16);
   }
 }
 
-/* 首次数据到达时的一次性级联入场；切 tab / 翻页 / 刷新不重播 */
+/* One-time cascading entrance when data first arrives; tab switches, paging and refreshes do not replay it. */
 .cardEnter {
   animation: quota-card-in 0.45s var(--ease-out-strong, ease-out) both;
   animation-delay: var(--card-delay, 0s);
@@ -42,7 +38,7 @@
   }
 }
 
-/* ---------- 头部：品牌图标 + 文件名 ---------- */
+/* ---------- Header: brand icon + file name ---------- */
 
 .head {
   display: flex;
@@ -136,7 +132,7 @@
   }
 }
 
-/* ---------- body 容器 ---------- */
+/* ---------- Body container ---------- */
 
 .body {
   display: flex;
@@ -145,7 +141,7 @@
   min-width: 0;
 }
 
-/* ---------- idle：整块 body 即点击加载的落点 ---------- */
+/* ---------- Idle: the whole body is the click-to-load target ---------- */
 
 .idleBody {
   display: flex;
@@ -201,7 +197,7 @@
   text-align: center;
 }
 
-/* ---------- loading：双幽灵行骨架 ---------- */
+/* ---------- Loading: two ghost-row skeleton ---------- */
 
 .skeleton {
   display: flex;
@@ -216,7 +212,7 @@
   gap: 6px;
 }
 
-/* 骨架：底色 + 一道 1.2s 匀速扫光（linear —— 环境性匀速运动的唯一例外） */
+/* Skeleton: base colour plus a 1.2s linear shimmer (linear is the one exception for ambient constant motion). */
 .skeletonLabel,
 .skeletonTrack {
   display: block;
@@ -277,7 +273,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ---------- footer 动作 ---------- */
+/* ---------- Footer actions ---------- */
 
 .actionRow {
   display: flex;
@@ -286,7 +282,7 @@
   flex-wrap: wrap;
 }
 
-/* 安静描边药丸（与凭证卡图标动作同族：hover 才显色块） */
+/* Quiet outlined pill (same family as the credential card icon actions: fill only on hover). */
 .actionPill {
   display: inline-flex;
   align-items: center;

@@ -1,31 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <title>t3code-proxy</title>
-  <defs>
-    <linearGradient id="tile" x1="128" y1="0" x2="128" y2="256" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2A2A2D"/>
-      <stop offset="0.45" stop-color="#0C0C0D"/>
-      <stop offset="1" stop-color="#000000"/>
-    </linearGradient>
-    <linearGradient id="rim" x1="40" y1="0" x2="216" y2="256" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF" stop-opacity="0.55"/>
-      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.08"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.28"/>
-    </linearGradient>
-    <radialGradient id="sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0 120 -190 0 128 0)">
-      <stop stop-color="#FFFFFF" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#tile)"/>
-  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#sheen)"/>
-  <rect x="5.5" y="5.5" width="245" height="245" rx="56.5" stroke="url(#rim)" stroke-width="3"/>
-  <g transform="translate(40 42) scale(0.6875)">
-    <path d="M128 234C94 228 44 190 26 140l26-28L38 22l68 46q22-6 44 0l68-46-14 90 26 28c-18 50-68 88-102 94Z" fill="#0A0A0A" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
-    <path d="m58 54 26 18-20 20Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
-    <path d="m198 54-26 18 20 20Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M50 148q44 0 64 28l14 22 14-22q20-28 64-28c-14 36-46 60-78 68-32-8-64-32-78-68Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M119 72q9-2 18 0v26h17l-26 32-26-32h17Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M70 138q13-15 26 0M160 138q13-15 26 0" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
-    <path d="M117 196h22l-11 13Z" fill="#0A0A0A" stroke="#0A0A0A" stroke-width="8" stroke-linejoin="round"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title">
+  <title id="title">t3code-proxy</title>
+  <defs><linearGradient id="silver" x1="128" y1="20" x2="128" y2="216" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9CCD2"/></linearGradient><linearGradient id="tile" x1="128" y1="0" x2="128" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#2A2A2D"/><stop offset="0.45" stop-color="#0C0C0D"/><stop offset="1" stop-color="#000000"/></linearGradient>
+  <linearGradient id="rim" x1="40" y1="0" x2="216" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFFFF" stop-opacity="0.55"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.08"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0.28"/></linearGradient></defs>
+  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#tile)"/><rect x="5.5" y="5.5" width="245" height="245" rx="56.5" stroke="url(#rim)" stroke-width="3"/><g transform="translate(13 22) scale(0.84)"><path d="M186 104C210 104 232 112 250 126C234 130 220 136 212 146C226 156 236 170 240 188C224 182 210 180 200 184C208 196 212 210 210 226C196 210 178 202 160 198Z" fill="#8F939B" stroke="#8F939B" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M164 72C170 52 182 36 198 22C206 46 210 70 208 96Z" fill="#8F939B" stroke="#8F939B" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M38 152C62 138 88 126 108 114C120 108 130 98 136 86C138 62 142 40 150 20C164 36 174 56 180 78C200 80 220 88 236 100C220 106 206 112 196 120C212 126 226 138 232 154C216 152 200 152 188 156C198 168 206 182 206 198C190 186 174 178 160 176C160 188 156 200 148 210C144 194 136 180 124 170C104 172 84 170 66 166C52 164 40 160 38 152Z" fill="url(#silver)" stroke="url(#silver)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M151 44C148 58 147 70 148 82L166 80C162 66 157 54 151 44Z" fill="#8F939B"/>
+    <path d="M102 130C112 120 124 114 138 112C134 120 130 126 126 130C118 128 110 128 102 130Z" fill="#000000"/>
+    <circle cx="46" cy="152" r="6.5" fill="#000000"/></g></svg>

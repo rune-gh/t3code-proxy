@@ -4,7 +4,7 @@ import { getValidationMessage } from '../blocks/shared';
 import { SettingList, TextSetting, ToggleSetting } from '../fields/FieldPrimitives';
 import { SettingsSection } from '../SettingsSection';
 
-/** Quota history: the recorder that samples Claude and Codex quota for the Overview charts. */
+/** Quota history: the recorder that samples subscription quota for the Overview charts. */
 export function SectionQuotaHistory({
   values,
   validationErrors,

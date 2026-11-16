@@ -1,4 +1,4 @@
-// Package quotahistory records the remaining quota of Claude and Codex OAuth
+// Package quotahistory records the remaining quota of subscription
 // credentials over time so the management panel can chart and project it.
 //
 // When quota-history.enabled is false nothing is polled, opened or written.
@@ -7,6 +7,7 @@ package quotahistory
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,8 @@ type Settings struct {
 	Interval  time.Duration
 	Retention time.Duration
 	Path      string
+	// Providers is the normalized comma-separated allowlist. Empty enables all.
+	Providers string
 }
 
 // SettingsFromConfig resolves the quota-history section of cfg. Invalid or
@@ -48,6 +51,14 @@ func SettingsFromConfig(cfg *config.Config, configFilePath string) (Settings, er
 	}
 	qh := cfg.QuotaHistory
 	s.Enabled = qh.Enabled
+	providers := make([]string, 0, len(qh.Providers))
+	for _, provider := range qh.Providers {
+		if provider = strings.ToLower(strings.TrimSpace(provider)); provider != "" {
+			providers = append(providers, provider)
+		}
+	}
+	sort.Strings(providers)
+	s.Providers = strings.Join(providers, ",")
 	if d, ok := parseDuration(qh.Interval); ok {
 		s.Interval = d
 	} else if strings.TrimSpace(qh.Interval) != "" {

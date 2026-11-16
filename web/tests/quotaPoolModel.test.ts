@@ -1,20 +1,41 @@
 import { describe, expect, test } from 'bun:test';
 import type { QuotaHistory, QuotaHistorySample } from '../src/services/api/quotaHistory';
 import { normalizeQuotaHistory } from '../src/services/api/quotaHistory';
+import enLocale from '../src/i18n/locales/en.json';
+import { buildMultiProviderHistory } from '../src/features/quota/__fixtures__/multiProviderHistory';
+import { buildPoolAccountRows, pickNextAccount } from '../src/features/quota/accountRows';
+import {
+  formatBurnRate,
+  formatCapacity,
+  formatPoolPercent,
+  POOL_UNITS,
+} from '../src/features/quota/poolFormat';
+import { formatPlanName, planKey } from '../src/features/quota/poolPrefs';
+import { windowLabel } from '../src/features/quota/poolWindowLabels';
 import {
   HOUR_MS,
+  JUMP_MIN_POINTS,
   buildAccountTracks,
   buildPoolView,
   computeBurnRate,
   defaultPoolSpan,
   detectJumps,
   historyFromLiveSnapshots,
+  jumpThreshold,
   nextResetAfter,
+  parseWindowKey,
+  defaultPoolWindow,
+  poolProvidersFromHistory,
+  poolWindowChoices,
+  providerWindowLabels,
+  providerWindows,
+  resolvePoolWindow,
   pooledAt,
   poolMax,
   remainingAt,
   shiftPoolSpan,
   simulateDrain,
+  weightForAccount,
   type SimAccount,
 } from '../src/features/quota/poolModel';
 
@@ -56,17 +77,17 @@ const history = (
   samples,
 });
 
-const sim = (id: string, remaining: number, nextReset: number | null, weight = 1): SimAccount => ({
+const sim = (id: string, remaining: number, nextReset: number | null, share = 1): SimAccount => ({
   authIndex: id,
   label: id,
-  weight,
+  share,
   remaining,
   nextReset,
   periodMs: 168 * H,
 });
 
 describe('pooling and weights', () => {
-  test('sums remaining × plan weight and scales the pool maximum', () => {
+  test('sums remaining × share of the heaviest plan and scales the pool maximum', () => {
     const h = history(
       [
         { id: 'a', provider: 'codex', plan: 'plus' },
@@ -81,8 +102,10 @@ describe('pooling and weights', () => {
     );
     const tracks = buildAccountTracks(h, 'codex', 'weekly', { pro: 2.5 });
     expect(tracks.map((t) => t.authIndex)).toEqual(['a', 'b']);
-    expect(poolMax(tracks)).toBe(350);
-    expect(pooledAt(tracks, NOW)).toBeCloseTo(60 + 90 * 2.5);
+    // Pro (2.5×) is the heaviest plan: 100%; Plus counts 1 / 2.5 = 40%.
+    expect(tracks.map((t) => t.share)).toEqual([0.4, 1]);
+    expect(poolMax(tracks)).toBeCloseTo(140);
+    expect(pooledAt(tracks, NOW)).toBeCloseTo(60 * 0.4 + 90);
   });
 
   test('defaults every plan to weight 1 and ignores other providers', () => {
@@ -365,10 +388,7 @@ describe('helpers', () => {
           label: 'x',
           plan: 'pro',
           disabled: false,
-          windows: [
-            { id: 'weekly', usedPercent: 30, resetAtMs: NOW + H, periodHours: 168 },
-            { id: 'code-review-weekly', usedPercent: 99 },
-          ],
+          windows: [{ key: 'seven_day', usedPercent: 30, resetAtMs: NOW + H, periodHours: 168 }],
         },
         {
           authIndex: '2',
@@ -385,7 +405,8 @@ describe('helpers', () => {
     expect(h.samples).toHaveLength(1);
     expect(Object.keys(h.samples[0].windows)).toEqual(['seven_day']);
     const tracks = buildAccountTracks(h, 'codex', 'weekly', { pro: 2 });
-    expect(pooledAt(tracks, NOW)).toBe(140);
+    // One account is the whole pool: 100% whatever its plan weight.
+    expect(pooledAt(tracks, NOW)).toBe(70);
   });
 
   test('normalizes the backend payload', () => {
@@ -411,6 +432,7 @@ describe('helpers', () => {
       label: 'u@x',
       plan: 'max_20x',
       disabled: false,
+      weight: null,
     });
     expect(h.samples.map((s) => s.error)).toEqual(['boom', '']);
     expect(h.samples[1].windows.seven_day).toEqual({
@@ -418,5 +440,514 @@ describe('helpers', () => {
       resetsAt: null,
       periodHours: 168,
     });
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Every provider: data-driven pools, window keys, weights from the hub
+ * ------------------------------------------------------------------------- */
+
+/** Minimal i18next stand-in over the real English strings. */
+const t = (key: string, options: Record<string, unknown> = {}): string => {
+  const value = key
+    .split('.')
+    .reduce<unknown>(
+      (node, part) =>
+        node && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined,
+      enLocale
+    );
+  if (typeof value !== 'string') return key;
+  return value.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options[name] ?? ''));
+};
+
+const multi = () =>
+  normalizeQuotaHistory(
+    {
+      enabled: true,
+      interval_seconds: 600,
+      now: NOW,
+      ...buildMultiProviderHistory(NOW),
+    },
+    NOW
+  );
+
+describe('pools for every provider', () => {
+  test('any provider with renewing windows in the history gets a pool', () => {
+    const h = multi();
+    expect(poolProvidersFromHistory(h)).toEqual(['xai', 'antigravity']);
+  });
+
+  test('Claude and Codex lead, other providers follow in first-seen order', () => {
+    const base = multi();
+    const h: QuotaHistory = {
+      ...base,
+      accounts: [
+        ...base.accounts,
+        { authIndex: 'c', provider: 'codex', label: 'c', plan: 'plus', disabled: false },
+        { authIndex: 'k', provider: 'claude', label: 'k', plan: 'pro', disabled: false },
+      ],
+      samples: [
+        ...base.samples,
+        sample(NOW - H, 'c', { seven_day: { used: 10 } }),
+        sample(NOW - H, 'k', { seven_day: { used: 10 } }),
+      ],
+    };
+    expect(poolProvidersFromHistory(h)).toEqual(['claude', 'codex', 'xai', 'antigravity']);
+  });
+
+  test('balances that never renew, disabled accounts and failed samples do not pool', () => {
+    const h = history(
+      [
+        { id: 'k1', provider: 'kimi' },
+        { id: 'd1', provider: 'devin', disabled: true },
+        { id: 'm1', provider: 'meta' },
+      ],
+      [
+        {
+          t: NOW - H,
+          authIndex: 'k1',
+          error: '',
+          windows: { credits: { usedPercent: 40, resetsAt: null, periodHours: null } },
+        },
+        sample(NOW - H, 'd1', { seven_day: { used: 10 } }),
+        { t: NOW - H, authIndex: 'm1', error: 'boom', windows: {} },
+      ]
+    );
+    expect(poolProvidersFromHistory(h)).toEqual([]);
+  });
+
+  test('window choices come from the keys present, longest period first', () => {
+    const h = multi();
+    expect(poolWindowChoices('xai', h)).toEqual(['monthly', 'seven_day']);
+    expect(defaultPoolWindow('xai', h)).toBe('monthly');
+    expect(poolWindowChoices('antigravity', h)).toEqual([
+      'seven_day_gemini_pro',
+      'image_gen',
+      // Same length: the order the provider reports them in.
+      'five_hour_gemini_pro',
+      'five_hour_claude',
+    ]);
+    expect(defaultPoolWindow('antigravity', h)).toBe('seven_day_gemini_pro');
+    expect(providerWindows(h, 'xai')).toEqual([
+      { key: 'monthly', periodHours: 720, label: null },
+      { key: 'seven_day', periodHours: 168, label: null },
+    ]);
+  });
+
+  test('Claude and Codex keep their named choices and defaults', () => {
+    const h = multi();
+    expect(poolWindowChoices('claude', h)).toEqual(['weekly', 'fable', 'five_hour']);
+    expect(defaultPoolWindow('claude')).toBe('fable');
+    expect(poolWindowChoices('codex')).toEqual(['weekly', 'five_hour']);
+    expect(defaultPoolWindow('codex')).toBe('weekly');
+  });
+
+  test('a remembered choice that is no longer offered falls back to the default', () => {
+    const h = multi();
+    expect(resolvePoolWindow('xai', h, 'seven_day')).toBe('seven_day');
+    expect(resolvePoolWindow('xai', h, 'fable')).toBe('monthly');
+    expect(resolvePoolWindow('xai', h, undefined)).toBe('monthly');
+    expect(resolvePoolWindow('claude', h, undefined)).toBe('fable');
+  });
+
+  test('xAI pools by the weight the hub reports per account', () => {
+    const h = multi();
+    const view = buildPoolView(h, {
+      provider: 'xai',
+      window: 'monthly',
+      now: NOW,
+      spanStart: NOW - 3 * 24 * H,
+      spanEnd: NOW + 10 * 24 * H,
+      burnWindowHours: 3,
+      futureUsage: 'same',
+    });
+    expect(view.tracks.map((track) => [track.authIndex, track.weight])).toEqual([
+      ['g1', 1],
+      ['g2', 8],
+    ]);
+    // SuperGrok Heavy (8×) is 100%, SuperGrok 12.5%.
+    expect(view.max).toBeCloseTo(112.5);
+    expect(view.current).toBeGreaterThan(0);
+    expect(view.current).toBeLessThanOrEqual(112.5);
+    expect(view.recorded.length).toBeGreaterThan(10);
+    expect(view.burnRate).toBeGreaterThan(0);
+  });
+
+  test('the effective plan map wins over a stale per-account weight', () => {
+    const h = multi();
+    const tracks = buildAccountTracks(h, 'xai', 'monthly', { supergrok_heavy: 2 });
+    expect(tracks.map((track) => track.weight)).toEqual([1, 2]);
+    expect(poolMax(tracks)).toBe(150);
+  });
+
+  test('Antigravity pools a model-scoped 5-hour window, skipping accounts without it', () => {
+    const h = multi();
+    const tracks = buildAccountTracks(h, 'antigravity', 'five_hour_claude');
+    expect(tracks.map((track) => track.authIndex)).toEqual(['a1', 'a2']);
+    expect(tracks.map((track) => track.weight)).toEqual([1, 4]);
+    expect(tracks.every((track) => track.windowKey === 'five_hour_claude')).toBe(true);
+    const unknown = buildAccountTracks(h, 'antigravity', 'image_gen');
+    expect(unknown.map((track) => track.authIndex)).toEqual(['a1']);
+  });
+
+  test('an unknown provider with an unknown key still pools and gets a label', () => {
+    const h = history(
+      [{ id: 'z1', provider: 'muse', plan: 'team' }],
+      [
+        {
+          t: NOW - H,
+          authIndex: 'z1',
+          error: '',
+          windows: { zq_bucket: { usedPercent: 25, resetsAt: NOW + 2 * H, periodHours: null } },
+        },
+      ]
+    );
+    expect(poolProvidersFromHistory(h)).toEqual(['muse']);
+    expect(poolWindowChoices('muse', h)).toEqual(['zq_bucket']);
+    const view = buildPoolView(h, {
+      provider: 'muse',
+      window: 'zq_bucket',
+      now: NOW,
+      spanStart: NOW - 24 * H,
+      spanEnd: NOW + 24 * H,
+      burnWindowHours: 3,
+      futureUsage: 'same',
+    });
+    expect(view.current).toBe(75);
+    expect(windowLabel(t, 'zq_bucket')).toBe('Zq Bucket');
+  });
+
+  test('per-account rows use the provider windows, weights and the longest window for order', () => {
+    const h = multi();
+    const windows = providerWindows(h, 'antigravity');
+    const rows = buildPoolAccountRows(
+      h,
+      'antigravity',
+      ['a1', 'a2', 'a3'].map((id) => ({ authIndex: id, label: id, plan: null, disabled: false })),
+      NOW,
+      {
+        windowKeys: [...windows].reverse().map((window) => window.key),
+        primary: windows[0].key,
+        weights: { ultra: 4, pro: 1 },
+      }
+    );
+    const a3 = rows.find((row) => row.authIndex === 'a3')!;
+    expect(Object.keys(a3.windows)).toEqual([
+      'five_hour_claude',
+      'five_hour_gemini_pro',
+      'image_gen',
+      'seven_day_gemini_pro',
+    ]);
+    expect(a3.windows.five_hour_claude).toBeNull();
+    expect(a3.plan).toBe('pro');
+    expect(rows.find((row) => row.authIndex === 'a2')!.weight).toBe(4);
+    // Ordered by the soonest reset of the longest (weekly) window.
+    const resets = rows.map((row) => row.weekly!.resetsAt!);
+    expect([...resets].sort((a, b) => a - b)).toEqual(resets);
+    expect(rows.filter((row) => row.isNext)).toHaveLength(1);
+  });
+});
+
+describe('window labels', () => {
+  test('Claude and Codex labels are unchanged', () => {
+    expect(windowLabel(t, 'weekly')).toBe('Weekly');
+    expect(windowLabel(t, 'fable')).toBe('Fable weekly');
+    expect(windowLabel(t, 'five_hour')).toBe('5-hour');
+  });
+
+  test('backend keys read as plain names', () => {
+    expect(windowLabel(t, 'seven_day')).toBe('Weekly');
+    expect(windowLabel(t, 'seven_day_opus')).toBe('Opus weekly');
+    expect(windowLabel(t, 'seven_day_gemini_pro')).toBe('Gemini Pro weekly');
+    expect(windowLabel(t, 'five_hour_claude')).toBe('Claude 5-hour');
+    expect(windowLabel(t, 'monthly')).toBe('Monthly');
+    expect(windowLabel(t, 'thirty_day')).toBe('Monthly');
+    expect(windowLabel(t, 'daily')).toBe('Daily');
+    expect(windowLabel(t, '24h')).toBe('Daily');
+    expect(windowLabel(t, '12h')).toBe('12-hour');
+    expect(windowLabel(t, 'two_week')).toBe('2-week');
+    expect(windowLabel(t, 'image_gen')).toBe('Image Gen');
+  });
+
+  test('odd keys never come back empty', () => {
+    expect(windowLabel(t, '')).toBe('Quota window');
+    expect(windowLabel(t, '___')).toBe('Quota window');
+    expect(windowLabel(t, 'x-1')).toBe('X 1');
+    expect(parseWindowKey('weird key!')).toEqual({ span: null, scope: 'Weird Key!' });
+  });
+});
+
+describe('pooled units', () => {
+  test('every pool reads in percent of its heaviest plan', () => {
+    expect(POOL_UNITS.value(471)).toBe('471%');
+    expect(POOL_UNITS.value(38.4)).toBe('38%');
+    expect(POOL_UNITS.value(0.3)).toBe('<1%');
+    expect(POOL_UNITS.value(-5)).toBe('0%');
+    expect(POOL_UNITS.signed(20)).toBe('+20%');
+    expect(formatBurnRate(34)).toBe('34%/h');
+    expect(formatBurnRate(2.34)).toBe('2.3%/h');
+    expect(formatBurnRate(0.01)).toBe('<0.1%/h');
+    expect(formatBurnRate(0)).toBe('0%/h');
+    expect(formatCapacity(12.5)).toBe('12.5%');
+    expect(formatPoolPercent(120)).toBe('120%');
+  });
+});
+
+describe('percent of the heaviest plan (owner pools)', () => {
+  const ownerView = (
+    provider: string,
+    accounts: Array<{ id: string; plan: string; weight: number; used: number }>,
+    weights?: Record<string, number>
+  ) => {
+    const h: QuotaHistory = {
+      enabled: true,
+      intervalSeconds: 600,
+      now: NOW,
+      accounts: accounts.map((a) => ({
+        authIndex: a.id,
+        provider,
+        label: a.id,
+        plan: a.plan,
+        disabled: false,
+        weight: a.weight,
+      })),
+      samples: accounts.map((a) =>
+        sample(NOW - H, a.id, { seven_day: { used: a.used, resetsAt: NOW + 24 * H } })
+      ),
+    };
+    return buildPoolView(h, {
+      provider,
+      window: 'weekly',
+      weights,
+      now: NOW,
+      spanStart: NOW - 24 * H,
+      spanEnd: NOW + 3 * 24 * H,
+      burnWindowHours: 3,
+      futureUsage: 'same',
+    });
+  };
+
+  test('Claude Pro + Max 5x: 38% of 120%, Max 5x = 100%, Pro = 20%', () => {
+    const view = ownerView(
+      'claude',
+      [
+        { id: 'pro', plan: 'pro', weight: 1, used: 100 },
+        { id: 'max', plan: 'max_5x', weight: 5, used: 62 },
+      ],
+      { pro: 1, max_5x: 5 }
+    );
+    expect(view.tracks.map((t) => [t.authIndex, t.share])).toEqual([
+      ['pro', 0.2],
+      ['max', 1],
+    ]);
+    expect(view.max).toBeCloseTo(120);
+    expect(view.current).toBeCloseTo(38);
+    expect(POOL_UNITS.value(view.current)).toBe('38%');
+    expect(POOL_UNITS.value(view.max)).toBe('120%');
+    // The projected reset refills both: Pro adds 20%, Max 5x adds 62%.
+    const reset = view.jumps.find((jump) => jump.projected);
+    expect(reset?.amount).toBeCloseTo(20 + 62);
+  });
+
+  test('Codex Plus + prolite at 5×: 80% of 120%', () => {
+    const view = ownerView('codex', [
+      { id: 'plus', plan: 'plus', weight: 1, used: 100 },
+      { id: 'prolite', plan: 'prolite', weight: 5, used: 20 },
+    ]);
+    expect(view.max).toBeCloseTo(120);
+    expect(view.current).toBeCloseTo(80);
+  });
+
+  test('a heavier account without a reading still sets the scale', () => {
+    const h: QuotaHistory = {
+      enabled: true,
+      intervalSeconds: 600,
+      now: NOW,
+      accounts: [
+        {
+          authIndex: 'pro',
+          provider: 'claude',
+          label: 'pro',
+          plan: 'pro',
+          disabled: false,
+          weight: 1,
+        },
+        {
+          authIndex: 'max',
+          provider: 'claude',
+          label: 'max',
+          plan: 'max_5x',
+          disabled: false,
+          weight: 5,
+        },
+        {
+          authIndex: 'off',
+          provider: 'claude',
+          label: 'off',
+          plan: 'max_20x',
+          disabled: true,
+          weight: 20,
+        },
+      ],
+      // Only Pro has a sample; the Max 5x read failed and the Max 20x account is disabled.
+      samples: [sample(NOW - H, 'pro', { seven_day: { used: 50, resetsAt: NOW + 24 * H } })],
+    };
+    const tracks = buildAccountTracks(h, 'claude', 'weekly');
+    expect(tracks.map((t) => [t.authIndex, t.share])).toEqual([['pro', 0.2]]);
+    expect(poolMax(tracks)).toBeCloseTo(20);
+    expect(pooledAt(tracks, NOW)).toBeCloseTo(10);
+  });
+
+  test('a plan sent as a display name finds its weight by plan key', () => {
+    expect(planKey('SuperGrok Heavy')).toBe('supergrok_heavy');
+    expect(planKey(' Max-20x ')).toBe('max_20x');
+    expect(formatPlanName('supergrok')).toBe('SuperGrok');
+    expect(formatPlanName('SuperGrok Heavy')).toBe('SuperGrok Heavy');
+    expect(formatPlanName('max_5x')).toBe('Max 5x');
+    const weights = { supergrok: 1, supergrok_heavy: 10 };
+    expect(weightForAccount({ plan: 'SuperGrok Heavy', weight: 1 }, weights)).toBe(10);
+    expect(weightForAccount({ plan: 'SuperGrok', weight: 1 }, weights)).toBe(1);
+  });
+
+  test('a light plan keeps its reset label: the threshold scales with the lightest share', () => {
+    expect(jumpThreshold([{ share: 1 }, { share: 0.2 }])).toBeCloseTo(1);
+    expect(jumpThreshold([{ share: 1 }])).toBe(JUMP_MIN_POINTS);
+    expect(jumpThreshold([])).toBe(JUMP_MIN_POINTS);
+    // Pro refills 15% of its own window, which is 3 pool percent: still labelled.
+    const view = ownerView(
+      'claude',
+      [
+        { id: 'pro', plan: 'pro', weight: 1, used: 15 },
+        { id: 'max', plan: 'max_5x', weight: 5, used: 0 },
+      ],
+      { pro: 1, max_5x: 5 }
+    );
+    const reset = view.jumps.find((jump) => jump.projected);
+    expect(reset?.amount).toBeCloseTo(3);
+  });
+
+  test('a reset beyond the projected range is still reported as the next reset', () => {
+    const h: QuotaHistory = {
+      enabled: true,
+      intervalSeconds: 600,
+      now: NOW,
+      accounts: [
+        {
+          authIndex: 'm',
+          provider: 'mistral',
+          label: 'm',
+          plan: 'EDU',
+          disabled: false,
+          weight: 1,
+        },
+      ],
+      samples: [
+        sample(NOW - H, 'm', {
+          api_monthly: { used: 3, resetsAt: NOW + 15 * 24 * H, period: 720 },
+        }),
+      ],
+    };
+    const view = buildPoolView(h, {
+      provider: 'mistral',
+      window: resolvePoolWindow('mistral', h, undefined) as string,
+      now: NOW,
+      spanStart: NOW - 3 * 24 * H,
+      spanEnd: NOW + 11 * 24 * H,
+      burnWindowHours: 3,
+      futureUsage: 'same',
+    });
+    expect(view.tracks).toHaveLength(1);
+    expect(view.nextReset?.at).toBe(NOW + 15 * 24 * H);
+    expect(view.nextReset?.amount).toBeCloseTo(3);
+  });
+
+  test('an unweighted pool stays N × 100%', () => {
+    const view = ownerView('codex', [
+      { id: 'a', plan: 'plus', weight: 1, used: 50 },
+      { id: 'b', plan: 'plus', weight: 1, used: 0 },
+    ]);
+    expect(view.max).toBe(200);
+    expect(view.current).toBe(150);
+  });
+
+  test('a single heavy account is 100%, whatever its weight', () => {
+    const view = ownerView('claude', [{ id: 'g', plan: 'max_20x', weight: 20, used: 25 }]);
+    expect(view.max).toBe(100);
+    expect(view.current).toBe(75);
+  });
+});
+
+describe('provider-reported window names', () => {
+  test('prefers the name the hub reports over one read from the key', () => {
+    const history = normalizeQuotaHistory({
+      enabled: true,
+      accounts: [
+        { auth_index: 'agy-1', provider: 'antigravity', label: 'a', plan: '', disabled: false },
+      ],
+      samples: [
+        {
+          t: 1_000,
+          auth_index: 'agy-1',
+          windows: {
+            group_0_b1: {
+              used_percent: 10,
+              resets_at: 9_999_999,
+              period_hours: 168,
+              label: 'Gemini Pro weekly',
+            },
+            weekly: { used_percent: 5, resets_at: 9_999_999, period_hours: 168 },
+          },
+        },
+      ],
+    });
+    const windows = providerWindows(history, 'antigravity');
+    const labels = providerWindowLabels(windows);
+    const t = (key: string) => key;
+    expect(labels).toEqual({ group_0_b1: 'Gemini Pro weekly' });
+    expect(windowLabel(t, 'group_0_b1', labels)).toBe('Gemini Pro weekly');
+    expect(windowLabel(t, 'weekly', labels)).toBe('quota_pool.window_weekly');
+  });
+});
+
+describe('a provider-reported `weekly` window', () => {
+  test('pools under its own key instead of the Claude and Codex alias', () => {
+    const history = normalizeQuotaHistory({
+      enabled: true,
+      accounts: [{ auth_index: 'meta-1', provider: 'meta', label: 'm', plan: '', disabled: false }],
+      samples: [
+        {
+          t: 1_000,
+          auth_index: 'meta-1',
+          windows: { weekly: { used_percent: 40, resets_at: 9_999_999, period_hours: 168 } },
+        },
+      ],
+    });
+    expect(defaultPoolWindow('meta', history)).toBe('weekly');
+    const tracks = buildAccountTracks(history, 'meta', 'weekly');
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0].windowKey).toBe('weekly');
+    expect(tracks[0].points[0].remaining).toBe(60);
+  });
+});
+
+describe('the Next badge and the 5-hour headroom guard', () => {
+  const row = (authIndex: string, weeklyReset: number, fiveHourRemaining: number, weight = 1) =>
+    ({
+      authIndex,
+      disabled: false,
+      exhausted: false,
+      weight,
+      weekly: { remaining: 50, resetsAt: weeklyReset },
+      fiveHour: { remaining: fiveHourRemaining, resetsAt: null },
+    }) as unknown as Parameters<typeof pickNextAccount>[0][number];
+
+  test('passes over an account with little 5-hour headroom while another has room', () => {
+    expect(pickNextAccount([row('soon-but-tight', 1_000, 5), row('later', 2_000, 50)])).toBe(
+      'later'
+    );
+  });
+  test('weighs headroom by plan, and falls back when every account is tight', () => {
+    expect(pickNextAccount([row('max', 1_000, 5, 20), row('later', 2_000, 50)])).toBe('max');
+    expect(pickNextAccount([row('a', 1_000, 5), row('b', 2_000, 4)])).toBe('a');
   });
 });

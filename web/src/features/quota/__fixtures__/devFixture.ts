@@ -1,7 +1,12 @@
 /**
  * DEV-only fixture session: `/?fixture=quota-history#/quota` renders the app
  * against canned data instead of a live hub. Add `&history=off` to simulate a
- * hub without the quota-history endpoint (404) and check the degraded view. Loaded through a dynamic import
+ * hub without the quota-history endpoint (404) and check the degraded view,
+ * `&providers=two` to record only Claude and Codex (no xAI/Antigravity pools),
+ * `&pool=owner` for the owner's hub (Claude Pro + Max 5x, Codex Plus + prolite,
+ * one Antigravity account with four group windows, one xAI weekly window),
+ * and `&weights=off` to simulate a hub without server-side plan weights
+ * (`/routing/plan-weights` 404, weights kept in the browser). Loaded through a dynamic import
  * guarded by `import.meta.env.DEV`, so production bundles never contain it.
  *
  * The fake session is kept out of persisted login storage, and every
@@ -13,6 +18,8 @@ import { createJSONStorage } from 'zustand/middleware';
 import { apiClient, installDevApiAdapter } from '@/services/api/client';
 import { useAuthStore } from '@/stores';
 import { buildQuotaHistoryFixture } from './quotaHistory';
+import { buildMultiProviderHistory, PLAN_WEIGHTS_FIXTURE } from './multiProviderHistory';
+import { buildOwnerPoolHistory } from './ownerPool';
 import { installHubPagesFixture } from '@/features/connect/__fixtures__/hubPagesFixture';
 import { createResetCreditsFixture } from './resetCredits';
 import { enrichAccountsFixture } from '@/features/authFiles/__fixtures__/accountsFixture';
@@ -39,8 +46,47 @@ const parseBody = (data: unknown): Record<string, unknown> => {
 export function installQuotaHistoryFixture(): void {
   if (!import.meta.env.DEV) return;
   const fixture = buildQuotaHistoryFixture();
+  const params = new URLSearchParams(window.location.search);
+  const historyOff = params.get('history') === 'off';
+  const weightsOff = params.get('weights') === 'off';
+  if (params.get('pool') === 'owner') {
+    const owner = buildOwnerPoolHistory(fixture.payload.now);
+    fixture.payload.accounts = owner.accounts;
+    fixture.payload.samples = owner.samples;
+    fixture.credentials.files = owner.files;
+  } else if (params.get('providers') !== 'two') {
+    const extra = buildMultiProviderHistory(fixture.payload.now);
+    fixture.payload.accounts.push(...extra.accounts);
+    fixture.payload.samples.push(...extra.samples);
+    fixture.payload.samples.sort((a, b) => Number(a.t) - Number(b.t));
+    const known = new Set(fixture.credentials.files.map((file) => file.auth_index));
+    fixture.credentials.files.push(...extra.files.filter((file) => !known.has(file.auth_index)));
+  }
   enrichAccountsFixture(fixture.credentials.files);
-  const historyOff = new URLSearchParams(window.location.search).get('history') === 'off';
+  const planWeights = {
+    defaults: PLAN_WEIGHTS_FIXTURE.defaults as Record<string, Record<string, number>>,
+    configured: structuredClone(PLAN_WEIGHTS_FIXTURE.configured),
+  };
+  const effectiveWeights = () => {
+    const out: Record<string, Record<string, number>> = {};
+    new Set([...Object.keys(planWeights.defaults), ...Object.keys(planWeights.configured)]).forEach(
+      (provider) => {
+        out[provider] = {
+          ...(planWeights.defaults[provider] ?? {}),
+          ...(planWeights.configured[provider] ?? {}),
+        };
+      }
+    );
+    return out;
+  };
+  // Each recorded account carries its effective weight, as the hub reports it.
+  const historyAccounts = () =>
+    fixture.payload.accounts.map((account) => {
+      const weight = weightsOff
+        ? undefined
+        : effectiveWeights()[String(account.provider)]?.[String(account.plan)];
+      return weight === undefined ? account : { ...account, weight };
+    });
   const resetCredits = createResetCreditsFixture(Date.now());
 
   const adapter: AxiosAdapter = async (config) => {
@@ -62,6 +108,7 @@ export function installQuotaHistoryFixture(): void {
       const until = Number(config.params?.until ?? Number.MAX_SAFE_INTEGER);
       return respond({
         ...fixture.payload,
+        accounts: historyAccounts(),
         samples: fixture.payload.samples.filter((s) => {
           const t = Number(s.t);
           return t >= since && t <= until;
@@ -69,6 +116,34 @@ export function installQuotaHistoryFixture(): void {
       });
     }
     if (!historyOff && method === 'post' && /\/quota-history\/refresh$/.test(path)) {
+      return respond({ status: 'ok' });
+    }
+    if (!weightsOff && method === 'get' && /\/v8\/management\/routing\/plan-weights$/.test(path)) {
+      return respond({
+        defaults: planWeights.defaults,
+        configured: planWeights.configured,
+        effective: effectiveWeights(),
+      });
+    }
+    if (method === 'patch' && /\/v8\/management\/config$/.test(path)) {
+      const body = parseBody(config.data);
+      const routing = body.routing as Record<string, unknown> | undefined;
+      const set = routing?.['plan-weights'] as Record<string, Record<string, number>> | undefined;
+      Object.entries(set ?? {}).forEach(([provider, plans]) => {
+        planWeights.configured[provider] = {
+          ...(planWeights.configured[provider] ?? {}),
+          ...plans,
+        };
+      });
+      return respond({ status: 'ok' });
+    }
+    const weightPath = /\/v8\/management\/config\/routing\/plan-weights\/([^/]+)\/([^/]+)$/.exec(
+      path
+    );
+    if (method === 'delete' && weightPath) {
+      const provider = decodeURIComponent(weightPath[1]);
+      const plan = decodeURIComponent(weightPath[2]);
+      if (planWeights.configured[provider]) delete planWeights.configured[provider][plan];
       return respond({ status: 'ok' });
     }
     if (method === 'get' && /\/v8\/management\/credentials$/.test(path)) {

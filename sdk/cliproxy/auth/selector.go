@@ -1532,6 +1532,10 @@ func (s *SessionAffinitySelector) shouldPreserveBindingWhenUnavailable(ctx conte
 	if s == nil || (!s.rebindOnQuotaOnly && !s.rebindOnNever) || authID == "" {
 		return false
 	}
+	// A spent scoped weekly cap is a quota condition, not a transient one.
+	if !s.rebindOnNever && boundAuthScopedWeeklyCapSpent(candidates, model, authID, now) {
+		return false
+	}
 	if ctx != nil {
 		if validated, _ := ctx.Value(prevalidatedAuthCandidatesKey{}).(bool); validated {
 			transientAuthIDs := sessionAffinityTransientAuthIDsFromContext(ctx)
@@ -1693,6 +1697,10 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	available, err := getSelectorAvailableAuthsAcrossPriorities(ctx, availabilityCandidates, provider, model, now)
 	if err != nil && !s.rebindOnNever {
 		return nil, err
+	}
+	if !s.rebindOnNever {
+		// A bound account whose scoped weekly cap is known spent rebinds before sending.
+		available = withoutSpentScopedWeeklyCaps(available, model, now)
 	}
 	fallbackAuths := highestPriorityAuths(available)
 
@@ -1874,6 +1882,10 @@ func (s *SessionAffinitySelector) pickLCP(ctx context.Context, provider, model s
 	available, errAvailable := getSelectorAvailableAuthsAcrossPriorities(ctx, availabilityCandidates, provider, model, now)
 	if errAvailable != nil && !s.rebindOnNever {
 		return nil, true, errAvailable
+	}
+	if !s.rebindOnNever {
+		// A bound account whose scoped weekly cap is known spent rebinds before sending.
+		available = withoutSpentScopedWeeklyCaps(available, model, now)
 	}
 
 	var preservedAuthID string

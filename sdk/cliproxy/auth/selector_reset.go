@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	cliproxyexecutor "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
@@ -16,14 +18,25 @@ import (
 // that reset passes. Accounts without a usable reset whose last observation is
 // absent or older than probeInterval are probed first, so every account gets
 // observed after restarts and resets. Accounts that never report a weekly
-// window, such as Grok or Antigravity, therefore keep round-robin behavior.
+// window keep round-robin behavior until the recorder publishes a reading.
 //
 // When the requested model is governed by a model-scoped weekly cap (see
 // selector_reset_scoped.go), accounts whose latest observation shows that cap
 // spent are skipped while another eligible account exists, and the scoped
 // cap's reset replaces the overall weekly reset for ranking.
+//
+// Plan capacity (see plan_weight.go) shapes two decisions. Accounts whose
+// plan-weighted 5-hour headroom is below routing.plan-headroom-reserve are
+// skipped for new conversations while another eligible account has headroom
+// (see plan_headroom.go). Where several accounts remain equal (tied resets,
+// probes, or pools that report no quota), new conversations are spread in
+// proportion to plan weight with smooth weighted round-robin, so a Max 20x
+// account takes twenty conversations for every one on a Pro account. With equal
+// weights this is plain round-robin in ID order.
 type SoonestResetFirstSelector struct {
-	fallback RoundRobinSelector
+	mu sync.Mutex
+	// credits holds the smooth weighted round-robin state per provider and model.
+	credits map[string]map[string]float64
 	// now overrides the clock in tests.
 	now func() time.Time
 }
@@ -38,12 +51,12 @@ func (s *SoonestResetFirstSelector) Pick(ctx context.Context, provider, model st
 		return nil, err
 	}
 	available = preferCodexWebsocketAuths(ctx, provider, available)
-	// Skip accounts whose scoped cap for this model is spent. When every account
+	// Skip accounts whose governing allowance for this model is spent. When every account
 	// is spent, keep them all so ranking picks the one whose cap resets first.
 	scoped := make(map[*Auth]scopedWeeklyState)
 	usable := make([]*Auth, 0, len(available))
 	for _, auth := range available {
-		state, ok := scopedWeeklyWindowFor(auth, model, now)
+		state, ok := governingQuotaWindowFor(auth, model, now)
 		if ok {
 			scoped[auth] = state
 		}
@@ -53,40 +66,161 @@ func (s *SoonestResetFirstSelector) Pick(ctx context.Context, provider, model st
 	}
 	if len(usable) > 0 {
 		available = usable
+	} else if wait, ok := waitForCoolingSibling(ctx, scoped, model, now); ok {
+		// Every account that can take the request is known to be spent, and one with
+		// allowance left is only cooling down. Sending the request to a spent account
+		// would hand the client that account's "limit reached until its reset" instead
+		// of the short wait that is actually ahead.
+		if provider == "mixed" {
+			provider = ""
+		}
+		return nil, newModelCooldownError(model, provider, wait)
 	}
-	var earliest time.Time
-	var candidates, probes []*Auth
+	available = withShortWindowHeadroom(available, planHeadroomReserve(), now)
+	type rankedAuth struct {
+		auth  *Auth
+		reset time.Time
+	}
+	var ranked []rankedAuth
+	var probes []*Auth
+	// Providers with a usage-only account that has no reading.
+	unread := make(map[string]bool)
 	for _, auth := range available {
 		reset := observedWeeklyReset(auth, model, now)
-		if state, ok := scoped[auth]; ok {
+		if state, ok := scoped[auth]; ok && (state.scoped || state.exhausted) {
 			reset = state.reset
 		}
-		if reset.IsZero() {
-			// Only providers that report quota can produce an observation; others (Grok,
-			// Antigravity) would otherwise stay probes forever and win every mixed pool.
-			if !ProviderSupportsQuotaObservation(auth.Provider) {
-				continue
-			}
-			if observed := lastObservation(auth, model); observed.IsZero() || now.Sub(observed) > probeInterval {
-				probes = append(probes, auth)
-			}
+		if !reset.IsZero() {
+			ranked = append(ranked, rankedAuth{auth: auth, reset: reset})
 			continue
 		}
-		if earliest.IsZero() || reset.Before(earliest) {
-			earliest = reset
-			candidates = []*Auth{auth}
-		} else if reset.Equal(earliest) {
-			candidates = append(candidates, auth)
+		// A usage-only account gets readings only from the recorder.
+		if !quotaObservationCanProbe(auth) {
+			unread[strings.ToLower(auth.Provider)] = true
+			continue
+		}
+		if observed := lastObservation(auth, model); observed.IsZero() || now.Sub(observed) > probeInterval {
+			probes = append(probes, auth)
+		}
+	}
+	// While one account of a usage-only provider has no reading, ranking its
+	// siblings would starve it, so that provider is left out of ranking. Other
+	// providers in the same pool are still ranked.
+	var earliest time.Time
+	var candidates []*Auth
+	for _, entry := range ranked {
+		if unread[strings.ToLower(entry.auth.Provider)] {
+			continue
+		}
+		if earliest.IsZero() || entry.reset.Before(earliest) {
+			earliest = entry.reset
+			candidates = []*Auth{entry.auth}
+		} else if entry.reset.Equal(earliest) {
+			candidates = append(candidates, entry.auth)
 		}
 	}
 	switch {
 	case len(probes) > 0:
-		return s.fallback.Pick(ctx, provider, model, opts, probes)
+		return s.pickWeighted(provider, model, probes), nil
 	case len(candidates) > 0:
-		return s.fallback.Pick(ctx, provider, model, opts, candidates)
+		return s.pickWeighted(provider, model, candidates), nil
 	default:
-		return s.fallback.Pick(ctx, provider, model, opts, available)
+		return s.pickWeighted(provider, model, available), nil
 	}
+}
+
+// coolingCandidate is an account kept out of a pick only until a known time: a
+// quota cooldown, or the hold after a transient upstream error.
+type coolingCandidate struct {
+	auth  *Auth
+	until time.Time
+}
+
+type coolingCandidatesKey struct{}
+
+// withCoolingCandidates tells the selector which candidates are cooling down.
+// The manager hands selectors only the available accounts, so without this a
+// selector cannot tell "every account is spent" from "the account with
+// allowance left is unavailable for a moment".
+func withCoolingCandidates(ctx context.Context, cooling []coolingCandidate) context.Context {
+	if len(cooling) == 0 {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, coolingCandidatesKey{}, cooling)
+}
+
+// waitForCoolingSibling reports how long to wait when a cooling account still
+// has allowance: until the first such account is back, or until the first
+// spent account resets if that comes sooner. spent holds the governing state
+// of the available accounts, all of which are exhausted.
+func waitForCoolingSibling(ctx context.Context, spent map[*Auth]scopedWeeklyState, model string, now time.Time) (time.Duration, bool) {
+	if ctx == nil {
+		return 0, false
+	}
+	cooling, _ := ctx.Value(coolingCandidatesKey{}).([]coolingCandidate)
+	var back time.Time
+	for _, candidate := range cooling {
+		if candidate.auth == nil || !candidate.until.After(now) {
+			continue
+		}
+		if state, ok := governingQuotaWindowFor(candidate.auth, model, now); ok && state.exhausted {
+			continue
+		}
+		if back.IsZero() || candidate.until.Before(back) {
+			back = candidate.until
+		}
+	}
+	if back.IsZero() {
+		return 0, false
+	}
+	for _, state := range spent {
+		if state.exhausted && state.reset.After(now) && state.reset.Before(back) {
+			back = state.reset
+		}
+	}
+	return back.Sub(now), true
+}
+
+// maxWeightedKeys bounds the number of provider/model credit tables kept.
+const maxWeightedKeys = 4096
+
+// pickWeighted picks one of auths with smooth weighted round-robin by plan
+// weight: every candidate earns its weight, the richest is picked (ties go to
+// the lowest ID) and pays the candidates' total. The result is deterministic
+// and spreads picks in proportion to weight. Credits of accounts outside the
+// current candidate set are dropped, so a set change starts them fresh.
+func (s *SoonestResetFirstSelector) pickWeighted(provider, model string, auths []*Auth) *Auth {
+	if len(auths) == 1 {
+		return auths[0]
+	}
+	ordered := make([]*Auth, len(auths))
+	copy(ordered, auths)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].ID < ordered[j].ID })
+	key := provider + ":" + canonicalModelLookupKey(model)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.credits == nil || (s.credits[key] == nil && len(s.credits) >= maxWeightedKeys) {
+		s.credits = make(map[string]map[string]float64)
+	}
+	previous := s.credits[key]
+	credits := make(map[string]float64, len(ordered))
+	var total float64
+	var picked *Auth
+	for _, auth := range ordered {
+		weight := PlanWeightOf(auth)
+		total += weight
+		credits[auth.ID] = previous[auth.ID] + weight
+		if picked == nil || credits[auth.ID] > credits[picked.ID] {
+			picked = auth
+		}
+	}
+	credits[picked.ID] -= total
+	s.credits[key] = credits
+	return picked
 }
 
 // probeInterval bounds how often an account without a usable weekly reset is
@@ -101,11 +235,27 @@ func latestQuota(auth *Auth, model string) QuotaState {
 	return quota
 }
 
+// lastObservation is the time of the newest passive reading. Usage polls do
+// not count: a poll that carries no usable reset arrives every interval and
+// would otherwise keep an account from ever being probed.
 func lastObservation(auth *Auth, model string) time.Time {
 	return latestQuota(auth, model).ObservedAt
 }
 
+// observedWeeklyReset returns the reset used to rank the account: the polled
+// governing window, or the weekly reset from response headers when those are
+// newer (a window can reset early) or no poll exists.
 func observedWeeklyReset(auth *Auth, model string, now time.Time) time.Time {
+	passive := passiveWeeklyReset(auth, model, now)
+	state, ok := observedGoverningWindow(auth, model, now)
+	if !ok || (!passive.IsZero() && latestQuota(auth, model).ObservedAt.After(state.observedAt)) {
+		return passive
+	}
+	return state.reset
+}
+
+// passiveWeeklyReset reads the weekly reset from passive response headers.
+func passiveWeeklyReset(auth *Auth, model string, now time.Time) time.Time {
 	quota := latestQuota(auth, model)
 	// futureResetTime rejects resets that have passed or exceed one week.
 	if quota.ObservedAt.IsZero() || quota.ObservedAt.After(now) || now.Sub(quota.ObservedAt) > 8*24*time.Hour {

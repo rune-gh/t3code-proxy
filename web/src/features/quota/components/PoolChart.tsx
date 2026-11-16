@@ -11,12 +11,11 @@ import { useEffect, useId, useMemo, useRef, useState, type PointerEvent } from '
 import { useTranslation } from 'react-i18next';
 import { dayStarts, type PoolView, type SeriesPoint } from '../poolModel';
 import {
-  formatBurnRate,
   formatDayTick,
-  formatPoolPercent,
-  formatSignedPercent,
   formatWeekdayTime,
   niceCeil,
+  POOL_UNITS,
+  type PoolUnits,
 } from '../poolFormat';
 import styles from './PoolChart.module.scss';
 
@@ -30,6 +29,8 @@ export interface PoolChartProps {
   spanEnd: number;
   now: number;
   locale: string;
+  /** Value formatting: pool percent (the heaviest plan in the pool is 100%). */
+  units?: PoolUnits;
 }
 
 const HEIGHT = 300;
@@ -86,6 +87,7 @@ export function PoolChart({
   spanEnd,
   now,
   locale,
+  units = POOL_UNITS,
 }: PoolChartProps) {
   const { t } = useTranslation();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -129,7 +131,7 @@ export function PoolChart({
   const y = (value: number) =>
     plotBottom - (Math.min(Math.max(value, 0), yMax) / yMax) * (plotBottom - plotTop);
 
-  const formatValue = (value: number) => (drain ? formatBurnRate(value) : formatPoolPercent(value));
+  const formatValue = (value: number) => (drain ? units.rate(value) : units.value(value));
 
   const days = useMemo(() => dayStarts(spanStart, spanEnd), [spanStart, spanEnd]);
   const dayLabels = useMemo(() => {
@@ -167,12 +169,24 @@ export function PoolChart({
         out.push({
           x: jx,
           y: labelY,
-          label: formatSignedPercent(jump.amount),
+          label: units.signed(jump.amount),
           projected: jump.projected,
         });
       });
     return out;
-  }, [compact, drain, plotBottom, plotLeft, plotRight, plotTop, span, spanStart, view.jumps, yMax]);
+  }, [
+    compact,
+    drain,
+    plotBottom,
+    plotLeft,
+    plotRight,
+    plotTop,
+    span,
+    spanStart,
+    units,
+    view.jumps,
+    yMax,
+  ]);
 
   const nowVisible = now >= spanStart && now <= spanEnd;
   const nowX = x(now);
@@ -208,12 +222,12 @@ export function PoolChart({
   const summary = drain
     ? t('quota_pool.chart_summary_drain', {
         defaultValue: 'Drain rate over time; currently {{rate}}.',
-        rate: formatBurnRate(view.burnRate),
+        rate: units.rate(view.burnRate),
       })
     : t('quota_pool.chart_summary', {
         defaultValue: 'Pooled quota over time: {{current}} of {{max}} left.',
-        current: formatPoolPercent(view.current),
-        max: formatPoolPercent(view.max),
+        current: units.value(view.current),
+        max: units.value(view.max),
       });
 
   const tooltipFlip = hoverX !== null && hoverX > width / 2;
@@ -382,10 +396,10 @@ export function PoolChart({
           {formatWeekdayTime(hover.time, locale)}
           {' · '}
           {drain
-            ? formatBurnRate(hover.value)
+            ? units.rate(hover.value)
             : t('quota_pool.tooltip_left', {
                 defaultValue: '{{value}} left',
-                value: formatPoolPercent(hover.value),
+                value: units.value(hover.value),
               })}
           {' · '}
           {hover.projected

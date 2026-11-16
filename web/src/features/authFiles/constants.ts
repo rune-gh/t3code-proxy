@@ -3,6 +3,7 @@ import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconMeta from '@/assets/icons/meta.svg';
+import iconMistral from '@/assets/icons/mistral.svg';
 import iconDevin from '@/assets/icons/devin.svg';
 import iconDevinDark from '@/assets/icons/devin-dark.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
@@ -28,14 +29,7 @@ export type AuthFileModelItem = {
 export type AuthFileIconAsset = string | { light: string; dark: string };
 
 export type QuotaProviderType =
-  | 'antigravity'
-  | 'claude'
-  | 'codex'
-  | 'devin'
-  | 'kimi'
-  | 'meta'
-  | 'plugin'
-  | 'xai';
+  'antigravity' | 'claude' | 'codex' | 'devin' | 'kimi' | 'meta' | 'plugin' | 'xai';
 export type AuthFileQuotaFilter = string | null;
 export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
 
@@ -81,7 +75,7 @@ export const AUTH_FILE_MANUAL_REFRESH_PROVIDERS = new Set([
   'xai',
 ]);
 
-// 标签类型颜色配置：权威版本在 @/utils/quota/constants.ts，此处仅转发
+// Tag type colours: the source of truth is @/utils/quota/constants.ts; this only re-exports it
 export { TYPE_COLORS } from '@/utils/quota';
 
 export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
@@ -90,6 +84,7 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   claude: iconClaude,
   codex: iconCodex,
   meta: iconMeta,
+  mistral: iconMistral,
   devin: { light: iconDevin, dark: iconDevinDark },
   gemini: iconGemini,
   xai: { light: iconGrok, dark: iconGrokDark },
@@ -131,7 +126,7 @@ export const getAuthFileStatusMessage = (file: AuthFileItem): string => {
   return String(raw).trim();
 };
 
-/** 这些 status_message 视为健康，不触发告警态。 */
+/** These status_message values count as healthy and raise no warning state. */
 export const HEALTHY_AUTH_FILE_STATUS_MESSAGES = new Set([
   'ok',
   'healthy',
@@ -140,15 +135,16 @@ export const HEALTHY_AUTH_FILE_STATUS_MESSAGES = new Set([
   'available',
 ]);
 
-/** 是否存在非健康的 status_message（卡片告警态 / 谱条琥珀色共用判定）。 */
+/** Whether there is an unhealthy status_message (shared by the card warning state and the amber bar). */
 export const hasAuthFileStatusWarning = (file: AuthFileItem): boolean => {
   const message = getAuthFileStatusMessage(file);
   return Boolean(message) && !HEALTHY_AUTH_FILE_STATUS_MESSAGES.has(message.toLowerCase());
 };
 
 /**
- * 是否为需要用户处理的问题凭证。
- * 主动停用是独立状态，不应进入“问题”筛选或“删除问题凭证”的批量操作。
+ * Whether this is a problem credential the user has to deal with.
+ * A deliberate disable is its own state: it stays out of the "problem" filter and the
+ * "delete problem credentials" batch action.
  */
 export const isProblemAuthFile = (file: AuthFileItem): boolean => {
   const status = typeof file.status === 'string' ? file.status.trim().toLowerCase() : '';
@@ -180,8 +176,8 @@ export const getAuthFileIcon = (type: string, resolvedTheme: ResolvedTheme): str
       : iconEntry.light;
 };
 
-// 与 AI 提供商界面（PROVIDER_LOGOS 的 themeSurface）保持一致：
-// 这些提供商的图标底座颜色随主题切换（浅色主题黑底，深色主题白底）
+// Kept in line with the AI providers page (themeSurface of PROVIDER_LOGOS):
+// these providers' icon tile follows the theme (black in light theme, white in dark theme)
 export const THEME_SURFACE_ICON_PROVIDERS = new Set(['kimi']);
 
 export const isThemeSurfaceIconProvider = (type: string): boolean =>
@@ -271,7 +267,7 @@ export const formatModified = (item: AuthFileItem): string => {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
 };
 
-// 检查模型是否被 OAuth 排除
+// Whether OAuth exclusions cover the model
 export const isModelExcluded = (
   modelId: string,
   providerType: string,
@@ -281,7 +277,7 @@ export const isModelExcluded = (
   const excludedModels = excluded[providerKey] || excluded[providerType] || [];
   return excludedModels.some((pattern) => {
     if (pattern.includes('*')) {
-      // 支持通配符匹配：先转义正则特殊字符，再将 * 视为通配符
+      // Wildcard match: escape regex metacharacters first, then treat * as a wildcard
       const regexSafePattern = pattern
         .split('*')
         .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))

@@ -2,6 +2,7 @@ package quotahistory
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,13 @@ type Window struct {
 	UsedPercent float64 `json:"used_percent"`
 	ResetsAt    *int64  `json:"resets_at"`
 	PeriodHours float64 `json:"period_hours"`
+	// Label is the provider's own name for the window, when it has one.
+	Label      string  `json:"label,omitempty"`
+	Budget     float64 `json:"budget,omitempty"`
+	Currency   string  `json:"currency,omitempty"`
+	modelScope []string
+	// estimated marks a used percent the payload did not state.
+	estimated bool
 }
 
 var errEmptyPayload = errors.New("empty or invalid usage payload")
@@ -202,8 +210,10 @@ func ParseCodexUsage(body []byte, now time.Time) (map[string]Window, string, err
 			if !limitReached {
 				continue
 			}
+			// The payload says a limit was hit but not which window.
 			used = 100
 		}
+		estimated := !ok
 		reset := resetMs(firstExisting(raw.Get("reset_at"), raw.Get("resetAt")))
 		if reset == nil {
 			if after, okAfter := number(firstExisting(raw.Get("reset_after_seconds"), raw.Get("resetAfterSeconds"))); okAfter && after > 0 {
@@ -211,7 +221,7 @@ func ParseCodexUsage(body []byte, now time.Time) (map[string]Window, string, err
 				reset = &ms
 			}
 		}
-		windows[id] = Window{UsedPercent: used, ResetsAt: reset, PeriodHours: seconds / 3600}
+		windows[id] = Window{UsedPercent: used, ResetsAt: reset, PeriodHours: seconds / 3600, estimated: estimated}
 	}
 	return windows, plan, nil
 }
@@ -220,10 +230,11 @@ func ParseCodexUsage(body []byte, now time.Time) (map[string]Window, string, err
 func number(r ojson.Result) (float64, bool) {
 	switch r.Type {
 	case ojson.Number:
-		return r.Float(), true
+		v := r.Float()
+		return v, !math.IsNaN(v) && !math.IsInf(v, 0)
 	case ojson.String:
 		v, errParse := strconv.ParseFloat(strings.TrimSpace(r.String()), 64)
-		if errParse != nil {
+		if errParse != nil || math.IsNaN(v) || math.IsInf(v, 0) {
 			return 0, false
 		}
 		return v, true

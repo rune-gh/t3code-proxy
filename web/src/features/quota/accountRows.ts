@@ -5,8 +5,16 @@
  * history the pool chart uses.
  */
 
-import type { QuotaHistory, QuotaHistorySample } from '@/services/api';
-import { MINUTE_MS, nextResetAfter, samplesByAccount, type PoolProvider } from './poolModel';
+import type { QuotaBudget, QuotaHistory, QuotaHistorySample } from '@/services/api';
+import {
+  MINUTE_MS,
+  isLivePoolProvider,
+  nextResetAfter,
+  samplesByAccount,
+  weightForAccount,
+  type PlanWeights,
+  type PoolProvider,
+} from './poolModel';
 
 export interface WindowReading {
   /** 0–100, % of the window left now. */
@@ -15,6 +23,8 @@ export interface WindowReading {
   resetsAt: number | null;
   /** When the reading was taken. */
   readAt: number;
+  /** Money the window allows (API-key providers with a budget). */
+  budget?: QuotaBudget;
 }
 
 export interface PoolAccountInput {
@@ -28,6 +38,10 @@ export interface PoolAccountInput {
 
 export interface PoolAccountRow extends PoolAccountInput {
   fiveHour: WindowReading | null;
+  /**
+   * The window soonest-reset-first orders by: `seven_day` for Claude and
+   * Codex, the provider's longest window for everyone else.
+   */
   weekly: WindowReading | null;
   /** Model-scoped weekly window (Claude Fable), when the account reports one. */
   scopedWeekly: WindowReading | null;
@@ -39,6 +53,21 @@ export interface PoolAccountRow extends PoolAccountInput {
   exhausted: boolean;
   /** The account soonest-reset-first would pick for the next new conversation. */
   isNext: boolean;
+  /** Every window column the table shows for this provider, by backend key. */
+  windows: Record<string, WindowReading | null>;
+  /** Plan weight this account counts with in the pool. */
+  weight: number;
+}
+
+export interface PoolRowOptions {
+  /**
+   * Window columns for providers other than Claude and Codex, by backend key;
+   * `primary` is the window that orders accounts (usually the longest).
+   */
+  windowKeys?: readonly string[];
+  primary?: string | null;
+  /** Effective plan weights for the provider. */
+  weights?: PlanWeights;
 }
 
 /** Backend window keys per column. */
@@ -66,20 +95,32 @@ export function readWindow(
       remaining: passed ? 100 : Math.min(100, Math.max(0, 100 - window.usedPercent)),
       resetsAt: nextResetAfter(window.resetsAt, window.periodHours, now),
       readAt: sample.t,
+      ...(window.budget ? { budget: window.budget } : {}),
     };
   }
   return null;
 }
 
+/** The hub's default `routing.plan-headroom-reserve`. */
+export const DEFAULT_HEADROOM_RESERVE = 10;
+
+/** Plan-weighted 5-hour headroom below the reserve: the hub holds new conversations off it. */
+const isTight = (row: PoolAccountRow): boolean =>
+  row.fiveHour !== null && row.weight * row.fiveHour.remaining < DEFAULT_HEADROOM_RESERVE;
+
 /**
  * Mirror of the hub's soonest-reset-first pick among accounts it can see:
- * enabled, read, and not out of allowance; earliest weekly reset wins, ties
- * break on auth index. An estimate: the hub also probes unread accounts first.
+ * enabled, read, and not out of allowance; accounts with little 5-hour
+ * headroom are passed over while another has room; earliest weekly reset wins,
+ * ties break on auth index. An estimate: the hub also probes unread accounts
+ * first, and the reserve may be configured differently.
  */
 export function pickNextAccount(rows: readonly PoolAccountRow[]): string | null {
+  const usable = rows.filter((row) => !row.disabled && !row.exhausted && row.weekly?.resetsAt);
+  const roomy = usable.filter((row) => !isTight(row));
   let best: PoolAccountRow | null = null;
-  rows.forEach((row) => {
-    if (row.disabled || row.exhausted || !row.weekly?.resetsAt) return;
+  (roomy.length > 0 ? roomy : usable).forEach((row) => {
+    if (!row.weekly?.resetsAt) return;
     if (
       !best ||
       row.weekly.resetsAt < best.weekly!.resetsAt! ||
@@ -104,34 +145,52 @@ export function buildPoolAccountRows(
   history: QuotaHistory,
   provider: PoolProvider,
   accounts: readonly PoolAccountInput[],
-  now: number
+  now: number,
+  options: PoolRowOptions = {}
 ): PoolAccountRow[] {
   const byAccount = samplesByAccount(history);
-  const planFromHistory = new Map(
+  const historyAccounts = new Map(
     history.accounts
       .filter((account) => account.provider === provider)
-      .map((account) => [account.authIndex, account.plan])
+      .map((account) => [account.authIndex, account])
   );
+  const named = isLivePoolProvider(provider);
+  const extraKeys = named ? [] : (options.windowKeys ?? []);
+  const primary = named ? ROW_WINDOW_KEYS.weekly : (options.primary ?? extraKeys[0] ?? null);
 
   const rows: PoolAccountRow[] = accounts.map((account) => {
     const samples = byAccount.get(account.authIndex) ?? [];
-    const fiveHour = readWindow(samples, ROW_WINDOW_KEYS.fiveHour, now);
-    const weekly = readWindow(samples, ROW_WINDOW_KEYS.weekly, now);
+    const fiveHour = named ? readWindow(samples, ROW_WINDOW_KEYS.fiveHour, now) : null;
     const scopedWeekly =
       provider === 'claude' ? readWindow(samples, ROW_WINDOW_KEYS.scopedWeekly, now) : null;
-    const readings = [fiveHour, weekly, scopedWeekly].filter(
+    const windows: Record<string, WindowReading | null> = {};
+    if (named) {
+      windows[ROW_WINDOW_KEYS.fiveHour] = fiveHour;
+      windows[ROW_WINDOW_KEYS.weekly] = readWindow(samples, ROW_WINDOW_KEYS.weekly, now);
+      if (provider === 'claude') windows[ROW_WINDOW_KEYS.scopedWeekly] = scopedWeekly;
+    } else {
+      extraKeys.forEach((key) => {
+        windows[key] = readWindow(samples, key, now);
+      });
+    }
+    const weekly = primary ? (windows[primary] ?? readWindow(samples, primary, now)) : null;
+    const readings = Object.values(windows).filter(
       (reading): reading is WindowReading => reading !== null
     );
     const lastReadAt = readings.length ? Math.max(...readings.map((r) => r.readAt)) : null;
     const newest = [...samples].reverse().find((sample) => sample.t <= now);
     const sampleError =
       newest?.error && (lastReadAt === null || newest.t > lastReadAt) ? newest.error : '';
-    const exhausted =
-      (weekly !== null && weekly.remaining <= EPSILON) ||
-      (fiveHour !== null && fiveHour.remaining <= EPSILON);
+    // Claude and Codex: out of the 5-hour or weekly allowance. Others: any window.
+    const exhausted = named
+      ? (weekly !== null && weekly.remaining <= EPSILON) ||
+        (fiveHour !== null && fiveHour.remaining <= EPSILON)
+      : readings.some((reading) => reading.remaining <= EPSILON);
+    const recorded = historyAccounts.get(account.authIndex);
+    const plan = account.plan ?? recorded?.plan ?? null;
     return {
       ...account,
-      plan: account.plan ?? planFromHistory.get(account.authIndex) ?? null,
+      plan,
       fiveHour,
       weekly,
       scopedWeekly,
@@ -139,6 +198,8 @@ export function buildPoolAccountRows(
       error: sampleError || account.liveError || '',
       exhausted,
       isNext: false,
+      windows,
+      weight: weightForAccount({ plan, weight: recorded?.weight ?? null }, options.weights),
     };
   });
 

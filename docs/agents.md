@@ -2,15 +2,21 @@
 
 This page is for a coding agent that sets up a t3code-proxy hub for a person. When you finish,
 the person has a hub on an always-on home machine with their accounts signed in, published to
-their tailnet, and the clients they chose pointed at it. Every step below links to the
-[setup guide](setup.md), which has the exact commands.
+their tailnet, and the clients they chose pointed at it. The hub supports subscription and
+API-key providers with plan-aware pooling for supported quota windows. Follow
+[providers](providers.md) for every login and current quota coverage, and the
+[setup guide](setup.md) for installation.
+
+For a new machine that runs agents, follow [set up a box](box-setup.md). For T3 Code services,
+remote pairing and Windows plus WSL 2, follow [environments](environments.md).
 
 ## Tell the user what you are doing
 
 Start with a short explanation in your own words. Cover these points:
 
-- One machine at home holds every Claude and Codex login and keeps the tokens fresh. Every other
-  machine sends its Claude Code, Codex and T3 Code traffic to that machine over Tailscale.
+- One machine at home holds the chosen subscription logins and upstream API keys and keeps OAuth
+  tokens fresh. Every other machine sends its configured provider traffic there over Tailscale.
+  Agents can run on home or cloud T3 Code environments using that hub.
 - This avoids signing in on every device and keeps the traffic coming from one home connection.
 - The setup follows the one Theo Browne describes in his
   [token maxing video](https://www.youtube.com/watch?v=D8PikZ1KhUo) and
@@ -29,7 +35,8 @@ Get answers to these before you change anything:
    is fine.
 2. What operating system does the hub run?
 3. Is Tailscale installed on the hub and on every client, signed in to the same tailnet?
-4. Which Claude and Codex accounts should be signed in?
+4. Which provider accounts and API-key upstreams should be configured? Use the
+   [provider table](providers.md#capability-table) to establish login and client support.
 5. Which machines should use the hub?
 6. Should you edit their normal Claude Code and Codex config, or use a second config directory and
    leave the normal setup alone?
@@ -78,7 +85,11 @@ Follow the [setup guide](setup.md) in order:
 6. Edit the client config files. Back each file up first. Check for an existing
    `ANTHROPIC_BASE_URL` in `~/.claude/settings.json` and an existing `model_provider` in
    `~/.codex/config.toml`, and tell the user before you replace them.
-7. If they use T3 Code, follow [T3 Code](t3code.md).
+7. If they use T3 Code, follow [T3 Code](t3code.md) and configure each execution machine using
+   [environments](environments.md). Windows and WSL 2 need separate provider settings.
+8. Confirm panel quota coverage and set plan weights for pooled charts where supported. See
+   [providers](providers.md#capability-table), [quota history](quota-history.md) and
+   [routing](routing.md).
 
 ## Rules for you
 

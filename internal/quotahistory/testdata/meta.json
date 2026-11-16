@@ -1,0 +1,8 @@
+{
+  "api_key": "fixture-secret-do-not-retain",
+  "subs_tier_name": "Muse Code Everyday Usage",
+  "subs_usage": {
+    "window": {"used_percent": "2", "window_duration_mins": "300", "resets_at": 1794726000},
+    "weekly": {"used_percent": 65, "resets_at": 1795132800}
+  }
+}

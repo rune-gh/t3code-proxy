@@ -138,3 +138,33 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* The two hard rules, repeated next to the Claude Code snippet. */
+.rulesNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 72ch;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--warning-surface);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.rulesIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning-foreground);
+}
+
+.rulesList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

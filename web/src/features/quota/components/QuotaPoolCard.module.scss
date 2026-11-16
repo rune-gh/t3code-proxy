@@ -31,6 +31,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.windowSelect {
+  min-width: 0;
+  max-width: 220px;
 }
 
 /* ---------- plan weights popover ---------- */
@@ -44,7 +51,7 @@
   top: calc(100% + 4px);
   right: 0;
   z-index: $z-dropdown;
-  width: 260px;
+  width: min(280px, calc(100vw - 32px));
   padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -73,6 +80,32 @@
   padding: var(--space-1) 0;
   font-size: var(--text-base);
   color: var(--foreground);
+}
+
+.weightPlan {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.weightDefault {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightsError {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--destructive-foreground);
+}
+
+.weightsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .weightInputWrap {
@@ -145,27 +178,12 @@
   vertical-align: bottom;
 }
 
-.weightNote {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted-foreground);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 2px;
-
-  &:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-}
-
 .noData {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
+  gap: var(--space-3);
   min-height: 160px;
   padding: var(--space-4);
   border-radius: var(--radius-md);
@@ -211,25 +229,6 @@
 .swatchThin {
   border-top-width: 1px;
   opacity: 0.6;
-}
-
-/* ---------- account cards toggle ---------- */
-
-.detailsBar {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: calc(-1 * var(--space-1));
-}
-
-.chevron,
-.chevronOpen {
-  margin-left: var(--space-1);
-  vertical-align: -3px;
-  transition: transform var(--duration-fast) var(--ease-out);
-}
-
-.chevronOpen {
-  transform: rotate(180deg);
 }
 
 @include mobile {

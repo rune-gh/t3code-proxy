@@ -3,6 +3,11 @@ import {
   buildClaudeSettings,
   buildCodexConfig,
   buildCurlCheck,
+  buildGeminiCheck,
+  buildGeminiEnv,
+  buildMuseCodeCheck,
+  buildOpenAIEnv,
+  buildOpenCodeConfig,
   HUB_PLACEHOLDER,
   isLoopbackAddress,
   KEY_PLACEHOLDER,
@@ -117,5 +122,65 @@ describe('snippets', () => {
     expect(buildCurlCheck({ hub: HUB, key: "a'b" })).toContain(
       `-H 'Authorization: Bearer a'\\''b'`
     );
+  });
+});
+
+describe('other clients', () => {
+  const KEY = 'sk-test-123';
+
+  test('OpenAI variables point at /v1', () => {
+    expect(buildOpenAIEnv({ hub: HUB, key: KEY })).toBe(
+      `export OPENAI_BASE_URL=${HUB}/v1\nexport OPENAI_API_KEY=${KEY}`
+    );
+    expect(buildOpenAIEnv({ hub: '', key: '' })).toBe(
+      `export OPENAI_BASE_URL='${HUB_PLACEHOLDER}/v1'\nexport OPENAI_API_KEY='${KEY_PLACEHOLDER}'`
+    );
+  });
+
+  test('OpenCode config is valid JSON with an OpenAI-compatible provider', () => {
+    const config = JSON.parse(buildOpenCodeConfig({ hub: HUB, key: KEY }));
+    const provider = config.provider['t3code-proxy'];
+    expect(provider.npm).toBe('@ai-sdk/openai-compatible');
+    expect(provider.options).toEqual({ baseURL: `${HUB}/v1`, apiKey: KEY });
+    expect(Object.keys(provider.models)).toEqual(['<model id>']);
+  });
+
+  test('Gemini clients get the hub root; the check uses the Gemini key header', () => {
+    expect(buildGeminiEnv({ hub: HUB, key: KEY })).toBe(
+      `export GOOGLE_GEMINI_BASE_URL=${HUB}\nexport GEMINI_API_KEY=${KEY}`
+    );
+    expect(buildGeminiCheck({ hub: HUB, key: KEY })).toBe(
+      `curl -s ${HUB}/v1beta/models -H 'x-goog-api-key: ${KEY}' | head -c 300`
+    );
+  });
+
+  test('a key with quotes stays one shell word', () => {
+    expect(buildOpenAIEnv({ hub: HUB, key: "a'b" })).toContain(`OPENAI_API_KEY='a'\\''b'`);
+  });
+
+  test('Muse Code check reads the generated model list', () => {
+    expect(buildMuseCodeCheck({ hub: HUB, key: KEY })).toBe(
+      `curl -s ${HUB}/muse-code/models -H 'Authorization: Bearer ${KEY}' | head -c 300`
+    );
+  });
+});
+
+describe('every snippet targets a route the hub serves', () => {
+  // Paths registered in internal/api/server_routes.go.
+  const SERVED = ['/v1', '/v1/models', '/v1beta/models', '/muse-code/models'];
+  test('URLs in the snippets', () => {
+    const input = { hub: HUB, key: 'k' };
+    const text = [
+      buildOpenAIEnv(input),
+      buildOpenCodeConfig(input),
+      buildGeminiCheck(input),
+      buildMuseCodeCheck(input),
+      buildCurlCheck(input),
+    ].join('\n');
+    const paths = [...text.matchAll(/https:\/\/box\.tailnet\.ts\.net:8317(\/[\w/-]*)/g)].map(
+      (match) => match[1]
+    );
+    expect(paths.length).toBeGreaterThan(0);
+    paths.forEach((path) => expect(SERVED).toContain(path));
   });
 });

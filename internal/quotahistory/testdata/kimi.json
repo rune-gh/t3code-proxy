@@ -1,0 +1,9 @@
+{
+  "limits": [
+    {"name": "Session", "window": {"duration": "300", "timeUnit": "TIME_UNIT_MINUTE"}, "detail": {"limit": "100", "remaining": 40, "reset_in": "3600"}},
+    {"scope": "daily", "detail": {"limit": 100, "used": 20, "resetAt": "2026-11-16T00:00:00Z"}},
+    {"window": {"duration": 1, "timeUnit": "TIME_UNIT_WEEK"}, "detail": {"limit": 100, "used": 10, "reset_time": 1795132800000}}
+  ],
+  "usage": {"limit": 1000, "used": "500", "reset_time": "2026-11-20T00:00:00Z"},
+  "usages": {"limit_month_total": {"used_ratio": "0.75", "reset_time": "2026-12-01T00:00:00Z"}}
+}

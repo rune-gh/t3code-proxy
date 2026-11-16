@@ -100,7 +100,7 @@ lift. `prefers-reduced-motion` turns animation off globally (`global.scss`).
 | Toast | `showNotification('Saved', 'success')` from `useNotificationStore` |
 | `Table` (+ `TableHeader/Body/Row/Head/Cell`) | `<Table><TableHeader>...</TableHeader><TableBody>...</TableBody></Table>` |
 | `Skeleton` | `<Skeleton height={32} />` |
-| `EmptyState` | `<EmptyState title="No accounts yet" description="Add a Claude or Codex login." action={<Button>Add account</Button>} />` |
+| `EmptyState` | `<EmptyState title="No accounts yet" description="Sign in with a subscription." action={<Button>Add account</Button>} />` |
 | `Spinner` (`LoadingSpinner`) | `<Spinner size={16} label="Loading accounts" />` |
 | `PageHeader` | see below |
 | `Toolbar` | `<Toolbar ariaLabel="Filters" end={<SegmentedControl .../>}><Input .../></Toolbar>` |
@@ -128,7 +128,7 @@ no top bar on desktop and no floating toolbar: page actions belong in `PageHeade
 <>
   <PageHeader
     title="Accounts"
-    description="Claude and Codex logins the hub rotates through."
+    description="Subscription logins the hub rotates through."
     meta={<Badge>12</Badge>}
     actions={<Button variant="primary">Add account</Button>}
     tabs={<Tabs ariaLabel="Provider" items={providers} value={p} onChange={setP} />}

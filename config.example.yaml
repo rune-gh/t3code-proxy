@@ -183,7 +183,10 @@ routing:
   # expire unused is spent first. Accounts without a fresh reading are probed first (at most once
   # an hour), an account whose model-specific weekly cap is spent is skipped for that model while
   # another is available, providers that report no quota rotate round-robin, and ties rotate.
-  # Priority tiers still apply; weights are not used. See docs/routing.md.
+  # Priority tiers still apply; per-credential weights are not used. Ties, probes and pools without
+  # quota reports are spread in proportion to plan weight instead (see plan-weights below), and an
+  # account whose 5-hour window is nearly spent gets no new conversation while another has headroom.
+  # See docs/routing.md.
   # weighted-round-robin uses each credential's integer weight (default 1, maximum 1,000,000).
   # Non-positive weights exclude the credential while this strategy is active.
   # Sticky requests (including inherited and LCP bindings) also consume weighted credits
@@ -235,6 +238,24 @@ routing:
   #     keep the binding and return the error (or retry the same credential) instead.
   # Ignored when routing.session-affinity is false.
   session-affinity-rebind-on: "any"
+
+  # Plan capacity weights relative to each provider's base paid plan (1.0), used by
+  # soonest-reset-first. Built-in: claude pro/team 1, max 5, max_5x 5, max_20x 20 (any max_<N>x
+  # tier weighs N); codex plus/team/business/enterprise/edu 1, prolite 5, pro 20, promax 50;
+  # xai supergrok 1, supergrok_heavy 10. The Codex ratios are approximate and change over time.
+  # Entries here replace the built-in value for that plan; names are case-insensitive and
+  # "Max 20x" equals "max_20x".
+  # Each weight must be > 0 and <= 1000.
+  # plan-weights:
+  #   codex:
+  #     pro: 10
+  #   claude:
+  #     max_20x: 18
+  # Plan-weighted 5-hour headroom reserve, in base-plan percent. Headroom is plan weight x percent
+  # of the 5-hour window left; an account below the reserve gets no NEW conversation while another
+  # eligible account has more (bound conversations stay). 10 means Pro is tight below 10% left,
+  # Max 20x below 0.5%. 0 disables the guard. Range 0-1000. Default: 10
+  plan-headroom-reserve: 10
 
   # When true, unprefixed model requests only use credentials without a prefix (except when prefix == model name).
   force-model-prefix: false
@@ -1333,13 +1354,16 @@ observability:
     addr: "127.0.0.1:8316"
 
 # Quota history recorder. When enabled, the hub polls the usage endpoint of
-# every enabled Claude and Codex OAuth credential and stores one sample per poll, so the
+# every supported enabled account and stores one sample per poll, so the
 # management panel can chart remaining quota over time. Disabled by default; when disabled
 # nothing is polled or written. Changes are applied on config hot-reload.
 # Endpoints: GET /v8/management/quota-history?since=<unix ms>&until=<unix ms>
 #            POST /v8/management/quota-history/refresh (also mirrored under /v0/management).
 quota-history:
   enabled: false
+  # Provider IDs to poll. Empty enables all supported providers and quota plugins.
+  # Built-in IDs: claude, codex, xai, antigravity, kimi, kimi-ai, meta, devin, mistral.
+  providers: []
   # Poll interval per account (Go duration or "<n>d"). Default 10m, minimum 5m.
   interval: 10m
   # Samples older than this are pruned hourly. Default 35d, minimum 1d.

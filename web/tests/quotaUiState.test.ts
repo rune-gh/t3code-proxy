@@ -78,3 +78,24 @@ describe('quota ui state', () => {
     expect(readQuotaUiState()).toBeNull();
   });
 });
+
+describe('overview view preferences', () => {
+  beforeEach(() => {
+    storage = installSessionStorage();
+  });
+
+  test('keeps the view and the resets filter, history-only tabs included', () => {
+    writeQuotaUiState({ view: 'resets', resetsFilter: 'week:1', tab: 'mistral' });
+    expect(readQuotaUiState()).toEqual({
+      tab: 'mistral',
+      sortMode: undefined,
+      view: 'resets',
+      resetsFilter: 'week:1',
+    });
+  });
+
+  test('drops an unknown view', () => {
+    storage.setItem(KEY, JSON.stringify({ view: 'cards' }));
+    expect(readQuotaUiState()?.view).toBeUndefined();
+  });
+});

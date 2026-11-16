@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/MoeForge/moego/ojson"
 	coreauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 	log "github.com/sirupsen/logrus"
 )
@@ -41,15 +41,15 @@ func codexHeaders() map[string]string {
 }
 
 const (
-	requestTimeout       = 20 * time.Second
-	defaultScheduledGap  = 3 * time.Second
-	defaultManualGap     = 500 * time.Millisecond
-	defaultStartupDelay  = 30 * time.Second
-	minPollSpacing       = time.Minute
-	pruneEvery           = time.Hour
-	profileTTL           = 6 * time.Hour
-	planSeedRecords      = 5000
-	maxErrorMessageBytes = 200
+	// sampleTimeout bounds one account's usage reads (see AGENTS.md exceptions).
+	sampleTimeout       = 45 * time.Second
+	defaultScheduledGap = 3 * time.Second
+	defaultManualGap    = 500 * time.Millisecond
+	defaultStartupDelay = 30 * time.Second
+	minPollSpacing      = time.Minute
+	pruneEvery          = time.Hour
+	profileTTL          = 6 * time.Hour
+	planSeedRecords     = 5000
 
 	// MaxSamplesPerAccount caps how many samples one account contributes to a
 	// History response; denser ranges are downsampled evenly.
@@ -72,6 +72,13 @@ type Deps struct {
 	ListAuths func() []*coreauth.Auth
 	// Do sends an authenticated request.
 	Do Doer
+	// DoRequest supports provider requests with JSON bodies. Do remains a GET fallback.
+	DoRequest func(context.Context, *coreauth.Auth, string, string, map[string]string, []byte) (int, []byte, error)
+	// PluginProviders lists providers served by registered quota plugins.
+	// The context ends when the recorder stops.
+	PluginProviders func(context.Context) map[string]string
+	// FetchPlugin uses the host's per-account quota capability and transport.
+	FetchPlugin func(context.Context, *coreauth.Auth) ([]byte, error)
 	// Label returns the display label of a credential (optional).
 	Label func(*coreauth.Auth) string
 }
@@ -82,7 +89,9 @@ type Account struct {
 	Provider  string `json:"provider"`
 	Label     string `json:"label"`
 	Plan      string `json:"plan"`
-	Disabled  bool   `json:"disabled"`
+	// Weight is the plan capacity routing uses for this account (1 = base plan).
+	Weight   float64 `json:"weight"`
+	Disabled bool    `json:"disabled"`
 }
 
 // History is the GET /quota-history response.
@@ -119,7 +128,10 @@ type Recorder struct {
 	manualMu sync.Mutex
 	manual   *manualPoll
 
-	pollMu sync.Mutex
+	pollMu    sync.Mutex
+	providers atomic.Value // normalized comma-separated provider allowlist
+	// pluginIDs is the last plugin discovery; nil until the first poll.
+	pluginIDs atomic.Pointer[map[string]string]
 
 	plansMu         sync.Mutex
 	plans           map[string]string
@@ -154,11 +166,16 @@ func (r *Recorder) Apply(s Settings) error {
 	}
 	r.stopLocked()
 	r.settings = s
+	r.providers.Store(s.Providers)
+	r.forgetUntracked(s.Enabled)
+	r.pluginIDs.Store(nil)
 	if !s.Enabled {
 		return nil
 	}
 	store, errOpen := OpenStore(s.Path)
 	if errOpen != nil {
+		// Nothing will poll, so no reading may keep steering routing.
+		r.forgetUntracked(false)
 		return errOpen
 	}
 	r.plansMu.Lock()
@@ -170,6 +187,12 @@ func (r *Recorder) Apply(s Settings) error {
 	r.plansMu.Unlock()
 	r.store = store
 	r.ctx, r.cancel = context.WithCancel(context.Background())
+	// Routing learns stored plans now instead of after the first poll.
+	for _, auth := range r.trackable(nil) {
+		if plan := r.plan(auth.Index); plan != "" && providerOf(auth) != "mistral" {
+			coreauth.ObserveAuthPlan(auth.ID, plan)
+		}
+	}
 	r.wg.Add(1)
 	go r.run(r.ctx, store, s)
 	log.Infof("quota-history: recording every %s to %s (retention %s)", s.Interval, s.Path, s.Retention)
@@ -306,7 +329,7 @@ func (r *Recorder) poll(ctx context.Context, store *Store, gap time.Duration, co
 	r.pollMu.Lock()
 	defer r.pollMu.Unlock()
 	stored := 0
-	for i, auth := range r.targets() {
+	for i, auth := range r.targets(ctx) {
 		if i > 0 && gap > 0 {
 			t := time.NewTimer(gap)
 			select {
@@ -318,6 +341,12 @@ func (r *Recorder) poll(ctx context.Context, store *Store, gap time.Duration, co
 		}
 		if ctx.Err() != nil {
 			return stored
+		}
+		// The target list was taken when the round started. Read the account
+		// again so one disabled or removed meanwhile is not polled, and a token
+		// refresh does not write back a stale copy.
+		if auth = r.current(auth.ID); auth == nil || isDisabled(auth) {
+			continue
 		}
 		rec := r.sample(ctx, auth)
 		if ctx.Err() != nil {
@@ -337,38 +366,70 @@ func (r *Recorder) poll(ctx context.Context, store *Store, gap time.Duration, co
 }
 
 func (r *Recorder) sample(ctx context.Context, auth *coreauth.Auth) record {
-	reqCtx, cancel := context.WithTimeout(ctx, requestTimeout)
+	// One provider that accepts the connection and never answers must not stop
+	// recording for every other account.
+	ctx, cancel := context.WithTimeout(ctx, sampleTimeout)
 	defer cancel()
 	rec := record{Sample: Sample{T: r.now().UnixMilli(), AuthIndex: auth.Index, Windows: map[string]Window{}}}
-	var windows map[string]Window
-	var errFetch error
-	switch providerOf(auth) {
-	case "claude":
-		windows, errFetch = r.fetchClaude(reqCtx, auth)
-		if errFetch == nil {
-			rec.Plan = r.claudePlan(reqCtx, auth)
-		}
-	case "codex":
-		var plan string
-		windows, plan, errFetch = r.fetchCodex(reqCtx, auth)
-		if plan == "" {
-			plan = metadataString(auth, "plan_type")
-		}
-		if plan != "" {
-			r.setPlan(auth.Index, plan)
-		}
-		rec.Plan = plan
+	poll := providerPollers[providerOf(auth)]
+	if poll == nil {
+		poll = (*Recorder).fetchPlugin
 	}
+	windows, plan, errFetch := poll(r, ctx, auth)
 	if errFetch != nil {
 		rec.Error = errFetch.Error()
 		log.Debugf("quota-history: %s auth %s: %s", providerOf(auth), auth.Index, rec.Error)
 		return rec
 	}
 	rec.Windows = windows
+	rec.Plan = plan
+	if plan != "" {
+		r.setPlan(auth.Index, plan)
+	}
+	// Mistral's API and Vibe budgets fund separate request types. History keeps
+	// both allowances, while account-wide routing cannot identify which applies.
+	if providerOf(auth) == "mistral" {
+		return rec
+	}
+	r.publishRouting(auth, plan, windows, time.UnixMilli(rec.T))
+	observations := make([]coreauth.QuotaWindow, 0, len(windows))
+	for key, window := range windows {
+		// A usage figure the parser had to assume is charted but does not steer routing.
+		if window.ResetsAt == nil || window.PeriodHours <= 0 || window.estimated {
+			continue
+		}
+		scope := window.modelScope
+		if family, scoped := strings.CutPrefix(key, WindowSevenDay+"_"); providerOf(auth) == "claude" && scoped {
+			scope = []string{"*-" + family + "-*", "*-" + family}
+		}
+		observations = append(observations, coreauth.QuotaWindow{Key: key, UsedPercent: window.UsedPercent,
+			ResetAt: time.UnixMilli(*window.ResetsAt), Period: time.Duration(window.PeriodHours * float64(time.Hour)), ModelScope: scope})
+	}
+	coreauth.ObserveQuotaWindows(auth.ID, time.UnixMilli(rec.T), observations)
 	if providerOf(auth) == "claude" {
 		coreauth.ObserveScopedWeeklyWindows(auth.ID, time.UnixMilli(rec.T), scopedWeeklyWindows(windows))
 	}
 	return rec
+}
+
+// publishRouting hands routing the plan and 5-hour reading of one account, so
+// plan weights and the headroom guard use what the recorder already fetched.
+func (r *Recorder) publishRouting(auth *coreauth.Auth, plan string, windows map[string]Window, observedAt time.Time) {
+	if plan == "" {
+		plan = r.plan(auth.Index)
+	}
+	if plan != "" {
+		coreauth.ObserveAuthPlan(auth.ID, plan)
+	}
+	window, ok := windows[WindowFiveHour]
+	if !ok || window.estimated {
+		return
+	}
+	var resetAt time.Time
+	if window.ResetsAt != nil && *window.ResetsAt > 0 {
+		resetAt = time.UnixMilli(*window.ResetsAt)
+	}
+	coreauth.ObserveShortWindowUsage(auth.ID, observedAt, window.UsedPercent, resetAt)
 }
 
 // scopedWeeklyWindows extracts the model-scoped weekly caps ("seven_day_<family>")
@@ -398,6 +459,20 @@ func (r *Recorder) fetchClaude(ctx context.Context, auth *coreauth.Auth) (map[st
 // claudePlan returns the cached plan and refreshes it from the profile endpoint
 // at most once per profileTTL.
 func (r *Recorder) claudePlan(ctx context.Context, auth *coreauth.Auth) string {
+	return r.cachedPlan(auth, func() string {
+		body, errDo := r.get(ctx, auth, ClaudeProfileURL, claudeHeaders())
+		if errDo != nil {
+			return ""
+		}
+		return ParseClaudePlan(body)
+	})
+}
+
+// cachedPlan returns the plan last learned for an account and asks fetch for a
+// fresh one at most once per profileTTL. A failed or empty fetch keeps the
+// stored plan, so an outage of the plan endpoint does not erase a known plan.
+// While no plan is known at all, the fetch is retried on the next poll.
+func (r *Recorder) cachedPlan(auth *coreauth.Auth, fetch func() string) string {
 	r.plansMu.Lock()
 	plan := r.plans[auth.Index]
 	last := r.profileAttempts[auth.Index]
@@ -409,13 +484,14 @@ func (r *Recorder) claudePlan(ctx context.Context, auth *coreauth.Auth) string {
 	if !due {
 		return plan
 	}
-	body, errDo := r.get(ctx, auth, ClaudeProfileURL, claudeHeaders())
-	if errDo != nil {
-		return plan
+	if fetched := strings.TrimSpace(fetch()); fetched != "" {
+		r.setPlan(auth.Index, fetched)
+		return fetched
 	}
-	if parsed := ParseClaudePlan(body); parsed != "" {
-		r.setPlan(auth.Index, parsed)
-		return parsed
+	if plan == "" {
+		r.plansMu.Lock()
+		delete(r.profileAttempts, auth.Index)
+		r.plansMu.Unlock()
 	}
 	return plan
 }
@@ -435,29 +511,29 @@ func (r *Recorder) fetchCodex(ctx context.Context, auth *coreauth.Auth) (map[str
 }
 
 func (r *Recorder) get(ctx context.Context, auth *coreauth.Auth, url string, header map[string]string) ([]byte, error) {
-	if r.deps.Do == nil {
+	return r.request(ctx, auth, "GET", url, header, nil)
+}
+
+func (r *Recorder) request(ctx context.Context, auth *coreauth.Auth, method, url string, header map[string]string, data []byte) ([]byte, error) {
+	var status int
+	var body []byte
+	var errDo error
+	if r.deps.DoRequest != nil {
+		status, body, errDo = r.deps.DoRequest(ctx, auth, method, url, header, data)
+	} else if r.deps.Do != nil && len(data) == 0 {
+		status, body, errDo = r.deps.Do(ctx, auth, method, url, header)
+	} else {
 		return nil, errors.New("no request transport")
 	}
-	status, body, errDo := r.deps.Do(ctx, auth, "GET", url, header)
 	if errDo != nil {
 		return nil, errDo
 	}
 	if status < 200 || status >= 300 {
-		return nil, statusError(status, body)
+		// Usage responses can echo credentials or personal data. Keep errors bounded
+		// to the status code for both storage and logs.
+		return nil, fmt.Errorf("HTTP %d", status)
 	}
 	return body, nil
-}
-
-func statusError(status int, body []byte) error {
-	root := ojson.ParseBytes(body)
-	msg := firstString(root.Get("error.message"), root.Get("error"), root.Get("message"), root.Get("detail"))
-	if len(msg) > maxErrorMessageBytes {
-		msg = msg[:maxErrorMessageBytes]
-	}
-	if msg == "" {
-		return fmt.Errorf("HTTP %d", status)
-	}
-	return fmt.Errorf("HTTP %d: %s", status, msg)
 }
 
 func (r *Recorder) setPlan(authIndex, plan string) {
@@ -551,29 +627,35 @@ func downsample(samples []Sample, max int) []Sample {
 	return out
 }
 
-// accounts lists every Claude/Codex OAuth credential, including disabled ones.
+// accounts lists supported subscription credentials, including disabled ones.
 func (r *Recorder) accounts() []Account {
 	out := []Account{}
-	for _, auth := range r.trackable() {
+	for _, auth := range r.trackable(r.pluginProviders(context.Background(), false)) {
 		plan := r.plan(auth.Index)
-		if plan == "" && providerOf(auth) == "codex" {
-			plan = metadataString(auth, "plan_type")
+		if plan == "" {
+			plan = coreauth.PlanOf(auth)
+		}
+		weight := 1.0
+		if providerOf(auth) != "mistral" {
+			weight = coreauth.PlanWeight(providerOf(auth), plan)
 		}
 		out = append(out, Account{
 			AuthIndex: auth.Index,
 			Provider:  providerOf(auth),
 			Label:     r.label(auth),
 			Plan:      plan,
+			Weight:    weight,
 			Disabled:  isDisabled(auth),
 		})
 	}
 	return out
 }
 
-// targets lists the credentials polled this round.
-func (r *Recorder) targets() []*coreauth.Auth {
+// targets lists the credentials polled this round and refreshes the list of
+// quota-plugin providers.
+func (r *Recorder) targets(ctx context.Context) []*coreauth.Auth {
 	var out []*coreauth.Auth
-	for _, auth := range r.trackable() {
+	for _, auth := range r.trackable(r.pluginProviders(ctx, true)) {
 		if !isDisabled(auth) {
 			out = append(out, auth)
 		}
@@ -581,19 +663,95 @@ func (r *Recorder) targets() []*coreauth.Auth {
 	return out
 }
 
-func (r *Recorder) trackable() []*coreauth.Auth {
+// pluginProviders returns the providers served by quota plugins. Only polls
+// ask the plugins, with the recorder's context, so a slow plugin cannot
+// outlive a shutdown or hold up a history request; history requests reuse the
+// last list, which is empty until the first poll. Plugins are not asked at all
+// when the provider allowlist names only built-in providers.
+func (r *Recorder) pluginProviders(ctx context.Context, refresh bool) map[string]string {
+	if r.deps.PluginProviders == nil {
+		return nil
+	}
+	if !refresh {
+		if cached := r.pluginIDs.Load(); cached != nil {
+			return *cached
+		}
+		return nil
+	}
+	providers, _ := r.providers.Load().(string)
+	wanted := providers == ""
+	for _, name := range strings.Split(providers, ",") {
+		wanted = wanted || (name != "" && providerPollers[name] == nil)
+	}
+	found := map[string]string{}
+	if wanted {
+		for provider, id := range r.deps.PluginProviders(ctx) {
+			found[provider] = id
+		}
+	}
+	r.pluginIDs.Store(&found)
+	return found
+}
+
+// forgetUntracked drops the routing readings of accounts the recorder no
+// longer polls, because the recorder was turned off or the provider left the
+// allowlist. Otherwise a last "spent" reading would keep steering routing until
+// its window resets.
+func (r *Recorder) forgetUntracked(enabled bool) {
+	if r.deps.ListAuths == nil {
+		return
+	}
+	tracked := make(map[string]bool)
+	if enabled {
+		// The last plugin list keeps plugin-provider accounts tracked across a
+		// settings change; trackable applies the new allowlist to them.
+		for _, auth := range r.trackable(r.pluginProviders(context.Background(), false)) {
+			tracked[auth.ID] = true
+		}
+	}
+	for _, auth := range r.deps.ListAuths() {
+		if auth == nil || tracked[auth.ID] {
+			continue
+		}
+		coreauth.ForgetQuotaWindows(auth.ID)
+		coreauth.ForgetScopedWeeklyWindows(auth.ID)
+		coreauth.ForgetShortWindowUsage(auth.ID)
+		// The plan falls back to response headers and the credential's own fields.
+		coreauth.ObserveAuthPlan(auth.ID, "")
+	}
+}
+
+// current returns the live copy of an account, or nil when it is gone.
+func (r *Recorder) current(id string) *coreauth.Auth {
+	if r.deps.ListAuths == nil {
+		return nil
+	}
+	for _, auth := range r.deps.ListAuths() {
+		if auth != nil && auth.ID == id {
+			return auth
+		}
+	}
+	return nil
+}
+
+func (r *Recorder) trackable(plugins map[string]string) []*coreauth.Auth {
 	if r.deps.ListAuths == nil {
 		return nil
 	}
 	var out []*coreauth.Auth
+	providers, _ := r.providers.Load().(string)
 	for _, auth := range r.deps.ListAuths() {
 		if auth == nil {
 			continue
 		}
-		if p := providerOf(auth); p != "claude" && p != "codex" {
+		p := providerOf(auth)
+		if providerPollers[p] == nil && plugins[p] == "" {
 			continue
 		}
-		if auth.AuthKind() == coreauth.AuthKindAPIKey {
+		if providers != "" && !strings.Contains(","+providers+",", ","+p+",") {
+			continue
+		}
+		if auth.AuthKind() == coreauth.AuthKindAPIKey && (p == "claude" || p == "codex" || p == "xai") {
 			continue
 		}
 		if auth.EnsureIndex() == "" {
@@ -611,6 +769,12 @@ func (r *Recorder) trackable() []*coreauth.Auth {
 }
 
 func (r *Recorder) label(auth *coreauth.Auth) string {
+	if providerOf(auth) == "mistral" {
+		if name := strings.TrimSpace(auth.Attributes["compat_name"]); name != "" {
+			return name
+		}
+		return "Mistral"
+	}
 	if r.deps.Label != nil {
 		if label := strings.TrimSpace(r.deps.Label(auth)); label != "" {
 			return label
@@ -629,7 +793,19 @@ func (r *Recorder) label(auth *coreauth.Auth) string {
 }
 
 func providerOf(auth *coreauth.Auth) string {
-	return strings.ToLower(strings.TrimSpace(auth.Provider))
+	if auth.AuthKind() == coreauth.AuthKindAPIKey {
+		base, err := url.Parse(strings.TrimSpace(auth.Attributes["base_url"]))
+		if err == nil && strings.EqualFold(base.Hostname(), "api.mistral.ai") {
+			return "mistral"
+		}
+	}
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	// The billing poller requires Mistral's own host and an API key, even when
+	// another upstream happens to use the same provider name.
+	if provider == "mistral" {
+		return ""
+	}
+	return provider
 }
 
 func isDisabled(auth *coreauth.Auth) bool {

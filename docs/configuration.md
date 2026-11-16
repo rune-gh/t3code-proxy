@@ -87,12 +87,16 @@ routing:
   strategy: "soonest-reset-first"
   session-affinity: true
   session-affinity-ttl: "1h"
+  plan-headroom-reserve: 10 # default; 0 disables the 5-hour headroom guard
+  plan-weights:             # optional overrides of the built-in plan weights
+    codex:
+      pro: 12
   retry:
     request-retry: 3
     max-retry-interval: 30
 ```
 
-See [routing](routing.md) for the strategies, affinity and retries.
+See [routing](routing.md) for the strategies, plan weights, affinity and retries.
 
 ## Quota history
 

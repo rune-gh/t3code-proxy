@@ -16,6 +16,10 @@
 //	-port <n>        port to check (default: server.port from the config, then 8317)
 //	-json            print a JSON report instead of aligned text
 //	-offline         skip the public network (ipinfo.io) lookup
+//	-check-config    use the production config loader without starting services
+//	                 or modifying source files, and print a redacted JSON report
+//	-probe-url <url> with -check-config, probe an existing loopback HTTP hub
+//	-management-key-file <path> plaintext key file when config holds a hash
 //
 // Exit codes from Main: 0 when no check failed (warnings allowed), 1 when at
 // least one check failed, 2 on a usage error.
@@ -98,6 +102,11 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var opts Options
+	var configOnly bool
+	var probeURL, managementKeyFile string
+	fs.BoolVar(&configOnly, "check-config", false, "validate with the server loader on a temporary copy, without starting services (JSON output)")
+	fs.StringVar(&probeURL, "probe-url", "", "with -check-config, probe an existing loopback hub using config keys")
+	fs.StringVar(&managementKeyFile, "management-key-file", "", "plaintext management key file for -probe-url when config holds a hash")
 	fs.StringVar(&opts.ConfigPath, "config", "", "config file to inspect")
 	fs.StringVar(&opts.AuthDir, "auth-dir", "", "auth directory override")
 	fs.IntVar(&opts.Port, "port", 0, "port to check (default from config, then 8317)")
@@ -108,6 +117,16 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if fs.NArg() > 0 {
 		_, _ = fmt.Fprintf(stderr, "doctor: unexpected argument %q\n", fs.Arg(0))
+		return 2
+	}
+	if configOnly {
+		if checkConfigCommand(ctx, opts.ConfigPath, probeURL, managementKeyFile, stdout) {
+			return 0
+		}
+		return 1
+	}
+	if probeURL != "" || managementKeyFile != "" {
+		_, _ = fmt.Fprintln(stderr, "doctor: probe flags require -check-config")
 		return 2
 	}
 	if Run(ctx, stdout, opts) {

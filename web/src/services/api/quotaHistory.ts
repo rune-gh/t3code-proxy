@@ -18,6 +18,19 @@ export interface QuotaHistoryWindow {
   /** Epoch ms of the next reset, when known. */
   resetsAt: number | null;
   periodHours: number | null;
+  /** The provider's own name for this window, when the hub reports one. */
+  label?: string;
+  /**
+   * Money the window allows, for API-key providers with a spending budget
+   * (Mistral: `budget: 15`, `currency: "USD"`). Absent for subscription windows.
+   */
+  budget?: QuotaBudget;
+}
+
+export interface QuotaBudget {
+  amount: number;
+  /** ISO 4217 code, upper case; USD when the hub states an amount without one. */
+  currency: string;
 }
 
 export interface QuotaHistorySample {
@@ -34,6 +47,11 @@ export interface QuotaHistoryAccount {
   label: string;
   plan: string | null;
   disabled: boolean;
+  /**
+   * The account's effective plan weight as the hub routes with it (1 = one
+   * base-plan account). Absent on hubs that predate server-side plan weights.
+   */
+  weight?: number | null;
 }
 
 export interface QuotaHistory {
@@ -67,12 +85,40 @@ const epochMs = (value: unknown): number | null => {
 const text = (value: unknown): string =>
   typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
 
+/**
+ * A window's budget, read defensively: the amount as `budget` (number, numeric
+ * string, or `{ amount, currency }`), `budget_amount` or `budget_usd`; the
+ * currency as `currency` or `budget_currency`. Non-positive amounts are dropped.
+ */
+const normalizeBudget = (value: Record<string, unknown>): QuotaBudget | null => {
+  const nested = isRecord(value.budget) ? value.budget : null;
+  const amount = finiteNumber(
+    nested
+      ? (nested.amount ?? nested.value)
+      : (value.budget ??
+          value.budget_amount ??
+          value.budgetAmount ??
+          value.budget_usd ??
+          value.budgetUsd)
+  );
+  if (amount === null || !(amount > 0)) return null;
+  const rawCurrency = text(
+    nested?.currency ?? value.currency ?? value.budget_currency ?? value.budgetCurrency
+  )
+    .trim()
+    .toUpperCase();
+  return { amount, currency: /^[A-Z]{3}$/.test(rawCurrency) ? rawCurrency : 'USD' };
+};
+
 const normalizeWindow = (value: unknown): QuotaHistoryWindow | null => {
   if (!isRecord(value)) return null;
+  const budget = normalizeBudget(value);
   return {
     usedPercent: finiteNumber(value.used_percent ?? value.usedPercent),
     resetsAt: epochMs(value.resets_at ?? value.resetsAt),
     periodHours: finiteNumber(value.period_hours ?? value.periodHours),
+    ...(typeof value.label === 'string' && value.label.trim() ? { label: value.label.trim() } : {}),
+    ...(budget ? { budget } : {}),
   };
 };
 
@@ -80,13 +126,17 @@ export const normalizeQuotaHistory = (payload: unknown, receivedAt = Date.now())
   const root = isRecord(payload) ? payload : {};
   const accounts: QuotaHistoryAccount[] = (Array.isArray(root.accounts) ? root.accounts : [])
     .filter(isRecord)
-    .map((account) => ({
-      authIndex: text(account.auth_index ?? account.authIndex),
-      provider: text(account.provider).toLowerCase(),
-      label: text(account.label),
-      plan: text(account.plan) || null,
-      disabled: account.disabled === true,
-    }))
+    .map((account) => {
+      const weight = finiteNumber(account.weight);
+      return {
+        authIndex: text(account.auth_index ?? account.authIndex),
+        provider: text(account.provider).toLowerCase(),
+        label: text(account.label),
+        plan: text(account.plan) || null,
+        disabled: account.disabled === true,
+        weight: weight !== null && weight > 0 ? weight : null,
+      };
+    })
     .filter((account) => account.authIndex !== '');
 
   const samples: QuotaHistorySample[] = [];
