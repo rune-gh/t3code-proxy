@@ -128,6 +128,8 @@ func TestRecorderMistralAPIKeyAccounts(t *testing.T) {
 				return 200, []byte(mistralBudgetFixture), nil
 			case MistralSubscriptionURL:
 				return planStatus, []byte(mistralSubscriptionFixture), nil
+			case MistralWhoamiURL:
+				return 200, []byte(`{"customer_id":"fixture-customer"}`), nil
 			}
 			t.Errorf("unexpected billing URL %q", url)
 			return 404, nil, nil
@@ -287,5 +289,82 @@ func TestStoreMistralBudgetsRoundTrip(t *testing.T) {
 	}
 	if got := doc.Get("window").Raw; got != `{"used_percent":20,"resets_at":null,"period_hours":5}` {
 		t.Fatalf("legacy window JSON changed: %s", got)
+	}
+}
+
+// Two keys of one Mistral customer read the same budgets: an API key and the key
+// Mistral Vibe signs in with. They are recorded as one account, the one without
+// a model prefix, so neither allowance is counted twice.
+func TestRecorderMergesMistralKeysOfOneCustomer(t *testing.T) {
+	now := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
+	cfg := &config.Config{OpenAICompatibility: []config.OpenAICompatibility{
+		{Name: "mistral-vibe", Prefix: "vibe", BaseURL: "https://api.mistral.ai/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "fixture-vibe-key"}}},
+		{Name: "mistral", BaseURL: "https://api.mistral.ai/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "fixture-api-key"}}},
+		{Name: "mistral-other", BaseURL: "https://api.mistral.ai/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "fixture-other-key"}}},
+	}}
+	auths, err := synthesizer.NewConfigSynthesizer().Synthesize(&synthesizer.SynthesisContext{Config: cfg, Now: now, IDGenerator: synthesizer.NewStableIDGenerator()})
+	if err != nil || len(auths) != 3 {
+		t.Fatalf("synthesis = %d accounts, %v", len(auths), err)
+	}
+	customerOf := map[string]string{"fixture-vibe-key": "customer-a", "fixture-api-key": "customer-a", "fixture-other-key": "customer-b"}
+	whoamiStatus := 200
+	r := NewRecorder(Deps{
+		ListAuths: func() []*coreauth.Auth { return auths },
+		DoRequest: func(_ context.Context, auth *coreauth.Auth, _, url string, _ map[string]string, _ []byte) (int, []byte, error) {
+			switch url {
+			case MistralBudgetURL:
+				return 200, []byte(mistralBudgetFixture), nil
+			case MistralSubscriptionURL:
+				return 200, []byte(mistralSubscriptionFixture), nil
+			case MistralWhoamiURL:
+				return whoamiStatus, []byte(`{"customer_id":"` + customerOf[auth.Attributes["api_key"]] + `"}`), nil
+			}
+			return 404, nil, nil
+		},
+	})
+	r.now = func() time.Time { return now }
+	r.startupDelay = time.Hour
+	if err := r.Apply(enabledSettings(t)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(r.Close)
+	// The first round learns the customers as it goes, so a key polled before its
+	// sibling may still be stored once; history hides it.
+	if n := r.poll(context.Background(), r.store, 0, nil); n < 2 || n > 3 {
+		t.Fatalf("first round stored %d samples, want 2 or 3", n)
+	}
+	now = now.Add(time.Minute)
+	if n := r.poll(context.Background(), r.store, 0, nil); n != 2 {
+		t.Fatalf("stored %d samples, want 2 (one per customer)", n)
+	}
+	history, err := r.History(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	labels := map[string]bool{}
+	for _, account := range history.Accounts {
+		labels[account.Label] = true
+	}
+	if len(history.Accounts) != 2 || !labels["mistral"] || !labels["mistral-other"] || labels["mistral-vibe"] {
+		t.Fatalf("accounts = %+v, want mistral and mistral-other", history.Accounts)
+	}
+	listed := map[string]bool{}
+	for _, account := range history.Accounts {
+		listed[account.AuthIndex] = true
+	}
+	for _, sample := range history.Samples {
+		if !listed[sample.AuthIndex] {
+			t.Fatalf("history serves a sample of an unlisted account: %+v", sample)
+		}
+	}
+	if len(history.Samples) != 4 {
+		t.Fatalf("samples = %d, want 4 (two rounds, two customers)", len(history.Samples))
+	}
+
+	// A customer that cannot be read keeps the last one known.
+	whoamiStatus = 503
+	now = now.Add(profileTTL)
+	if n := r.poll(context.Background(), r.store, 0, nil); n != 2 {
+		t.Fatalf("stored %d samples after a failed customer read, want 2", n)
 	}
 }

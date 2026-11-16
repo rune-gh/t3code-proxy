@@ -131,6 +131,21 @@ func TestManagerWaitsForCoolingAccountInsteadOfSpentOne(t *testing.T) {
 		t.Fatalf("the failed account is not on hold (blocked=%v until %v)", blocked, next)
 	}
 
+	// Replay probes must retain the excluded account in their cooling pool.
+	// They are read-only and honor the configured selector, including affinity.
+	for _, selector := range []Selector{&SoonestResetFirstSelector{}, NewSessionAffinitySelectorWithConfig(SessionAffinityConfig{Fallback: &SoonestResetFirstSelector{}})} {
+		manager.SetSelector(selector)
+		if manager.HasAlternativeTargetForModel(ctx, []string{"codex"}, model, cliproxyexecutor.Options{}, open.ID) {
+			t.Fatal("spent account counted as a replay target while the account with allowance cools down")
+		}
+		available, errAlternative := manager.CheckAlternativeTargetForModel(ctx, []string{"codex"}, model, cliproxyexecutor.Options{}, open.ID)
+		var cooldown *modelCooldownError
+		if available || !errors.As(errAlternative, &cooldown) || cooldown.resetIn <= 0 || cooldown.resetIn > 5*time.Minute {
+			t.Fatalf("alternative = %v, %v; want the short cooldown", available, errAlternative)
+		}
+	}
+	manager.SetSelector(&SoonestResetFirstSelector{})
+
 	got, _, err = manager.pickNext(ctx, "codex", model, cliproxyexecutor.Options{}, nil)
 	var cooldown *modelCooldownError
 	if got != nil || !errors.As(err, &cooldown) {

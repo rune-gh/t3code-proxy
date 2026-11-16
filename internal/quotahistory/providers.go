@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
@@ -24,6 +25,9 @@ const (
 	DevinUsageURL            = "https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus"
 	MistralBudgetURL         = "https://api.mistral.ai/v1/billing/budget"
 	MistralSubscriptionURL   = "https://api.mistral.ai/v1/billing/subscription"
+	// MistralWhoamiURL names the customer behind a Mistral key, so two keys of
+	// one customer (an API key and a Vibe key) are recorded as one account.
+	MistralWhoamiURL = "https://console.mistral.ai/api/vibe/whoami"
 )
 
 var antigravityQuotaURLs = []string{
@@ -87,7 +91,68 @@ func (r *Recorder) fetchMistral(ctx context.Context, auth *coreauth.Auth) (map[s
 		}
 		return parseMistralPlan(body)
 	})
+	r.refreshMistralCustomer(ctx, auth)
 	return windows, plan, nil
+}
+
+// refreshMistralCustomer learns the customer behind a Mistral key at most once
+// per profileTTL. A failed request keeps what was known.
+func (r *Recorder) refreshMistralCustomer(ctx context.Context, auth *coreauth.Auth) {
+	r.plansMu.Lock()
+	last := r.customerAttempts[auth.Index]
+	due := last.IsZero() || r.now().Sub(last) >= profileTTL
+	if due {
+		r.customerAttempts[auth.Index] = r.now()
+	}
+	r.plansMu.Unlock()
+	if !due {
+		return
+	}
+	body, err := r.get(ctx, auth, MistralWhoamiURL, bearerHeaders())
+	if err != nil {
+		return
+	}
+	if id := firstString(ojson.ParseBytes(body).Get("customer_id")); id != "" {
+		r.plansMu.Lock()
+		r.customers[auth.Index] = id
+		r.plansMu.Unlock()
+	}
+}
+
+// mistralDuplicates returns the Mistral keys that another key of the same
+// customer already represents. Both keys read the same monthly budgets, so
+// recording both would count each allowance twice. The key without a model
+// prefix represents the customer, then the lowest index.
+func (r *Recorder) mistralDuplicates(auths []*coreauth.Auth) map[string]bool {
+	r.plansMu.Lock()
+	customers := make(map[string]string, len(r.customers))
+	for index, id := range r.customers {
+		customers[index] = id
+	}
+	r.plansMu.Unlock()
+	groups := make(map[string][]*coreauth.Auth)
+	for _, auth := range auths {
+		if providerOf(auth) != "mistral" {
+			continue
+		}
+		if id := customers[auth.Index]; id != "" {
+			groups[id] = append(groups[id], auth)
+		}
+	}
+	duplicates := make(map[string]bool)
+	for _, group := range groups {
+		sort.Slice(group, func(i, j int) bool {
+			pi, pj := strings.TrimSpace(group[i].Prefix) != "", strings.TrimSpace(group[j].Prefix) != ""
+			if pi != pj {
+				return !pi
+			}
+			return group[i].Index < group[j].Index
+		})
+		for _, auth := range group[1:] {
+			duplicates[auth.Index] = true
+		}
+	}
+	return duplicates
 }
 
 func bearerHeaders() map[string]string {

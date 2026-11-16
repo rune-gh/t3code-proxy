@@ -1705,7 +1705,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	fallbackAuths := highestPriorityAuths(available)
 
 	modelKey := canonicalModelKey(model)
-	cacheKey := provider + "::" + primaryID + "::" + modelKey
+	cacheKey := providerAffinityNamespace(provider, opts.Metadata) + "::" + primaryID + "::" + modelKey
 	isFork := false
 	if opts.Metadata != nil {
 		if forkFlag, ok := opts.Metadata[cliproxyexecutor.IsForkMetadataKey].(bool); ok && forkFlag {
@@ -1715,7 +1715,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	isSubagent := !isFork && isSubagentSession(primaryID, fallbackID)
 	fallbackKey := ""
 	if fallbackID != "" && fallbackID != primaryID {
-		fallbackKey = provider + "::" + fallbackID + "::" + modelKey
+		fallbackKey = providerAffinityNamespace(provider, opts.Metadata) + "::" + fallbackID + "::" + modelKey
 	}
 	bind := func(authID string, recordSelection bool) {
 		keys := []string{cacheKey}
@@ -2046,7 +2046,7 @@ func canonicalLCPProvider(provider string) string {
 }
 
 func lcpAffinityNamespace(provider, model string, metadata map[string]any) string {
-	provider = canonicalLCPProvider(provider)
+	provider = providerAffinityNamespace(canonicalLCPProvider(provider), metadata)
 	model = canonicalModelKey(model)
 	callerScope := sessionMetadataString(metadata, cliproxyexecutor.CallerScopeMetadataKey)
 	if provider == "" || callerScope == "" {
@@ -2366,10 +2366,10 @@ func (s *SessionAffinitySelector) OnResult(res Result) {
 		fallbackID = cliproxysession.BoundSessionIdentity(fallbackID)
 	}
 
-	cacheKey := ns + "::" + primaryID + "::" + nsModel
+	cacheKey := providerAffinityNamespace(ns, res.Options.Metadata) + "::" + primaryID + "::" + nsModel
 	var fallbackKey string
 	if fallbackID != "" && fallbackID != primaryID && !isSubagentSession(primaryID, fallbackID) {
-		fallbackKey = ns + "::" + fallbackID + "::" + nsModel
+		fallbackKey = providerAffinityNamespace(ns, res.Options.Metadata) + "::" + fallbackID + "::" + nsModel
 	}
 	if res.Success {
 		s.cache.Touch(cacheKey, res.AuthID)
@@ -2439,14 +2439,14 @@ func (s *SessionAffinitySelector) boundAuthForRequest(providers []string, model 
 
 	if primaryID != "" {
 		for _, candProvider := range candidateProviders {
-			if authID, ok := s.cache.Get(candProvider + "::" + primaryID + "::" + modelKey); ok && authID != "" {
+			if authID, ok := s.cache.Get(providerAffinityNamespace(candProvider, opts.Metadata) + "::" + primaryID + "::" + modelKey); ok && authID != "" {
 				return authID, true
 			}
 		}
 	}
 	if fallbackID != "" && fallbackID != primaryID && !isSubagent && !isFork {
 		for _, candProvider := range candidateProviders {
-			if authID, ok := s.cache.Get(candProvider + "::" + fallbackID + "::" + modelKey); ok && authID != "" {
+			if authID, ok := s.cache.Get(providerAffinityNamespace(candProvider, opts.Metadata) + "::" + fallbackID + "::" + modelKey); ok && authID != "" {
 				return authID, true
 			}
 		}

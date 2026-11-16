@@ -303,6 +303,9 @@ func requestExecutionMetadata(ctx context.Context) map[string]any {
 	}
 
 	meta := make(map[string]any)
+	if provider := coreauth.ProviderScopeFromContext(ctx); provider != "" {
+		meta[coreexecutor.ProviderScopeMetadataKey] = provider
+	}
 	if key != "" {
 		meta[idempotencyKeyMetadataKey] = key
 	}
@@ -311,6 +314,9 @@ func requestExecutionMetadata(ctx context.Context) map[string]any {
 	}
 	if pinnedAuthID := pinnedAuthIDFromContext(ctx); pinnedAuthID != "" {
 		meta[coreexecutor.PinnedAuthMetadataKey] = pinnedAuthID
+	}
+	if excludedAuthIDs := excludedAuthIDsFromContext(ctx); len(excludedAuthIDs) > 0 {
+		meta[coreexecutor.ExcludedAuthIDsMetadataKey] = excludedAuthIDs
 	}
 	if selectedCallback := selectedAuthIDCallbackFromContext(ctx); selectedCallback != nil {
 		meta[coreexecutor.SelectedAuthCallbackMetadataKey] = selectedCallback
@@ -634,6 +640,9 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 	}
 
 	if requestCtx != nil {
+		if provider := coreauth.ProviderScopeFromContext(requestCtx); provider != "" {
+			parentCtx = coreauth.WithProviderScope(parentCtx, provider)
+		}
 		parentCtx = httptransport.InheritDecorator(parentCtx, requestCtx)
 		parentCtx = logging.InheritDeferredCapture(parentCtx, requestCtx)
 	}

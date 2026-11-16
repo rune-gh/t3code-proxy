@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/interfaces"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/internal/thinking"
 	"github.com/rune-oai/t3code-proxy/internal/util"
@@ -88,11 +89,11 @@ func (h *OpenAIResponsesAPIHandler) responsesWebsocketAvailableAuthsForModel(mod
 	return available, modelKey
 }
 
-func (h *OpenAIResponsesAPIHandler) responsesWebsocketHasAlternativeReplayTarget(ctx context.Context, modelName string, rawJSON []byte, failedAuthID string) bool {
+func (h *OpenAIResponsesAPIHandler) responsesWebsocketAlternativeReplayTarget(ctx context.Context, modelName string, rawJSON []byte, failedAuthID string) (bool, *interfaces.ErrorMessage) {
 	if h == nil || h.BaseAPIHandler == nil || h.AuthManager == nil {
-		return false
+		return false, nil
 	}
-	return h.HasAlternativeExecutionTarget(ctx, h.HandlerType(), modelName, rawJSON, failedAuthID)
+	return h.CheckAlternativeExecutionTarget(ctx, h.HandlerType(), modelName, rawJSON, failedAuthID)
 }
 
 func (h *OpenAIResponsesAPIHandler) responsesWebsocketUsesCodexWebsocketPassthrough(modelName string) bool {

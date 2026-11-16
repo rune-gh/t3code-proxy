@@ -25,7 +25,7 @@ const (
 	homeRetryRoundMetadataKey = "request_retry_round"
 	// ExcludedAuthIDsMetadataKey stores credential IDs already attempted in the
 	// current request retry round.
-	ExcludedAuthIDsMetadataKey = "excluded_auth_ids"
+	ExcludedAuthIDsMetadataKey = cliproxyexecutor.ExcludedAuthIDsMetadataKey
 	// CloseAllExecutionSessionsID asks an executor to release all active execution sessions.
 	// Executors that do not support this marker may ignore it.
 	CloseAllExecutionSessionsID = "__all_execution_sessions__"
@@ -1005,7 +1005,14 @@ func (m *Manager) pickNextViaHome(ctx context.Context, model string, opts clipro
 	return auth, executor, provider, nil
 }
 
-func (m *Manager) pickHomeDispatchSelection(ctx context.Context, model string, opts cliproxyexecutor.Options) (*HomeDispatchSelection, error) {
+func (m *Manager) pickHomeDispatchSelection(ctx context.Context, model string, opts cliproxyexecutor.Options) (selected *HomeDispatchSelection, errSelection error) {
+	defer func() {
+		if scope := ProviderScopeFromContext(ctx); scope != "" && selected != nil && !strings.EqualFold(selected.Provider, scope) {
+			selected.End("provider_scope_mismatch")
+			selected = nil
+			errSelection = &Error{Code: "auth_not_found", Message: "home dispatch returned a credential outside the provider scope", HTTPStatus: http.StatusServiceUnavailable}
+		}
+	}()
 	if m == nil {
 		return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 	}

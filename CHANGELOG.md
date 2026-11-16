@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Provider-scoped client endpoints under `/provider/<name>` with filtered OpenAI, Anthropic and
+  Gemini model catalogs, provider-pinned text execution and isolated session affinity. Named
+  OpenAI-compatible upstreams such as `mistral` are supported. Antigravity CLI setup now uses
+  its enterprise model gateway environment variables.
+
 - Mistral monthly API and Vibe Code budget history for API-key upstreams on `api.mistral.ai`,
   with cached subscription plans and optional `budget` and `currency` window fields. These
   usage-only windows use account weight 1.
@@ -61,6 +66,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - New logo: a fox head in profile, white and silver on the black tile.
 
 ### Fixed
+
+- Two Mistral keys of one customer (a console key and a Vibe key) are recorded as one account,
+  so the monthly API and Vibe Code budgets are not counted twice.
 
 - `soonest-reset-first` no longer sends new work to an account it knows is spent while the
   account with allowance left is only on a short hold. Seen on a live hub: one "overloaded"

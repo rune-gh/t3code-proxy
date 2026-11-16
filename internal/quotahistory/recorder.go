@@ -136,19 +136,24 @@ type Recorder struct {
 	plansMu         sync.Mutex
 	plans           map[string]string
 	profileAttempts map[string]time.Time
+	// customers maps a Mistral key's auth index to the customer behind it.
+	customers        map[string]string
+	customerAttempts map[string]time.Time
 }
 
 // NewRecorder creates a stopped recorder. Call Apply to start it.
 func NewRecorder(deps Deps) *Recorder {
 	return &Recorder{
-		deps:            deps,
-		now:             time.Now,
-		scheduledGap:    defaultScheduledGap,
-		manualGap:       defaultManualGap,
-		startupDelay:    defaultStartupDelay,
-		settings:        Settings{Interval: DefaultInterval, Retention: DefaultRetention},
-		plans:           make(map[string]string),
-		profileAttempts: make(map[string]time.Time),
+		deps:             deps,
+		now:              time.Now,
+		scheduledGap:     defaultScheduledGap,
+		manualGap:        defaultManualGap,
+		startupDelay:     defaultStartupDelay,
+		settings:         Settings{Interval: DefaultInterval, Retention: DefaultRetention},
+		plans:            make(map[string]string),
+		profileAttempts:  make(map[string]time.Time),
+		customers:        make(map[string]string),
+		customerAttempts: make(map[string]time.Time),
 	}
 }
 
@@ -352,6 +357,9 @@ func (r *Recorder) poll(ctx context.Context, store *Store, gap time.Duration, co
 		if ctx.Err() != nil {
 			// Shutting down or reconfiguring: do not record a cancellation as an error.
 			return stored
+		}
+		if providerOf(auth) == "mistral" && r.mistralDuplicates(r.trackable(r.pluginProviders(ctx, false)))[auth.Index] {
+			continue
 		}
 		if errPut := store.put(rec); errPut != nil {
 			log.WithError(errPut).Warn("quota-history: store sample")
@@ -579,7 +587,15 @@ func (r *Recorder) History(since, until int64) (History, error) {
 		since = until - DefaultRange.Milliseconds()
 	}
 	out.Accounts = r.accounts()
+	listed := make(map[string]bool, len(out.Accounts))
+	for _, account := range out.Accounts {
+		listed[account.AuthIndex] = true
+	}
+	duplicates := r.mistralDuplicates(r.trackable(r.pluginProviders(context.Background(), false)))
 	errScan := store.scan(since, until, func(rec record) {
+		if duplicates[rec.AuthIndex] && !listed[rec.AuthIndex] {
+			return
+		}
 		if rec.Windows == nil {
 			rec.Windows = map[string]Window{}
 		}
@@ -630,7 +646,12 @@ func downsample(samples []Sample, max int) []Sample {
 // accounts lists supported subscription credentials, including disabled ones.
 func (r *Recorder) accounts() []Account {
 	out := []Account{}
-	for _, auth := range r.trackable(r.pluginProviders(context.Background(), false)) {
+	auths := r.trackable(r.pluginProviders(context.Background(), false))
+	duplicates := r.mistralDuplicates(auths)
+	for _, auth := range auths {
+		if duplicates[auth.Index] {
+			continue
+		}
 		plan := r.plan(auth.Index)
 		if plan == "" {
 			plan = coreauth.PlanOf(auth)

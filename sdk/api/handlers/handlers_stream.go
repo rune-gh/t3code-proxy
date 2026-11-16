@@ -26,8 +26,15 @@ func (h *BaseAPIHandler) ExecuteStreamWithAuthManager(ctx context.Context, handl
 // HasAlternativeExecutionTarget reports whether an alternative credential other
 // than excludedAuthID can serve a replayed request for modelName.
 func (h *BaseAPIHandler) HasAlternativeExecutionTarget(ctx context.Context, handlerType, modelName string, rawJSON []byte, excludedAuthID string) bool {
+	available, _ := h.CheckAlternativeExecutionTarget(ctx, handlerType, modelName, rawJSON, excludedAuthID)
+	return available
+}
+
+// CheckAlternativeExecutionTarget also returns the routing error that prevents
+// replay, allowing the caller to expose the hub's cooldown to the client.
+func (h *BaseAPIHandler) CheckAlternativeExecutionTarget(ctx context.Context, handlerType, modelName string, rawJSON []byte, excludedAuthID string) (bool, *interfaces.ErrorMessage) {
 	if h == nil || h.AuthManager == nil {
-		return false
+		return false, nil
 	}
 	originalRequestedModel := modelName
 	execOptions := modelExecutionOptions{
@@ -38,15 +45,16 @@ func (h *BaseAPIHandler) HasAlternativeExecutionTarget(ctx context.Context, hand
 		routeDecision = h.applyModelRouter(ctx, handlerType, modelName, rawJSON, true, execOptions)
 	}
 	if routeDecision.ExecutorPluginID != "" {
-		return false
+		return false, nil
 	}
-	providers, normalizedModel, errMsg := h.providersForExecution(modelName, originalRequestedModel, false, routeDecision, execOptions)
+	providers, normalizedModel, errMsg := h.providersForExecution(ctx, modelName, originalRequestedModel, false, routeDecision, execOptions)
 	if errMsg != nil {
-		return false
+		return false, nil
 	}
 	providers = adjustExecutionProvidersForEntryProtocol(handlerType, providers)
 	reqMeta := requestExecutionMetadata(ctx)
 	delete(reqMeta, coreexecutor.PinnedAuthMetadataKey)
+	delete(reqMeta, coreexecutor.ExcludedAuthIDsMetadataKey)
 	delete(reqMeta, coreexecutor.ExecutionSessionMetadataKey)
 	delete(reqMeta, coreexecutor.SelectedAuthCallbackMetadataKey)
 	delete(reqMeta, coreexecutor.FinalizedResponseFormatCallbackMetadataKey)
@@ -70,7 +78,11 @@ func (h *BaseAPIHandler) HasAlternativeExecutionTarget(ctx context.Context, hand
 		Metadata:        reqMeta,
 	}
 	ctx = enrichContextWithSessionHierarchy(ctx, opts.Headers, rawJSON, opts.Metadata)
-	return h.AuthManager.HasAlternativeTargetForModel(ctx, providers, normalizedModel, opts, excludedAuthID)
+	available, err := h.AuthManager.CheckAlternativeTargetForModel(ctx, providers, normalizedModel, opts, excludedAuthID)
+	if err != nil {
+		return false, ExecutionErrorMessage(err)
+	}
+	return available, nil
 }
 
 // ExecuteImageStreamWithAuthManager executes a streaming OpenAI-compatible image endpoint request.
@@ -351,7 +363,7 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	if routeDecision.ExecutorPluginID != "" {
 		return h.streamWithPluginExecutor(ctx, entryProtocol, responseProtocol, modelName, originalRequestedModel, rawJSON, alt, routeDecision.ExecutorPluginID, execOptions)
 	}
-	providers, normalizedModel, errMsg := h.providersForExecution(modelName, originalRequestedModel, allowImageModel, routeDecision, execOptions)
+	providers, normalizedModel, errMsg := h.providersForExecution(ctx, modelName, originalRequestedModel, allowImageModel, routeDecision, execOptions)
 	if errMsg != nil {
 		errChan := make(chan *interfaces.ErrorMessage, 1)
 		errChan <- errMsg

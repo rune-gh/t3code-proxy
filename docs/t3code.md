@@ -41,34 +41,49 @@ signs in directly and does not go through the hub.
 
 ## Antigravity (Gemini)
 
-T3 Code's Antigravity provider runs the Antigravity CLI (`agy`). With its **Gemini API key** sign-in
-the CLI sends Gemini API requests, and it reads the endpoint from `GOOGLE_GEMINI_BASE_URL`. That
-lets the stock provider use the hub's Antigravity account. It needs an `agy` release that knows
-this variable; 1.5.9 does.
+T3 Code's Antigravity provider runs the Antigravity CLI (`agy`). Its enterprise model gateway
+mode discovers models from the hub and sends requests through the hub's Antigravity accounts.
+This needs a recent `agy` release with gateway support.
 
 1. Open **Settings → Providers → Antigravity**.
-2. Set the sign-in method to **Gemini API key** and enter a hub access key, not a Google key.
-3. Add the environment variable `GOOGLE_GEMINI_BASE_URL` with the hub's root URL, such as
-   `https://<hub>.<tailnet>.ts.net:8317`.
+2. Set the sign-in method to **Gemini API key** and enter a hub access key.
+3. Add these provider environment variables. Mark the access key as sensitive.
 
-The model list comes from the CLI, not from the hub, so it also shows Gemini models your
-Antigravity account does not serve. Those fail with `unknown provider for model`. Hide them in
-the model picker and keep the ones `GET /v1beta/models` on the hub returns. The Google account
-sign-in method does not go through the hub.
+   ```text
+   AGY_LLM_GATEWAY_URL=https://<hub>/provider/antigravity
+   AGY_LLM_GATEWAY_API_KEY=<hub access key>
+   ```
+
+The model list comes from the hub and contains the models served by its Antigravity accounts.
+The Google account sign-in method connects directly to Google.
 
 ## Mistral (OpenCode and Vibe)
 
 Mistral has two monthly budgets on one account: API usage and Vibe Code. Which one a request
-draws on is decided by Mistral from the client that sent it.
+draws on depends on the key that sends it: a key made in the Mistral console draws on the API
+budget, and the key Mistral Vibe gets when you sign in with Mistral draws on the Vibe Code budget.
+To run both through the hub, give the hub both keys as two upstreams.
 
-- **OpenCode** pointed at the hub uses the hub's Mistral upstream (an `api-keys.openai-compatibility`
-  entry for `https://api.mistral.ai/v1`) and draws on the API budget.
-- **Mistral Vibe**, added in T3 Code as an ACP agent and signed in with Mistral, talks to Mistral
-  directly and draws on the Vibe Code budget. It does not pass through the hub.
+1. Keep the console key as the `mistral` upstream (`api-keys.openai-compatibility`, base URL
+   `https://api.mistral.ai/v1`). OpenCode and other clients use it as `<model>`.
+2. Add the Vibe key as a second upstream with the same base URL and models and `prefix: vibe`, and
+   set `force-model-prefix: true`. Its models are then reachable only as `vibe/<model>`, so nothing
+   else spends the Vibe budget by accident. On macOS, Vibe keeps its key in the keychain under the
+   service `ai.mistral.vibe`.
+3. Declare the reasoning levels Mistral accepts on models that have them, for example
+   `thinking: {levels: [none, high], zero-allowed: true}` on `mistral-vibe-cli-latest`. Without it
+   the hub turns "thinking off" into `reasoning_effort: low`, which Mistral rejects.
+4. Point Vibe at the hub in `~/.vibe/config.toml`: a `mistral` provider with
+   `api_base = "https://<hub>.<tailnet>.ts.net:8317/v1"`, `backend = "mistral"`,
+   `preserve_api_base = true`, and `api_key_env_var = "MISTRAL_API_KEY"`, with the hub access key
+   in `~/.vibe/.env`. Add each model as `[[models]]` with `name = "vibe/<model>"` and the alias Vibe
+   shows, such as `mistral-medium-3.5` for `vibe/mistral-vibe-cli-latest`.
 
-The hub reads both budgets with its Mistral key and shows them on the Overview page as money
-spent of the monthly amount, with the reset date, whichever client did the spending. See
-[quota history](quota-history.md).
+T3 Code's Mistral Vibe agent (ACP) reads the same files, so it follows.
+
+The hub reads both budgets and shows them on the Overview page as money spent of the monthly
+amount, with the reset date. Two keys of one Mistral customer are recorded as one account, so
+neither allowance is counted twice. See [quota history](quota-history.md).
 
 ## Other upstream providers
 

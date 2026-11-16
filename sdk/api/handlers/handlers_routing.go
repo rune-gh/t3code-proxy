@@ -10,8 +10,10 @@ import (
 
 	. "github.com/rune-oai/t3code-proxy/internal/constant"
 	"github.com/rune-oai/t3code-proxy/internal/interfaces"
+	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/internal/thinking"
 	"github.com/rune-oai/t3code-proxy/internal/util"
+	coreauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 	coreexecutor "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
 	"github.com/rune-oai/t3code-proxy/sdk/pluginapi"
 	"golang.org/x/net/context"
@@ -98,7 +100,7 @@ func excludeExecutionProvider(providers []string, excluded string) []string {
 }
 
 func (h *BaseAPIHandler) getRequestDetails(modelName string) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
-	return h.getRequestDetailsWithOptions(modelName, false, false)
+	return h.getRequestDetailsWithOptions(context.Background(), modelName, false, false)
 }
 
 func validateNativeInteractionsExecution(entryProtocol string, execOptions modelExecutionOptions, routeDecision modelRouteDecision) *interfaces.ErrorMessage {
@@ -125,7 +127,10 @@ func nativeInteractionsExecutionError() *interfaces.ErrorMessage {
 // providersForExecution resolves the providers and normalized model for a request. When a model
 // router selected a built-in provider, it skips model->provider resolution and uses the router's
 // provider (with an optional target model); otherwise it falls back to the registry-based path.
-func (h *BaseAPIHandler) providersForExecution(modelName, originalRequestedModel string, allowImageModel bool, routeDecision modelRouteDecision, execOptions modelExecutionOptions) ([]string, string, *interfaces.ErrorMessage) {
+func (h *BaseAPIHandler) providersForExecution(ctx context.Context, modelName, originalRequestedModel string, allowImageModel bool, routeDecision modelRouteDecision, execOptions modelExecutionOptions) ([]string, string, *interfaces.ErrorMessage) {
+	if coreauth.ProviderScopeFromContext(ctx) != "" {
+		return h.getRequestDetailsWithOptions(ctx, modelName, allowImageModel, execOptions.AllowSpeechModel)
+	}
 	forcedProvider := strings.ToLower(strings.TrimSpace(execOptions.ForcedProvider))
 	if forcedProvider != "" {
 		if routeDecision.ExecutorPluginID != "" {
@@ -159,13 +164,24 @@ func (h *BaseAPIHandler) providersForExecution(modelName, originalRequestedModel
 		}
 		return []string{routeDecision.Provider}, normalizedModel, nil
 	}
-	return h.getRequestDetailsWithOptions(modelName, allowImageModel, execOptions.AllowSpeechModel)
+	return h.getRequestDetailsWithOptions(ctx, modelName, allowImageModel, execOptions.AllowSpeechModel)
 }
 
-func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowImageModel, allowSpeechModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
+func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, modelName string, allowImageModel, allowSpeechModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
 	resolvedModelName := modelName
 	initialSuffix := thinking.ParseSuffix(modelName)
-	if initialSuffix.ModelName == "auto" {
+	scope := coreauth.ProviderScopeFromContext(ctx)
+	if scope != "" {
+		if initialSuffix.ModelName == "auto" {
+			models := registry.GetGlobalRegistry().GetAvailableModelsForProvider(scope, "openai")
+			if len(models) > 0 {
+				resolvedModelName, _ = models[0]["id"].(string)
+				if initialSuffix.HasSuffix {
+					resolvedModelName += "(" + initialSuffix.RawSuffix + ")"
+				}
+			}
+		}
+	} else if initialSuffix.ModelName == "auto" {
 		if h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() {
 			resolvedModelName = modelName
 		} else {
@@ -187,17 +203,6 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowIma
 	parsed := thinking.ParseSuffix(resolvedModelName)
 	baseModel := strings.TrimSpace(parsed.ModelName)
 
-	if errMsg := h.validateImageOnlyModel(baseModel, allowImageModel); errMsg != nil {
-		return nil, "", errMsg
-	}
-	if errMsg := h.validateSpeechOnlyModel(baseModel, allowSpeechModel); errMsg != nil {
-		return nil, "", errMsg
-	}
-
-	if h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() {
-		return []string{"home"}, resolvedModelName, nil
-	}
-
 	providers = util.GetProviderName(baseModel)
 	// Fallback: if baseModel has no provider but differs from resolvedModelName,
 	// try using the full model name. This handles edge cases where custom models
@@ -208,23 +213,29 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowIma
 		providers = util.GetProviderName(resolvedModelName)
 	}
 
+	if scope != "" {
+		providers = scopedModelProviders(providers, scope)
+		if len(providers) == 0 && baseModel != resolvedModelName {
+			providers = scopedModelProviders(util.GetProviderName(resolvedModelName), scope)
+		}
+	}
+	if scope != "" && len(providers) == 0 {
+		return nil, "", modelNotFoundError(modelName)
+	}
+
+	if errMsg := h.validateImageOnlyModel(baseModel, allowImageModel); errMsg != nil {
+		return nil, "", errMsg
+	}
+	if errMsg := h.validateSpeechOnlyModel(baseModel, allowSpeechModel); errMsg != nil {
+		return nil, "", errMsg
+	}
+
+	if h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() && scope == "" {
+		return []string{"home"}, resolvedModelName, nil
+	}
+
 	if len(providers) == 0 {
-		// The client asked for a model this proxy cannot route. Report it as a request
-		// error so streaming clients receive an actionable message instead of a
-		// gateway failure they would keep retrying. 400 is used rather than 404 to keep
-		// it distinguishable from an unregistered HTTP route.
-		// The model name is client supplied, so it is inserted through sjson rather
-		// than formatted into the JSON literal: an unescaped quote would otherwise
-		// corrupt the body or let the caller overwrite the error code.
-		body := `{"error":{"message":"","type":"invalid_request_error","code":"model_not_found","param":"model"}}`
-		body, errSet := ojson.Set(body, "error.message", "unknown provider for model "+modelName)
-		if errSet != nil {
-			body = `{"error":{"message":"unknown provider for model","type":"invalid_request_error","code":"model_not_found","param":"model"}}`
-		}
-		return nil, "", &interfaces.ErrorMessage{
-			StatusCode: http.StatusBadRequest,
-			Error:      errors.New(body),
-		}
+		return nil, "", modelNotFoundError(modelName)
 	}
 
 	// The thinking suffix is preserved in the model name itself, so no
@@ -361,6 +372,10 @@ func modelRoutersEnabled(host PluginModelRouterHost, skipPluginID string) bool {
 
 func (h *BaseAPIHandler) applyModelRouter(ctx context.Context, handlerType, modelName string, rawJSON []byte, stream bool, execOptions modelExecutionOptions) modelRouteDecision {
 	var decision modelRouteDecision
+	// A provider scope uses the provider's registered public models and credentials.
+	if coreauth.ProviderScopeFromContext(ctx) != "" {
+		return decision
+	}
 	host := h.modelRouterHost()
 	if host == nil || !modelRoutersEnabled(host, execOptions.SkipRouterPluginID) {
 		return decision
@@ -389,4 +404,19 @@ func (h *BaseAPIHandler) applyModelRouter(ctx context.Context, handlerType, mode
 		decision.Model = strings.TrimSpace(resp.TargetModel)
 	}
 	return decision
+}
+
+func scopedModelProviders(providers []string, scope string) []string {
+	for _, provider := range providers {
+		if strings.EqualFold(provider, scope) {
+			return []string{scope}
+		}
+	}
+	return nil
+}
+
+func modelNotFoundError(modelName string) *interfaces.ErrorMessage {
+	doc := ojson.NewDocString(`{"error":{"message":"unknown provider for model","type":"invalid_request_error","code":"model_not_found","param":"model"}}`)
+	_ = doc.Set("error.message", "unknown provider for model "+modelName)
+	return &interfaces.ErrorMessage{StatusCode: http.StatusBadRequest, Error: errors.New(doc.String())}
 }

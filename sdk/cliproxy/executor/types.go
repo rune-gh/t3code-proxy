@@ -8,6 +8,9 @@ import (
 	sdktranslator "github.com/rune-oai/t3code-proxy/sdk/translator"
 )
 
+// ProviderScopeMetadataKey isolates affinity bindings for provider-scoped endpoints.
+const ProviderScopeMetadataKey = "provider_scope"
+
 // RequestedModelMetadataKey stores the client-requested model name in Options.Metadata.
 const RequestedModelMetadataKey = "requested_model"
 
@@ -34,6 +37,8 @@ const GenerateMetadataKey = "generate"
 const (
 	// PinnedAuthMetadataKey locks execution to a specific auth ID.
 	PinnedAuthMetadataKey = "pinned_auth_id"
+	// ExcludedAuthIDsMetadataKey excludes specific auth IDs from selection for the current attempt.
+	ExcludedAuthIDsMetadataKey = "excluded_auth_ids"
 	// SelectionIDMetadataKey stores the per-selection ID generated for a plugin scheduler pick.
 	SelectionIDMetadataKey = "selection_id"
 	// SelectedAuthMetadataKey stores the auth ID selected by the scheduler.
