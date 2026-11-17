@@ -203,21 +203,31 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, model
 	parsed := thinking.ParseSuffix(resolvedModelName)
 	baseModel := strings.TrimSpace(parsed.ModelName)
 
-	providers = util.GetProviderName(baseModel)
-	// Fallback: if baseModel has no provider but differs from resolvedModelName,
-	// try using the full model name. This handles edge cases where custom models
-	// may be registered with their full suffixed name (e.g., "my-model(8192)").
-	// Evaluated in Story 11.8: This fallback is intentionally preserved to support
-	// custom model registrations that include thinking suffixes.
-	if len(providers) == 0 && baseModel != resolvedModelName {
-		providers = util.GetProviderName(resolvedModelName)
-	}
-
-	if scope != "" {
-		providers = scopedModelProviders(providers, scope)
-		if len(providers) == 0 && baseModel != resolvedModelName {
-			providers = scopedModelProviders(util.GetProviderName(resolvedModelName), scope)
+	lookupProviders := func() []string {
+		found := util.GetProviderName(baseModel)
+		// Fallback: if baseModel has no provider but differs from resolvedModelName,
+		// try using the full model name. This handles edge cases where custom models
+		// may be registered with their full suffixed name (e.g., "my-model(8192)").
+		// Evaluated in Story 11.8: This fallback is intentionally preserved to support
+		// custom model registrations that include thinking suffixes.
+		if len(found) == 0 && baseModel != resolvedModelName {
+			found = util.GetProviderName(resolvedModelName)
 		}
+		if scope != "" {
+			found = scopedModelProviders(found, scope)
+			if len(found) == 0 && baseModel != resolvedModelName {
+				found = scopedModelProviders(util.GetProviderName(resolvedModelName), scope)
+			}
+		}
+		return found
+	}
+	providers = lookupProviders()
+	// No credential serves the model yet, for example one a client offers before
+	// the hub's catalog lists it. Adopt it on the provider it belongs to and look
+	// again; the upstream still rejects a name it does not know.
+	homeRouted := h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() && scope == ""
+	if len(providers) == 0 && !homeRouted && registry.ResolveUnknownModel(baseModel, scope) {
+		providers = lookupProviders()
 	}
 	if scope != "" && len(providers) == 0 {
 		return nil, "", modelNotFoundError(modelName)

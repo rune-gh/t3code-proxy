@@ -328,3 +328,40 @@ func TestExecuteImageWithAuthManager_AllowsImageOnlyModels(t *testing.T) {
 		})
 	}
 }
+
+// A model no credential lists yet is handed to the unknown-model resolver with
+// the request's provider scope, then routed once the resolver registers it.
+func TestGetRequestDetails_AdoptsUnknownModelThroughResolver(t *testing.T) {
+	modelRegistry := registry.GetGlobalRegistry()
+	const clientID = "test-request-details-adopt"
+	t.Cleanup(func() { modelRegistry.UnregisterClient(clientID) })
+
+	var calls []string
+	registry.SetUnknownModelResolver(func(model, scope string) bool {
+		calls = append(calls, model+"|"+scope)
+		modelRegistry.RegisterClient(clientID, "claude", []*registry.ModelInfo{{ID: model}})
+		return true
+	})
+	t.Cleanup(func() { registry.SetUnknownModelResolver(nil) })
+
+	handler := NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, coreauth.NewManager(nil, nil, nil))
+	providers, model, errMsg := handler.getRequestDetails("claude-adoptroute-9-9(high)")
+	if errMsg != nil {
+		t.Fatalf("unexpected error: %v", errMsg.Error)
+	}
+	if !reflect.DeepEqual(providers, []string{"claude"}) || model != "claude-adoptroute-9-9(high)" {
+		t.Fatalf("got providers %v model %q", providers, model)
+	}
+	if !reflect.DeepEqual(calls, []string{"claude-adoptroute-9-9|"}) {
+		t.Fatalf("resolver calls = %v, want the base model without its thinking suffix", calls)
+	}
+
+	// The scope reaches the resolver, and a registration outside it does not route.
+	ctx := coreauth.WithProviderScope(context.Background(), "antigravity")
+	if _, _, errMsg := handler.getRequestDetailsWithOptions(ctx, "claude-adoptroute-scoped", false, false); errMsg == nil {
+		t.Fatal("a model registered only outside the scope must not route")
+	}
+	if got := calls[len(calls)-1]; got != "claude-adoptroute-scoped|antigravity" {
+		t.Fatalf("scoped resolver call = %q", got)
+	}
+}

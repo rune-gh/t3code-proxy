@@ -43,7 +43,7 @@ const (
 func GinLogrusLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
+		path := util.MaskSensitivePath(c.Request.URL.Path)
 		raw := util.MaskSensitiveQuery(c.Request.URL.RawQuery)
 		// OAuth state is a callback capability; authorization codes and issued
 		// client IDs must not be included in management access logs either.
@@ -143,7 +143,7 @@ func GinLogrusRecovery() gin.HandlerFunc {
 		log.WithFields(log.Fields{
 			"panic": recovered,
 			"stack": string(debug.Stack()),
-			"path":  c.Request.URL.Path,
+			"path":  util.MaskSensitivePath(c.Request.URL.Path),
 		}).Error("recovered from panic")
 
 		c.AbortWithStatus(http.StatusInternalServerError)

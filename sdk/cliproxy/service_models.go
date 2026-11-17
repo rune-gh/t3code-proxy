@@ -259,16 +259,11 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 				if providerKey == "" {
 					providerKey = "openai-compatibility"
 				}
+				ms = s.appendAdoptedModels(providerKey, a.Prefix, s.appendPluginModels(providerKey, ms, nil), nil)
 				if len(ms) > 0 {
-					ms = s.appendPluginModels(providerKey, ms, nil)
 					published = s.registerResolvedModelsForAuthFenced(a, fence, providerKey, applyModelPrefixes(ms, a.Prefix, cfg.ForceModelPrefix))
 				} else {
-					ms = s.appendPluginModels(providerKey, nil, nil)
-					if len(ms) > 0 {
-						published = s.registerResolvedModelsForAuthFenced(a, fence, providerKey, applyModelPrefixes(ms, a.Prefix, cfg.ForceModelPrefix))
-					} else {
-						published = s.unregisterModelsForAuthFenced(a, fence)
-					}
+					published = s.unregisterModelsForAuthFenced(a, fence)
 				}
 				return true
 			}
@@ -281,17 +276,11 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 					if providerKey == "" {
 						providerKey = "openai-compatibility"
 					}
-					ms := cached.models
+					ms := s.appendAdoptedModels(providerKey, a.Prefix, s.appendPluginModels(providerKey, cached.models, nil), nil)
 					if len(ms) > 0 {
-						ms = s.appendPluginModels(providerKey, ms, nil)
 						published = s.registerResolvedModelsForAuthFenced(a, fence, providerKey, applyModelPrefixes(ms, a.Prefix, cfg.ForceModelPrefix))
 					} else {
-						ms = s.appendPluginModels(providerKey, nil, nil)
-						if len(ms) > 0 {
-							published = s.registerResolvedModelsForAuthFenced(a, fence, providerKey, applyModelPrefixes(ms, a.Prefix, cfg.ForceModelPrefix))
-						} else {
-							published = s.unregisterModelsForAuthFenced(a, fence)
-						}
+						published = s.unregisterModelsForAuthFenced(a, fence)
 					}
 					return published
 				}
@@ -306,7 +295,7 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 				}
 			}
 			if isCompatAuth {
-				models = s.appendPluginModels(providerKey, nil, nil)
+				models = s.appendAdoptedModels(providerKey, a.Prefix, s.appendPluginModels(providerKey, nil, nil), nil)
 				if len(models) > 0 {
 					published = s.registerResolvedModelsForAuthFenced(a, fence, providerKey, applyModelPrefixes(models, a.Prefix, cfg.ForceModelPrefix))
 				} else {
@@ -320,6 +309,7 @@ func (s *Service) registerModelsForAuthWithConfigAndCache(ctx context.Context, c
 	if ctx.Err() != nil {
 		return true
 	}
+	models = s.appendAdoptedModels(provider, a.Prefix, models, excluded)
 	models = applyOAuthModelAliasForAuth(cfg, provider, authKind, a.Attributes, models)
 	if ctx.Err() != nil {
 		return true

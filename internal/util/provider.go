@@ -240,6 +240,21 @@ func MaskSensitiveHeaderValue(key, value string) string {
 	}
 }
 
+// MaskSensitivePath hides credentials carried in a request path. OpenCode's
+// catalog fetch (/opencode/<access key>/api.json) cannot send headers, so its
+// access key is a path segment.
+func MaskSensitivePath(path string) string {
+	const openCodePrefix = "/opencode/"
+	if !strings.HasPrefix(path, openCodePrefix) {
+		return path
+	}
+	rest := path[len(openCodePrefix):]
+	if slash := strings.IndexByte(rest, '/'); slash >= 0 {
+		return openCodePrefix + "***" + rest[slash:]
+	}
+	return openCodePrefix + "***"
+}
+
 // MaskSensitiveQuery masks sensitive query parameters, e.g. auth_token, within the raw query string.
 func MaskSensitiveQuery(raw string) string {
 	if raw == "" {

@@ -156,6 +156,7 @@ func (s *Server) setupRoutes() {
 	}
 
 	s.setupProviderRoutes(openaiHandlers, claudeCodeHandlers, openaiResponsesHandlers, geminiHandlers)
+	s.setupOpenCodeRoutes()
 
 	// Root endpoint
 	s.engine.GET("/", func(c *gin.Context) {

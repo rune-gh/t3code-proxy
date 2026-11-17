@@ -45,7 +45,55 @@ type staticModelsJSON struct {
 
 // GetClaudeModels returns the standard Claude model definitions.
 func GetClaudeModels() []*ModelInfo {
-	return cloneModelInfos(getModels().Claude)
+	return withClaudeBuiltins(cloneModelInfos(getModels().Claude))
+}
+
+// withClaudeBuiltins adds Claude models that Claude Code offers but the
+// upstream models.json does not list yet, so requests for them route to Claude
+// accounts instead of failing with "unknown provider". Unlike the Codex and xAI
+// built-ins, catalog entries win: a builtin is only added when its ID is missing.
+// The input slice is never modified, so the shared catalog can be passed in.
+func withClaudeBuiltins(models []*ModelInfo) []*ModelInfo {
+	builtins := claudeBuiltinModelInfos()
+	out := make([]*ModelInfo, len(models), len(models)+len(builtins))
+	copy(out, models)
+	present := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		if model != nil {
+			present[strings.ToLower(strings.TrimSpace(model.ID))] = struct{}{}
+		}
+	}
+	for _, builtin := range builtins {
+		if _, exists := present[builtin.ID]; !exists {
+			out = append(out, builtin)
+		}
+	}
+	return out
+}
+
+func claudeBuiltinModelInfos() []*ModelInfo {
+	mythos := func(id, displayName string, created int64) *ModelInfo {
+		return &ModelInfo{
+			ID:                  id,
+			Object:              "model",
+			Created:             created,
+			OwnedBy:             "anthropic",
+			Type:                "claude",
+			DisplayName:         displayName,
+			ContextLength:       1000000,
+			MaxCompletionTokens: 128000,
+			Thinking: &ThinkingSupport{
+				DynamicAllowed: true,
+				Levels:         []string{"low", "medium", "high", "xhigh", "max"},
+			},
+			SupportedInputModalities:  []string{"text", "image"},
+			SupportedOutputModalities: []string{"text"},
+		}
+	}
+	return []*ModelInfo{
+		mythos("claude-mythos-5-1", "Claude Mythos 5.1", 1788220800),
+		mythos("claude-mythos-5-2", "Claude Mythos 5.2", 1794250800),
+	}
 }
 
 // GetGeminiModels returns the standard Gemini model definitions.
@@ -634,8 +682,9 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 	}
 
 	data := getModels()
+	claudeModels := withClaudeBuiltins(data.Claude)
 	allModels := [][]*ModelInfo{
-		data.Claude,
+		claudeModels,
 		data.Gemini,
 		data.Vertex,
 		data.AIStudio,
@@ -657,7 +706,7 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 	// Dated and bracketed Claude variants (claude-sonnet-5-5-20261001,
 	// claude-opus-5-5[1m]) share the capabilities of their catalog entry.
 	for _, familyID := range claudeFamilyModelIDs(modelID) {
-		for _, m := range data.Claude {
+		for _, m := range claudeModels {
 			if m != nil && m.ID == familyID {
 				return cloneModelInfo(m)
 			}
