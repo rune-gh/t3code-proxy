@@ -90,12 +90,16 @@ in its logs.
 
 1. Enable OpenCode in **Settings → Providers** on the environment's machine. Its driver is off
    until you do.
-2. Give the instance two environment variables, both marked sensitive:
+2. Give the instance these environment variables, the first two marked sensitive:
 
    ```sh
    OPENCODE_MODELS_URL=https://<hub>.<tailnet>.ts.net:8317/opencode/<access key>
    T3CODE_PROXY_API_KEY=<access key>
+   OPENCODE_AUTH_CONTENT={}
    ```
+
+   `OPENCODE_AUTH_CONTENT={}` hides OpenCode's own saved logins from this instance. OpenCode
+   1.18 fails to load its providers when a saved login names a provider the catalog lacks.
 
 3. Pick a `t3code-proxy/<model>` model in the thread. The instance lists only the hub's models;
    your own OpenCode setup outside T3 Code is unchanged.
