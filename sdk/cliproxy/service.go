@@ -157,6 +157,10 @@ type Service struct {
 	antigravityRefreshPending map[string]*antigravityModelRefreshRequest
 	antigravityPersistPending map[string]*antigravityHintPersistRequest
 	antigravityPersistActive  map[string]*antigravityHintPersistRequest
+
+	// adoptedModels holds models requested by clients before the catalog listed
+	// them; see service_model_adoption.go.
+	adoptedModels adoptedModelSet
 }
 
 // SetResultPolicy sets an execution result policy on the underlying core auth manager.

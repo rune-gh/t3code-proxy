@@ -234,6 +234,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	s.registerModelRefreshCallback()
+	registry.SetUnknownModelResolver(s.adoptUnknownModel)
 	if !homeEnabled {
 		go s.runAntigravityModelRefresh(ctx)
 	}
@@ -272,6 +273,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		if runCancel != nil {
 			runCancel()
 		}
+		registry.SetUnknownModelResolver(nil)
 
 		s.homeLifecycleMu.Lock()
 		if supervisor := s.homeSupervisor; supervisor != nil {

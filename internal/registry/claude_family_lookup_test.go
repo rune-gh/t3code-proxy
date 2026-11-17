@@ -37,3 +37,44 @@ func TestLookupStaticModelInfoClaudeVariantsUseCatalogEntry(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeModelsIncludeMythosBuiltins(t *testing.T) {
+	for _, id := range []string{"claude-mythos-5-1", "claude-mythos-5-2"} {
+		found := false
+		for _, model := range GetClaudeModels() {
+			if model != nil && model.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("GetClaudeModels() is missing %q; Claude Code requests for it would fail with unknown provider", id)
+		}
+		if info := LookupStaticModelInfoByChannel(id+"[1m]", "claude"); info == nil || info.ID != id {
+			t.Errorf("LookupStaticModelInfoByChannel(%q[1m]) = %+v, want %q", id, info, id)
+		}
+		if info := LookupStaticModelInfo(id); info == nil || info.Thinking == nil {
+			t.Errorf("LookupStaticModelInfo(%q) = %+v, want an entry with thinking support", id, info)
+		}
+	}
+}
+
+func TestWithClaudeBuiltinsKeepsCatalogEntries(t *testing.T) {
+	catalog := []*ModelInfo{{ID: "claude-mythos-5-2", DisplayName: "From catalog"}}
+	models := withClaudeBuiltins(catalog)
+	count := 0
+	for _, model := range models {
+		if model.ID == "claude-mythos-5-2" {
+			count++
+			if model.DisplayName != "From catalog" {
+				t.Errorf("builtin replaced the catalog entry: %+v", model)
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("claude-mythos-5-2 appears %d times, want 1", count)
+	}
+	if len(catalog) != 1 {
+		t.Errorf("input catalog was modified: %d entries", len(catalog))
+	}
+}

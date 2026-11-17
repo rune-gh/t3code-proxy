@@ -9,6 +9,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Models newer than the catalog now route instead of failing with `unknown provider for model`.
+  A request for a model no credential lists is adopted on the provider it belongs to: the
+  request's `/provider/<name>` scope, a credential prefix or ID namespace (`vibe/...`,
+  `devin/...`), or otherwise the provider serving the most models of its family (`claude`,
+  `gpt`, `gemini`, `grok`, `mistral`, `devstral`, ...). This covers every provider, including
+  Antigravity, plugins and OpenAI-compatible upstreams. The model copies the capabilities of
+  its closest sibling, survives catalog and token refreshes, and reaches credentials added
+  later. Excluded-models settings still apply and there is no cap; the provider's own error
+  answers names it does not know. Claude Mythos 5.1 and 5.2 are also built-in Claude models.
+- `GET /opencode/<access key>/api.json` serves the hub's models as a models.dev catalog for
+  OpenCode's `OPENCODE_MODELS_URL`, so OpenCode lists every hub model live. The key in the path
+  is masked in logs.
+
 - Provider-scoped client endpoints under `/provider/<name>` with filtered OpenAI, Anthropic and
   Gemini model catalogs, provider-pinned text execution and isolated session affinity. Named
   OpenAI-compatible upstreams such as `mistral` are supported. Antigravity CLI setup now uses

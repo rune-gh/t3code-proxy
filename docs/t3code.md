@@ -79,6 +79,35 @@ Setup on the machine running T3 Code:
 
 Clearing the binary path returns to T3 Code's bundled runtime and its fixed Gemini list.
 
+## OpenCode
+
+OpenCode takes its model catalog from a models.dev-style URL. The hub serves its own catalog at
+`https://<hub>/opencode/<access key>/api.json`: every model the hub serves, under one provider
+called `t3code-proxy`, refreshed by OpenCode every few minutes. Claude models use the Anthropic
+Messages API, Codex models the Responses API, and the rest OpenAI chat completions, all on the hub.
+OpenCode cannot send a header with that fetch, so the access key is in the path; the hub masks it
+in its logs.
+
+1. Enable OpenCode in **Settings → Providers** on the environment's machine. Its driver is off
+   until you do.
+2. Give the instance these environment variables, the first two marked sensitive:
+
+   ```sh
+   OPENCODE_MODELS_URL=https://<hub>.<tailnet>.ts.net:8317/opencode/<access key>
+   T3CODE_PROXY_API_KEY=<access key>
+   OPENCODE_AUTH_CONTENT={}
+   ```
+
+   `OPENCODE_AUTH_CONTENT={}` hides OpenCode's own saved logins from this instance. OpenCode
+   1.18 fails to load its providers when a saved login names a provider the catalog lacks.
+
+3. Pick a `t3code-proxy/<model>` model in the thread. The instance lists only the hub's models;
+   your own OpenCode setup outside T3 Code is unchanged.
+
+Claude subscription accounts are meant for Claude Code (see the note at the top of this page).
+OpenCode can reach them through this catalog, so exclude Claude models for it, or keep it to
+API-key accounts, if that matters to you.
+
 ## Mistral (OpenCode and Vibe)
 
 Mistral has two monthly budgets on one account: API usage and Vibe Code. Which one a request

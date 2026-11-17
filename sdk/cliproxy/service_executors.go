@@ -652,6 +652,7 @@ func (s *Service) tryRegisterPluginModelsForAuthWithConfigFenced(ctx context.Con
 		return true, true
 	}
 	models := applyExcludedModels(result.Models, activeExcluded)
+	models = s.appendAdoptedModels(providerKey, activeAuth.Prefix, models, activeExcluded)
 	models = applyOAuthModelAliasForAuth(cfg, providerKey, activeAuthKind, activeAuth.Attributes, models)
 	publicationFence := fence
 	if pluginAuthCommitted {

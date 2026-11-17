@@ -414,7 +414,7 @@ func shouldCaptureRequestBody(loggerEnabled bool, req *http.Request) bool {
 func captureRequestInfo(c *gin.Context, captureBody bool) (*RequestInfo, error) {
 	// Capture URL with sensitive query parameters masked
 	maskedQuery := util.MaskSensitiveQuery(c.Request.URL.RawQuery)
-	url := c.Request.URL.Path
+	url := util.MaskSensitivePath(c.Request.URL.Path)
 	if maskedQuery != "" {
 		url += "?" + maskedQuery
 	}
@@ -525,7 +525,7 @@ func decodeCapturedZstdRequestBodyWithLimit(raw []byte, limit int64) ([]byte, bo
 // It skips management endpoints to avoid leaking secrets but allows
 // all other routes, including module-provided ones, to honor request-log.
 func shouldLogRequest(path string) bool {
-	if strings.HasPrefix(path, "/v0/management") || strings.HasPrefix(path, "/v8/management") || strings.HasPrefix(path, "/management") {
+	if strings.HasPrefix(path, "/v0/management") || strings.HasPrefix(path, "/v8/management") || strings.HasPrefix(path, "/management") || strings.HasPrefix(path, "/opencode/") {
 		return false
 	}
 
