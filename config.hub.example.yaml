@@ -42,10 +42,11 @@ quota-history:
 
 observability:
   logs:
-    # Write rotating log files under logs/ next to the working directory instead
-    # of stdout. systemd and launchd already capture stdout; the Windows
-    # installer turns this on because a scheduled task has no console.
-    logging-to-file: false
-    logs-max-total-size-mb: 200
+    # Keep application logs and full proxy request/response logs, including
+    # upstream reasoning events and errors. Never automatically delete them.
+    logging-to-file: true
+    request-log: true
+    logs-max-total-size-mb: 0
+    error-logs-max-files: 0
   usage:
     usage-statistics-enabled: true

@@ -114,19 +114,34 @@ See [quota history](quota-history.md).
 ```yaml
 observability:
   logs:
-    logging-to-file: false
-    logs-max-total-size-mb: 200
+    logging-to-file: true
+    request-log: true
+    logs-max-total-size-mb: 0
+    error-logs-max-files: 0
     debug: false
   usage:
     usage-statistics-enabled: true
 ```
 
-- `logging-to-file`: write rotating log files under `logs/` instead of stdout. systemd and launchd
-  already capture stdout; the Windows installer turns this on because a Scheduled Task has no
-  console.
+- `logging-to-file`: write rotating application log files under `logs/` instead of stdout.
+- `request-log`: retain proxy requests, responses, upstream attempts, streamed events (including
+  provider-supplied reasoning), WebSocket timelines, and errors. Authentication headers are masked;
+  management requests are excluded. Providers cannot expose reasoning they do not send.
+- `error-logs-max-files`: cap forced error logs when request logging is off; `0` retains all of them.
 - `logs-max-total-size-mb`: delete the oldest log files above this total. `0` disables the cap.
 - `debug`: verbose logging. Turn it off again after you have the logs you need.
 - `usage-statistics-enabled`: aggregate request and token statistics in memory for the panel.
+
+The hub template enables request and application logging with automatic deletion disabled.
+Existing installations keep their configuration; apply the settings above to enable this policy.
+Keep `server.commercial-mode` disabled so request logging middleware runs, and leave the Home
+control-plane integration disabled when local retention is required: Home mode forwards request
+logs to that separate service instead of saving local copies.
+
+Completed logs can be compressed or copied to backup storage to recover space. Verify the backup
+before removing a local copy, and retain the backup indefinitely. Do not move active `main.log`,
+`response-body-*.tmp`, or request detail spool directories while requests are running. No automatic
+backup destination is configured by this template; provision storage before the disk fills.
 
 ## Outbound proxy
 
