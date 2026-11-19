@@ -20,7 +20,16 @@ type codexClientModelsPayload struct {
 }
 
 type codexClientModelsStore struct {
-	mu                sync.RWMutex
+	mu sync.RWMutex
+	// base is the configured catalog (embedded, remote or local file) and
+	// baseSlugs the slugs it lists.
+	base      []byte
+	baseSlugs map[string]struct{}
+	// account holds the models ChatGPT accounts reported, by slug, and
+	// accountTiers the slugs each plan tier reported.
+	account      map[string]codexAccountModel
+	accountTiers map[string]map[string]struct{}
+	// data is the served catalog: base plus account models it lacks.
 	data              []byte
 	revision          uint64
 	responsesLiteMap  map[string]bool
@@ -84,23 +93,37 @@ func CodexClientModelThinkingLevels(slug string) []string {
 	return append([]string(nil), levels...)
 }
 
+// loadCodexClientModelsFromBytes replaces the configured catalog and reports
+// whether the served catalog changed.
 func loadCodexClientModelsFromBytes(data []byte, source string) (bool, error) {
-	responsesLiteMap, thinkingLevelsMap, err := parseAndValidateCodexClientModelsJSON(data)
-	if err != nil {
+	if _, _, err := parseAndValidateCodexClientModelsJSON(data); err != nil {
 		return false, fmt.Errorf("%s: %w", source, err)
 	}
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return false, fmt.Errorf("%s: decode Codex client model catalog: %w", source, err)
+	}
+	baseSlugs := make(map[string]struct{}, len(payload.Models))
+	for _, model := range payload.Models {
+		if slug, err := requiredCodexClientModelString(model, "slug"); err == nil {
+			baseSlugs[slug] = struct{}{}
+		}
+	}
 
-	cloned := append([]byte(nil), data...)
 	codexClientCatalogStore.mu.Lock()
 	defer codexClientCatalogStore.mu.Unlock()
-	if bytes.Equal(codexClientCatalogStore.data, cloned) {
+	if codexClientCatalogStore.data != nil && bytes.Equal(codexClientCatalogStore.base, data) {
 		return false, nil
 	}
-	codexClientCatalogStore.data = cloned
-	codexClientCatalogStore.responsesLiteMap = responsesLiteMap
-	codexClientCatalogStore.thinkingLevelsMap = thinkingLevelsMap
-	codexClientCatalogStore.revision++
-	return true, nil
+	previousBase, previousSlugs := codexClientCatalogStore.base, codexClientCatalogStore.baseSlugs
+	codexClientCatalogStore.base = append([]byte(nil), data...)
+	codexClientCatalogStore.baseSlugs = baseSlugs
+	changed, err := codexClientCatalogStore.composeLocked()
+	if err != nil {
+		codexClientCatalogStore.base, codexClientCatalogStore.baseSlugs = previousBase, previousSlugs
+		return false, fmt.Errorf("%s: %w", source, err)
+	}
+	return changed, nil
 }
 
 // ValidateCodexClientModelsJSON validates the fields required to serve a
@@ -139,18 +162,8 @@ func parseAndValidateCodexClientModelsJSON(data []byte) (map[string]bool, map[st
 		if lite, ok := model["use_responses_lite"].(bool); ok && lite {
 			responsesLiteMap[lowerSlug] = true
 		}
-		if rawLevels, ok := model["supported_reasoning_levels"].([]any); ok {
-			levels := make([]string, 0, len(rawLevels))
-			for _, rawLevel := range rawLevels {
-				if entry, okMap := rawLevel.(map[string]any); okMap {
-					if effort, okEffort := entry["effort"].(string); okEffort && strings.TrimSpace(effort) != "" {
-						levels = append(levels, strings.TrimSpace(effort))
-					}
-				}
-			}
-			if len(levels) > 0 {
-				thinkingLevelsMap[lowerSlug] = levels
-			}
+		if levels := CodexClientEntryThinkingLevels(model); len(levels) > 0 {
+			thinkingLevelsMap[lowerSlug] = levels
 		}
 	}
 	return responsesLiteMap, thinkingLevelsMap, nil
