@@ -1499,6 +1499,7 @@ func TestCodexExecutor_IsCompatCompactionDuplexSession_Issue7406(t *testing.T) {
 	ctx = cliproxyexecutor.WithWebsocketInput(cliproxyexecutor.WithDownstreamWebsocket(ctx), inputCh)
 
 	turn1 := []byte(`{"type":"response.create","model":"client-alias","instructions":"Keep concise.","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"Remember ` + marker + `"}]}]}`)
+	ctx, initialCapture, export := beginTestDuplexArchive(t, ctx, turn1)
 	streamRes, errStream := wsExec.ExecuteStream(ctx, auth, cliproxyexecutor.Request{
 		Model:   "deepseek-v4.1-flash",
 		Payload: turn1,
@@ -1648,6 +1649,22 @@ func TestCodexExecutor_IsCompatCompactionDuplexSession_Issue7406(t *testing.T) {
 	if staleErrEv.Get("status").Int() != http.StatusConflict || staleErrEv.Get("error.code").String() != "previous_response_not_found" {
 		t.Fatalf("unexpected stale synthetic ID error: %s", staleErrEv.Raw)
 	}
+	cancel()
+	for range streamRes.Chunks {
+	}
+	initialCapture.Finish(200)
+	t.Run("ArchiveHTTPCompaction", func(t *testing.T) {
+		for _, call := range export() {
+			if call.Get("client_request.instructions").String() != "INSTRUCTIONS_B" {
+				continue
+			}
+			if call.Get("status").Int() != 200 || call.Get("attempts.0.transport").String() != "http" || call.Get("token_usage.TotalTokens").Int() != 15 || call.Get("response.id").String() != "resp_http_sum" || call.Get("client_response.id").String() != synthRespID || call.Get("upstream_request").Raw == "" {
+				t.Fatal(call.Raw)
+			}
+			return
+		}
+		t.Fatal("no compaction call in archive")
+	})
 }
 
 func TestCodexExecutor_IsCompatCompactionDuplexEOFCancelsHTTP_Issue7406(t *testing.T) {

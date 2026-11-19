@@ -19,7 +19,7 @@ func reconstruct(chunks [][]byte) ([]byte, bool) {
 	if len(chunks) == 1 && ojson.ValidBytes(chunks[0]) {
 		r := ojson.ParseBytes(chunks[0])
 		typ := r.Get("type").String()
-		if !strings.HasPrefix(typ, "response.") && !strings.HasPrefix(typ, "content_block_") && !strings.HasPrefix(typ, "message_") && !r.Get("choices.0.delta").Exists() && typ != "ping" {
+		if !strings.HasPrefix(typ, "response.") && !strings.HasPrefix(typ, "content_block_") && !strings.HasPrefix(typ, "message_") && !r.Get("choices.0.delta").Exists() && typ != "ping" && typ != "keepalive" && typ != "codex.response.metadata" && typ != "codex.rate_limits" {
 			return safePayload(chunks[0]), true
 		}
 	}
@@ -58,6 +58,11 @@ func reconstruct(chunks [][]byte) ([]byte, bool) {
 			return nil, false
 		}
 	}
+	for path, delta := range s.deltas {
+		if final := s.doc.Get(path); final.Type != ojson.String || final.String() != delta.String() {
+			return nil, false
+		}
+	}
 	return s.doc.Bytes(), true
 }
 
@@ -67,6 +72,7 @@ type streamState struct {
 	complete, chat, chatEnd bool
 	items                   map[int]string
 	observedItems           map[int]bool
+	deltas                  map[string]*strings.Builder
 	openBlocks              map[int]*strings.Builder
 }
 
@@ -84,7 +90,7 @@ func (s *streamState) event(r ojson.Result) bool {
 		s.observedItems[int(n)] = true
 	}
 	switch {
-	case typ == "ping":
+	case typ == "ping", typ == "keepalive", typ == "codex.response.metadata", typ == "response.metadata":
 		return true
 	case typ == "message_start":
 		msg := r.Get("message")
@@ -141,6 +147,36 @@ func (s *streamState) event(r ojson.Result) bool {
 		mergeFields(s.doc, "usage.", r.Get("usage"))
 	case typ == "message_stop":
 		s.complete = true
+	case strings.HasPrefix(typ, "response.") && strings.HasSuffix(typ, ".delta"):
+		// Drop raw frames only when the indexed final field includes the observed deltas.
+		path := "output." + strconv.FormatInt(idx.Int(), 10) + "."
+		switch typ {
+		case "response.output_text.delta":
+			path += "content." + strconv.FormatInt(r.Get("content_index").Int(), 10) + ".text"
+		case "response.function_call_arguments.delta", "response.mcp_call_arguments.delta":
+			path += "arguments"
+		case "response.custom_tool_call_input.delta":
+			path += "input"
+		case "response.refusal.delta":
+			path += "content." + strconv.FormatInt(r.Get("content_index").Int(), 10) + ".refusal"
+		case "response.reasoning_text.delta":
+			path += "content." + strconv.FormatInt(r.Get("content_index").Int(), 10) + ".text"
+		case "response.reasoning_summary_text.delta":
+			path += "summary." + strconv.FormatInt(r.Get("summary_index").Int(), 10) + ".text"
+		default:
+			return false
+		}
+		delta := r.Get("delta")
+		if delta.Type != ojson.String {
+			return false
+		}
+		if s.deltas == nil {
+			s.deltas = make(map[string]*strings.Builder)
+		}
+		if s.deltas[path] == nil {
+			s.deltas[path] = new(strings.Builder)
+		}
+		s.deltas[path].WriteString(delta.String())
 	case typ == "response.output_item.done":
 		item := r.Get("item")
 		if !item.IsObject() {

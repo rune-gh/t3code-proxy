@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/base64"
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/config"
@@ -30,6 +31,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			steer := []byte(`{"type":"response.steer","previous_response_id":"r1","input":[{"role":"user","content":[{"type":"input_text","text":"STEER_OK"}]}]}`)
 			accepted := []byte(`{"type":"response.steer.accepted","sequence_number":2,"steer":{"id":"s1","previous_response_id":"r1"}}`)
 			pending := []byte(`{"type":"response.steer.pending","sequence_number":8,"steer":{"id":"s2","previous_response_id":"r2"},"reason":"waiting_for_required_input","required_input":[{"type":"function_call_output","call_id":"c1","name":"lookup"}]}`)
+			knownFailure := []byte(`{"type":"response.steer.failed","status":409,"steer":{"id":"s4","previous_response_id":"r3"},"error":{"code":"invalid_input"}}`)
 			failed := []byte(`{"type":"response.steer.failed","sequence_number":14,"steer":{"id":"s3","previous_response_id":"missing","input":"recover me"},"error":{"code":"response_not_found","message":"missing response"}}`)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer close(serverDone)
@@ -88,6 +90,10 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 					t.Errorf("idle control missing: %s", got)
 				}
 				write(failed)
+				if got = read(); ojson.GetBytes(got, "previous_response_id").String() != "r3" {
+					t.Errorf("expected steer for r3: %s", got)
+				}
+				write(knownFailure)
 				// Keep the socket alive until the client closes it; no automatic replay.
 				_, _, _ = conn.ReadMessage()
 			}))
@@ -105,6 +111,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			exec.store = &codexWebsocketSessionStore{sessions: make(map[string]*codexWebsocketSession)}
 			auth := &cliproxyauth.Auth{ID: "A", Provider: "codex", Attributes: map[string]string{"api_key": "test-key", "base_url": server.URL, "websockets": "true"}}
 			req := core.Request{Model: "gpt-6-astra", Payload: []byte(`{"model":"gpt-6-astra","input":[],"instructions":"Initial settings"}`)}
+			ctx, initialCapture, export := beginTestDuplexArchive(t, ctx, req.Payload)
 			opts := core.Options{SourceFormat: sdktranslator.FromString("codex"), Metadata: map[string]any{core.ExecutionSessionMetadataKey: "duplex-test"}}
 			result, err := exec.ExecuteStream(ctx, auth, req, opts)
 			if err != nil {
@@ -146,11 +153,13 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 						}
 						seen["successor"] = true
 						input <- core.WebsocketInput{Payload: []byte(`{"type":"response.steer","previous_response_id":"missing","input":"recover me"}`)}
+					case event == "response.steer.failed" && bytes.Equal(chunk.Payload, knownFailure):
+						seen["failed"] = true
 					case event == "response.steer.failed":
 						if !bytes.Equal(chunk.Payload, failed) {
 							t.Fatal("failed input changed")
 						}
-						seen["failed"] = true
+						input <- core.WebsocketInput{Payload: []byte(`{"type":"response.steer","previous_response_id":"r3","input":"reject this"}`)}
 					}
 				case <-ctx.Done():
 					t.Fatal(ctx.Err())
@@ -164,6 +173,33 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			}
 			for range result.Chunks {
 			}
+			initialCapture.Finish(200)
+			t.Run("ArchiveSteerOutcomes", func(t *testing.T) {
+				steers := map[string]ojson.Result{}
+				for _, call := range export() {
+					if call.Get("client_request.type").String() == "response.steer" {
+						steers[call.Get("client_request.previous_response_id").String()] = call
+					}
+				}
+				for parent, wantID := range map[string]string{"r1": "r2", "r2": "r3", "missing": "", "r3": ""} {
+					call := steers[parent]
+					if call.Get("upstream_request.previous_response_id").String() != parent {
+						t.Errorf("missing upstream steer for %s", parent)
+					}
+					if wantID == "" {
+						frame, err := base64.StdEncoding.DecodeString(call.Get("raw_frames_base64.0").String())
+						wantStatus, wantFrame := int64(400), failed
+						if parent == "r3" {
+							wantStatus, wantFrame = 409, knownFailure
+						}
+						if !call.Get("failed").Bool() || call.Get("status").Int() != wantStatus || err != nil || !bytes.Equal(frame, wantFrame) {
+							t.Errorf("rejected steer = %s", call.Raw)
+						}
+					} else if call.Get("status").Int() != 200 || call.Get("response.id").String() != wantID {
+						t.Errorf("parent %s = %s", parent, call.Raw)
+					}
+				}
+			})
 			if connections.Load() != 1 {
 				t.Fatalf("connections=%d", connections.Load())
 			}

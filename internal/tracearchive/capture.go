@@ -84,11 +84,12 @@ func (r *Recorder) Bind(req *http.Request, protocol, traceID string) context.Con
 }
 
 type Capture struct {
-	mu       sync.Mutex // protects only this call's snapshots, never storage or queue waits
-	run      *worker
-	source   source
-	finished bool
-	data     *call
+	mu           sync.Mutex // protects only this call's snapshots, never storage or queue waits
+	run          *worker
+	source       source
+	finished     bool
+	duplexStatus int // business outcome of the handler-owned turn after bootstrap
+	data         *call
 }
 
 const maxCaptureBytes = 128 << 20
@@ -185,6 +186,7 @@ func (c *Capture) Request(provider, transport string, p []byte) {
 	defer c.mu.Unlock()
 	if c.reserve(len(p)) {
 		d := c.data
+		c.duplexStatus = 0
 		d.Provider = provider
 		d.Attempts = append(d.Attempts, Attempt{Start: time.Now().UTC(), Provider: provider, Transport: transport})
 		d.upstream = bytes.Clone(p)
@@ -279,6 +281,31 @@ func (c *Capture) observe(r usage.Record) {
 	}
 	d.Model = r.Model
 }
+
+// MarkDuplexResult lets the handler finish its initial turn once a committed
+// response ends, even while the socket continues serving follow-up turns.
+func (c *Capture) MarkDuplexResult(status int) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.duplexStatus = status
+	c.mu.Unlock()
+}
+
+// FinishDuplexResult commits a marked turn after the handler delivers its terminal frame.
+func (c *Capture) FinishDuplexResult() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	status := c.duplexStatus
+	c.mu.Unlock()
+	if status != 0 {
+		c.Finish(status)
+	}
+}
+
 func (c *Capture) Finish(status int) {
 	if c == nil {
 		return

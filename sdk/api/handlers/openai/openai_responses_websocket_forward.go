@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/clienterror"
 	"github.com/rune-oai/t3code-proxy/internal/interfaces"
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
 	"github.com/rune-oai/t3code-proxy/internal/util"
 	"github.com/rune-oai/t3code-proxy/sdk/api/handlers"
 	coreauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
@@ -24,6 +25,7 @@ import (
 )
 
 type responsesWebsocketForwardOptions struct {
+	initialCapture           *tracearchive.Capture
 	preserveCompletionOutput func() bool
 	duplexStream             func() bool
 	toolCacheTurn            *responsesWebsocketToolCacheTurn
@@ -351,6 +353,9 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 					)
 					cancel(errWrite)
 					return completedOutput, completedResponseID, sortedStringSet(pendingToolCallIDs), nil, errWrite
+				}
+				if turnEnded {
+					opts.initialCapture.FinishDuplexResult()
 				}
 			}
 		}

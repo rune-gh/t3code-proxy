@@ -1108,6 +1108,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 				wsTimelineLog,
 				passthroughSessionID,
 				responsesWebsocketForwardOptions{
+					initialCapture:           archiveTurn,
 					preserveCompletionOutput: preserveNativeOutput.Load,
 					duplexStream: func() bool {
 						return codexDuplexStream.Load() && !cliproxyexecutor.LocalWebsocketTurnExecuted(cliCtx)
@@ -1122,12 +1123,12 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 				},
 			)
 			cliCancel(nil)
-			if errForward != nil {
+			if forwardErrMsg != nil && (!failoverInPlace || cliproxyexecutor.IsUpstreamWebsocketTurnError(forwardErrMsg.Error)) {
+				archiveTurn.Finish(forwardErrMsg.StatusCode)
+			} else if errForward != nil {
 				archiveTurn.Finish(http.StatusBadGateway)
 			} else if forwardErrMsg == nil {
 				archiveTurn.Finish(http.StatusOK)
-			} else if !failoverInPlace || cliproxyexecutor.IsUpstreamWebsocketTurnError(forwardErrMsg.Error) {
-				archiveTurn.Finish(forwardErrMsg.StatusCode)
 			}
 			if errForward != nil {
 				wsTerminateErr = errForward

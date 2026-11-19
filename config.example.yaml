@@ -9,12 +9,14 @@
 # The compatibility notes at the end show old spellings for existing deployments.
 config-version: 8
 
-# Durable model-call history. Live files contain private conversation data.
+# Durable model-call history. The current live segment stays local in plaintext (0600 on POSIX).
 # See docs/trace-archive.md for encryption, recovery, and export.
 # trace-archive:
 #   enabled: false
-#   dir: ""                  # default: <auth-dir>/traces
-#   recipients: []           # age1... X25519 public keys
+#   dir: ""                  # default: <auth-dir>-traces (sibling directory)
+#   recipients: []           # required when enabled; use the age1... public key
+# Generate on the reader machine: age-keygen -o trace-identity.txt
+# Print the public recipient: age-keygen -y trace-identity.txt
 #   queue-size: 32
 #   max-local-size-mb: 0     # zero disables local eviction
 #   exclude-endpoints: []

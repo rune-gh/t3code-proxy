@@ -104,7 +104,7 @@ func checkConfig(e *env) Result {
 	host := c.Server.Host
 	var problems, warnings []string
 	if c.TraceArchive.Enabled && len(c.TraceArchive.Recipients) == 0 {
-		warnings = append(warnings, "trace archive has no age recipients; sealed history is plaintext")
+		problems = append(problems, "trace archive requires an age X25519 recipient")
 	}
 	switch host {
 	case "127.0.0.1", "localhost", "::1":

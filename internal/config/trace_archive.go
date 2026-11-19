@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,13 +25,18 @@ type TraceUploadConfig struct {
 	Remote  string `yaml:"remote,omitempty" json:"remote"`
 }
 
+var ErrTraceArchiveRecipient = errors.New("trace-archive: configure at least one valid age X25519 recipient in trace-archive.recipients")
+
 func (c TraceArchiveConfig) Validate() error {
 	if c.QueueSize < 0 || c.QueueSize > 65536 || c.MaxLocalSizeMB < 0 || c.MaxLocalSizeMB > 1<<40 {
 		return fmt.Errorf("trace-archive: invalid queue-size or max-local-size-mb")
 	}
+	if c.Enabled && len(c.Recipients) == 0 {
+		return ErrTraceArchiveRecipient
+	}
 	for _, key := range c.Recipients {
 		if _, err := age.ParseX25519Recipient(key); err != nil {
-			return fmt.Errorf("trace-archive: invalid X25519 recipient")
+			return ErrTraceArchiveRecipient
 		}
 	}
 	if c.Upload.Enabled && (strings.TrimSpace(c.Upload.Remote) == "" || strings.HasPrefix(c.Upload.Remote, "-")) {

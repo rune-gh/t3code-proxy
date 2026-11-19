@@ -55,7 +55,14 @@ func Directory(c *config.Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "traces"), nil
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if filepath.Dir(dir) == dir {
+		return "", fmt.Errorf("trace-archive: set dir explicitly when auth-dir is a filesystem root")
+	}
+	return dir + "-traces", nil
 }
 func (r *Recorder) Apply(c *config.Config) error {
 	r.mu.Lock()
@@ -114,6 +121,24 @@ func (r *Recorder) start(cfg config.TraceArchiveConfig) error {
 func (w *worker) recover() error {
 	entries, err := os.ReadDir(w.cfg.Dir)
 	if err != nil {
+		return err
+	}
+	// Upgrade sidecars in place while holding the writer lock. Offline readers
+	// also accept the old suffix so historical exports need no migration.
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), manifestSuffix+".json")
+		if !ok || !segmentName.MatchString(name) {
+			continue
+		}
+		path := filepath.Join(w.cfg.Dir, name+manifestSuffix)
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("cannot migrate trace manifest %s", e.Name())
+		}
+		if err := os.Rename(path+".json", path); err != nil {
+			return err
+		}
+	}
+	if err := recoverEvictions(w.cfg.Dir); err != nil {
 		return err
 	}
 	ms, err := listManifests(w.cfg.Dir)
@@ -176,11 +201,7 @@ func (w *worker) recover() error {
 			}
 			// A crash before manifest publication can leave an orphan with the old
 			// encryption suffix. The replacement is durable before removing the orphan.
-			orphan := target + ".age"
-			if len(w.cfg.Recipients) > 0 {
-				orphan = target
-			}
-			if err = os.Remove(orphan); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 		}

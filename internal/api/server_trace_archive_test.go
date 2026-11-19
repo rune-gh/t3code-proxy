@@ -3,23 +3,49 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"filippo.io/age"
 	"github.com/MoeForge/moego/ojson"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/config"
+	"github.com/rune-oai/t3code-proxy/internal/httpwire"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/internal/runtime/executor"
 	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
 	"github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 )
+
+func testArchiveSettings(t *testing.T) (config.TraceArchiveConfig, string) {
+	t.Helper()
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(t.TempDir(), "identity")
+	if err = os.WriteFile(key, []byte(id.String()+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return config.TraceArchiveConfig{Enabled: true, Dir: t.TempDir(), Recipients: []string{id.Recipient().String()}}, key
+}
+
+func TestTraceWriterForwardsFlushError(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	w := traceWriter{ResponseWriter: &compressionErrorWriter{ResponseWriter: c.Writer}}
+	if err := httpwire.FlushResponse(w); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("flush error = %v", err)
+	}
+}
 
 func TestTraceArchiveStreamingClaudeThroughServer(t *testing.T) {
 	const model = "archive-claude-test"
@@ -50,7 +76,8 @@ func TestTraceArchiveStreamingClaudeThroughServer(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	cfg := &config.Config{TraceArchive: config.TraceArchiveConfig{Enabled: true, Dir: t.TempDir()}}
+	settings, key := testArchiveSettings(t)
+	cfg := &config.Config{TraceArchive: settings}
 	cfg.APIKeys = []string{"never-archive-client-secret"}
 	s := newTestServerWithConfig(t, cfg)
 	defer s.archive.Close()
@@ -77,7 +104,7 @@ func TestTraceArchiveStreamingClaudeThroughServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	if tracearchive.Main([]string{"export", "--dir", cfg.TraceArchive.Dir}, &out, &stderr) != 0 {
+	if tracearchive.Main([]string{"export", "--dir", cfg.TraceArchive.Dir, "--identity", key}, &out, &stderr) != 0 {
 		t.Fatal(stderr.String())
 	}
 	result := ojson.ParseBytes(out.Bytes())
@@ -131,7 +158,10 @@ func TestTraceArchiveCodexWebsocketThroughServer(t *testing.T) {
 		_, _, _ = conn.ReadMessage()
 	}))
 	defer upstream.Close()
-	cfg := &config.Config{TraceArchive: config.TraceArchiveConfig{Enabled: true, Dir: t.TempDir()}}
+	settings, key := testArchiveSettings(t)
+	cfg := &config.Config{TraceArchive: settings}
+	cfg.Codex.ResponseSteering = true
+	cfg.CodexResponseSteering = true
 	cfg.APIKeys = []string{"test-key"}
 	s := newTestServerWithConfig(t, cfg)
 	defer s.archive.Close()
@@ -176,10 +206,13 @@ func TestTraceArchiveCodexWebsocketThroughServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	if tracearchive.Main([]string{"export", "--dir", cfg.TraceArchive.Dir}, &out, &stderr) != 0 {
+	if tracearchive.Main([]string{"export", "--dir", cfg.TraceArchive.Dir, "--identity", key}, &out, &stderr) != 0 {
 		t.Fatal(stderr.String())
 	}
 	record := ojson.ParseBytes(out.Bytes())
+	if record.Get("status").Int() != 200 {
+		t.Fatalf("initial turn status = %s", record.Get("status"))
+	}
 	if record.Get("response.output.0.encrypted_content").String() != "sealed-reasoning" || record.Get("response.output.0.summary.0.text").String() != "abbreviated" || record.Get("transport").String() != "ws" || record.Get("attempts.0.transport").String() != "ws" {
 		t.Fatal(out.String())
 	}
@@ -196,7 +229,7 @@ func TestTraceArchiveManagement(t *testing.T) {
 	if err := os.WriteFile(s.configFilePath, []byte("config-version: 8\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	request := func(method, path, body string, status int) string {
+	request := func(t *testing.T, method, path, body string, status int) string {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.RemoteAddr = "127.0.0.1:1234"
@@ -209,14 +242,23 @@ func TestTraceArchiveManagement(t *testing.T) {
 		return w.Body.String()
 	}
 	const base = "/v8/management/trace-archive/"
-	request("GET", "/v0/management/trace-archive/status", "", 404)
-	request("GET", base+"settings", "", 200)
-	request("POST", base+"seal-now", "", 409)
-	request("PUT", base+"settings", `{"enabled":true,"recipients":["bad"]}`, 422)
+	request(t, "GET", "/v0/management/trace-archive/status", "", 404)
+	request(t, "GET", base+"settings", "", 200)
+	request(t, "POST", base+"seal-now", "", 409)
+	t.Run("RequiresX25519Recipient", func(t *testing.T) {
+		for _, body := range []string{`{"enabled":true}`, `{"enabled":true,"recipients":["bad"]}`} {
+			result := request(t, "PUT", base+"settings", body, 400)
+			if !strings.Contains(ojson.Get(result, "message").String(), "X25519 recipient") {
+				t.Fatal(result)
+			}
+		}
+	})
 	settings := ojson.NewDocString(`{"enabled":true}`)
+	valid, _ := testArchiveSettings(t)
+	_ = settings.Set("recipients", valid.Recipients)
 	_ = settings.Set("dir", cfg.TraceArchive.Dir)
-	request("PUT", base+"settings", settings.String(), 200)
-	if !ojson.Get(request("GET", base+"settings", "", 200), "enabled").Bool() {
+	request(t, "PUT", base+"settings", settings.String(), 200)
+	if !ojson.Get(request(t, "GET", base+"settings", "", 200), "enabled").Bool() {
 		t.Fatal("settings read missed persisted update")
 	}
 	// Exercise the same update callback as the file watcher.
@@ -229,8 +271,8 @@ func TestTraceArchiveManagement(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.UpdateClients(next)
-	if !ojson.Get(request("GET", base+"status", "", 200), "enabled").Bool() {
+	if !ojson.Get(request(t, "GET", base+"status", "", 200), "enabled").Bool() {
 		t.Fatal("watcher did not enable recorder")
 	}
-	request("POST", base+"seal-now", "", 200)
+	request(t, "POST", base+"seal-now", "", 200)
 }

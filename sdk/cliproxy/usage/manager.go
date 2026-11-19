@@ -726,6 +726,9 @@ func (m *Manager) RegisterNamed(name string, plugin Plugin) {
 // WithRecordObserver attaches a request-local observer for metadata that must
 // be joined before an HTTP handler or websocket turn completes.
 func WithRecordObserver(ctx context.Context, observe func(Record)) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return context.WithValue(ctx, recordObserverKey{}, observe)
 }
 

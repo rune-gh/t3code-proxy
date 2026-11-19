@@ -2,6 +2,7 @@ package management
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -191,7 +192,11 @@ func (h *Handler) ConfigV8(c *gin.Context) {
 	}
 	next, err := config.ParseConfigBytes(data)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid_config", "message": err.Error()})
+		status := http.StatusUnprocessableEntity
+		if errors.Is(err, config.ErrTraceArchiveRecipient) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": "invalid_config", "message": err.Error()})
 		return
 	}
 	if err = config.ValidateV8Config(data); err != nil {

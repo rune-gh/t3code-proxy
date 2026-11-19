@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rune-oai/t3code-proxy/internal/config"
+	"github.com/rune-oai/t3code-proxy/internal/httpwire"
 	"github.com/rune-oai/t3code-proxy/internal/logging"
 	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
 	log "github.com/sirupsen/logrus"
@@ -35,6 +36,7 @@ type traceWriter struct {
 }
 
 func (w traceWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w traceWriter) FlushError() error           { return httpwire.FlushResponse(w.ResponseWriter) }
 func (w traceWriter) Write(p []byte) (int, error) {
 	n, e := w.ResponseWriter.Write(p)
 	w.c.ClientResponse(p[:n])

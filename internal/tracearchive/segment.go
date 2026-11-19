@@ -21,6 +21,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const manifestSuffix = ".manifest"
+
 var segmentName = regexp.MustCompile(`^traces-(\d{4}-\d{2}-\d{2})(-\d+)?\.(live|jsonl\.zst(\.age)?)$`)
 
 type counts struct {
@@ -315,14 +317,14 @@ func syncDirectory(dir string) error {
 	return f.Sync()
 }
 func writeManifest(dir string, m Manifest) error {
-	return atomicFile(filepath.Join(dir, m.File+".manifest.json"), func(f *os.File) error { _, err := f.Write(m.bytes()); return err })
+	return atomicFile(filepath.Join(dir, m.File+manifestSuffix), func(f *os.File) error { _, err := f.Write(m.bytes()); return err })
 }
 
 func (s *segment) seal(cfg config.TraceArchiveConfig) error {
 	if err := s.f.Sync(); err != nil {
 		return err
 	}
-	target := strings.TrimSuffix(s.path, ".live") + ".jsonl.zst"
+	target := strings.TrimSuffix(s.path, ".live") + ".jsonl.zst.age"
 	var keys []age.Recipient
 	for _, key := range cfg.Recipients {
 		k, err := age.ParseX25519Recipient(key)
@@ -331,26 +333,15 @@ func (s *segment) seal(cfg config.TraceArchiveConfig) error {
 		}
 		keys = append(keys, k)
 	}
-	if len(keys) > 0 {
-		target += ".age"
-	} else {
-		log.Warn("sealing plaintext trace archive: no age recipients configured")
-	}
 	footer := entry("footer")
 	_ = footer.Set("counts", s.counts)
 	_ = footer.Set("sha256", s.checksum())
 	if err := atomicFile(target, func(f *os.File) error {
-		var out io.Writer = f
-		var enc io.WriteCloser
-		if len(keys) > 0 {
-			var err error
-			enc, err = age.Encrypt(f, keys...)
-			if err != nil {
-				return err
-			}
-			out = enc
+		enc, err := age.Encrypt(f, keys...)
+		if err != nil {
+			return err
 		}
-		z, err := zstd.NewWriter(out, zstd.WithEncoderConcurrency(1))
+		z, err := zstd.NewWriter(enc, zstd.WithEncoderConcurrency(1))
 		if err != nil {
 			return err
 		}
@@ -363,10 +354,8 @@ func (s *segment) seal(cfg config.TraceArchiveConfig) error {
 		if e := z.Close(); err == nil {
 			err = e
 		}
-		if enc != nil {
-			if e := enc.Close(); err == nil {
-				err = e
-			}
+		if e := enc.Close(); err == nil {
+			err = e
 		}
 		return err
 	}); err != nil {
@@ -394,7 +383,10 @@ func listManifests(dir string) ([]Manifest, error) {
 	}
 	var out []Manifest
 	for _, e := range entries {
-		file, ok := strings.CutSuffix(e.Name(), ".manifest.json")
+		file, ok := strings.CutSuffix(e.Name(), manifestSuffix)
+		if !ok {
+			file, ok = strings.CutSuffix(e.Name(), manifestSuffix+".json")
+		}
 		if !ok {
 			continue
 		}

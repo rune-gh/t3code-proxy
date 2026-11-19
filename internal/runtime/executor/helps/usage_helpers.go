@@ -370,7 +370,8 @@ func (r *UsageReporter) PublishAdditionalModel(ctx context.Context, model string
 	if !ok {
 		return
 	}
-	r.publishRecord(ctx, record)
+	// Supplemental billing is delivered to usage sinks independently of the primary attempt observer.
+	r.publishRecord(usage.WithRecordObserver(ctx, nil), record)
 }
 
 // SetTranslatedRequestMetadata captures usage-relevant values from the final

@@ -62,7 +62,7 @@ func (w *worker) maintenance(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if w.cfg.Upload.Enabled && m.UploadedTo != w.cfg.Upload.Remote {
+		if w.cfg.Upload.Enabled && m.UploadedTo != w.cfg.Upload.Remote && strings.HasSuffix(m.File, ".age") {
 			if err = w.upload(ctx, &m); err != nil {
 				first = err
 				break
@@ -121,7 +121,7 @@ func (w *worker) upload(ctx context.Context, m *Manifest) error {
 	if err != nil {
 		return err
 	}
-	if err = copyVerified(tmp.Name(), m.File+".manifest.json", digest(raw), int64(len(raw))); err != nil {
+	if err = copyVerified(tmp.Name(), m.File+manifestSuffix, digest(raw), int64(len(raw))); err != nil {
 		return err
 	}
 	if err = writeManifest(w.cfg.Dir, confirmed); err == nil {
@@ -156,7 +156,7 @@ func recoverEvictions(dir string) error {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		_, err = os.Stat(path + ".manifest.json")
+		_, err = os.Stat(path + manifestSuffix)
 		switch {
 		case err == nil:
 			if _, exists := os.Lstat(path); !errors.Is(exists, os.ErrNotExist) {
@@ -184,7 +184,7 @@ func (w *worker) retain(ms []Manifest) error {
 	}
 	var total int64
 	for _, e := range entries {
-		if segmentName.MatchString(strings.TrimSuffix(e.Name(), ".manifest.json")) {
+		if segmentName.MatchString(strings.TrimSuffix(e.Name(), manifestSuffix)) {
 			i, err := e.Info()
 			if err != nil {
 				return err
@@ -200,7 +200,7 @@ func (w *worker) retain(ms []Manifest) error {
 			continue
 		}
 		path := filepath.Join(w.cfg.Dir, m.File)
-		manifest := path + ".manifest.json"
+		manifest := path + manifestSuffix
 		sidecar, err := os.Stat(manifest)
 		if err != nil {
 			return err

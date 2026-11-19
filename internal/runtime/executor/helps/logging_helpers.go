@@ -68,6 +68,10 @@ func requestLogCaptureEnabled(cfg *config.Config) bool {
 // RecordAPIRequest stores the upstream request metadata in Gin context for request logging.
 func RecordAPIRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
 	tracearchive.From(ctx).Request(info.Provider, "http", info.Body)
+	recordAPIRequestLog(ctx, cfg, info)
+}
+
+func recordAPIRequestLog(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
 	if cfg == nil || cfg.CommercialMode {
 		return
 	}
@@ -405,7 +409,7 @@ func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info Ups
 		return
 	}
 	if !cfg.RequestLog {
-		RecordAPIRequest(ctx, cfg, info)
+		recordAPIRequestLog(ctx, cfg, info)
 		return
 	}
 	ginCtx := ginContextFrom(ctx)

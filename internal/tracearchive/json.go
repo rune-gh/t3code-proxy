@@ -119,7 +119,8 @@ func safePayload(data []byte) []byte {
 			}
 			name := strings.ToLower(strings.ReplaceAll(key, "_", "-"))
 			lineHeader, _, hasColon := strings.Cut(v.Str, ":")
-			if headers && (credentialHeader(name) || named && (name == "value" || name == "values") || tuple && key != "0" || hasColon && credentialHeader(lineHeader)) {
+			structuredCredential := v.Type == ojson.String && (name == "authorization" || name == "authorization-token")
+			if structuredCredential || headers && (credentialHeader(name) || named && (name == "value" || name == "values") || tuple && key != "0" || hasColon && credentialHeader(lineHeader)) {
 				_ = d.Set(p, "[masked]")
 			} else {
 				walk(v, p, headers || strings.Contains(name, "headers") || name == "client-metadata" || name == "metadata")

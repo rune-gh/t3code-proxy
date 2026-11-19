@@ -14,6 +14,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/MoeForge/moego/ojson"
+	"github.com/klauspost/compress/zstd"
 	"github.com/rune-oai/t3code-proxy/internal/config"
 )
 
@@ -23,9 +24,18 @@ func check(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+func archiveIdentity(t *testing.T) *age.X25519Identity {
+	t.Helper()
+	id, err := age.GenerateX25519Identity()
+	check(t, err)
+	return id
+}
 func recorder(t *testing.T, settings config.TraceArchiveConfig) *Recorder {
 	t.Helper()
 	settings.Enabled = true
+	if len(settings.Recipients) == 0 {
+		settings.Recipients = []string{archiveIdentity(t).Recipient().String()}
+	}
 	r := new(Recorder)
 	check(t, r.Apply(&config.Config{TraceArchive: settings}))
 	t.Cleanup(r.Close)
@@ -134,22 +144,23 @@ func TestTornTailAndStaleSeal(t *testing.T) {
 	_, err = s.f.WriteString(`{"type":"blo`)
 	check(t, err)
 	check(t, s.f.Close())
-	r := recorder(t, config.TraceArchiveConfig{Dir: dir})
+	id := archiveIdentity(t)
+	r := recorder(t, config.TraceArchiveConfig{Dir: dir, Recipients: []string{id.Recipient().String()}})
 	submit(t, r, `{"input":["old"]}`, `{"ok":true}`)
 	r.Close()
 	var b bytes.Buffer
-	check(t, command([]string{"verify", "--dir", dir}, &b, io.Discard))
+	check(t, readArchive(dir, "", "", "verify", "calls", []age.Identity{id}, &b))
 	if strings.Count(b.String(), "1 calls, 1 blobs") != 2 {
 		t.Fatal(b.String())
 	}
-	paths, err := filepath.Glob(filepath.Join(dir, "*.jsonl.zst"))
+	paths, err := filepath.Glob(filepath.Join(dir, "*.jsonl.zst.age"))
 	check(t, err)
 	f, err := os.OpenFile(paths[0], os.O_APPEND|os.O_WRONLY, 0600)
 	check(t, err)
 	_, err = f.WriteString("x")
 	check(t, err)
 	check(t, f.Close())
-	if command([]string{"verify", "--dir", dir}, io.Discard, io.Discard) == nil {
+	if readArchive(dir, "", "", "verify", "calls", []age.Identity{id}, io.Discard) == nil {
 		t.Fatal("corrupt sealed file accepted")
 	}
 }
@@ -247,7 +258,8 @@ func TestUploadRetryAndRetention(t *testing.T) {
 	flag := filepath.Join(t.TempDir(), "fail")
 	t.Setenv("FAIL_RCLONE", flag)
 	check(t, os.WriteFile(flag, nil, 0600))
-	w := &worker{cfg: config.TraceArchiveConfig{Dir: dir, MaxLocalSizeMB: 1, Upload: config.TraceUploadConfig{Enabled: true, Binary: fake, Remote: remote}}}
+	id := archiveIdentity(t)
+	w := &worker{cfg: config.TraceArchiveConfig{Dir: dir, Recipients: []string{id.Recipient().String()}, MaxLocalSizeMB: 1, Upload: config.TraceUploadConfig{Enabled: true, Binary: fake, Remote: remote}}}
 	s, err := newSegment(dir, "2000-01-01")
 	check(t, err)
 	check(t, s.seal(w.cfg))
@@ -277,5 +289,131 @@ func TestUploadRetryAndRetention(t *testing.T) {
 	if len(ms) != 1 || ms[0].UploadedTo != remote {
 		t.Fatalf("unconfirmed remote manifest: %+v", ms)
 	}
-	check(t, readArchive(remote, "", "", "verify", "calls", nil, io.Discard))
+	check(t, readArchive(remote, "", "", "verify", "calls", []age.Identity{id}, io.Discard))
+}
+
+func TestMCPRequestCredentialsMaskedBeforePacking(t *testing.T) {
+	dir := t.TempDir()
+	id := archiveIdentity(t)
+	r := recorder(t, config.TraceArchiveConfig{Dir: dir, Recipients: []string{id.Recipient().String()}})
+	for _, body := range []string{`{"mcp_servers":[{"type":"url","authorization_token":"claude-secret"}]}`, `{"tools":[{"type":"mcp","authorization":"responses-secret"}]}`} {
+		submit(t, r, body, `{"ok":true}`)
+	}
+	check(t, r.Seal(context.Background()))
+	ms, err := listManifests(dir)
+	check(t, err)
+	f, err := os.Open(filepath.Join(dir, ms[0].File))
+	check(t, err)
+	defer closeLogged(f)
+	plain, err := age.Decrypt(f, id)
+	check(t, err)
+	z, err := zstd.NewReader(plain)
+	check(t, err)
+	defer z.Close()
+	raw, err := io.ReadAll(z)
+	check(t, err)
+	var out bytes.Buffer
+	check(t, readArchive(dir, "", "", "export", "calls", []age.Identity{id}, &out))
+	for _, b := range [][]byte{raw, out.Bytes()} {
+		if bytes.Contains(b, []byte("-secret")) {
+			t.Fatal("credential present in archive")
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	for i, path := range []string{"mcp_servers.0.authorization_token", "tools.0.authorization"} {
+		for _, side := range []string{"client_request", "upstream_request"} {
+			if ojson.Get(lines[i], side+"."+path).String() != "[masked]" {
+				t.Fatalf("%s.%s not masked", side, path)
+			}
+		}
+	}
+}
+
+func TestCodexMetadataFramesReconstruct(t *testing.T) {
+	frames := [][]byte{
+		[]byte(`{"type":"codex.response.metadata","headers":{"x-models-etag":"models-v1","x-codex-turn-state":"turn-1"}}`),
+		[]byte(`{"type":"keepalive"}`),
+		[]byte(`{"type":"response.metadata"}`),
+		[]byte(`{"type":"response.completed","response":{"id":"r","output":[]}}`),
+	}
+	if got, ok := reconstruct(frames); !ok || ojson.GetBytes(got, "id").String() != "r" {
+		t.Fatalf("response = %s", got)
+	}
+}
+
+func TestIncompleteItemShellPreservesDeltas(t *testing.T) {
+	for _, tc := range []struct{ event, shell string }{
+		{"response.output_text.delta", `{"type":"message","content":[{"type":"output_text","text":""}]}`},
+		{"response.function_call_arguments.delta", `{"type":"function_call","arguments":""}`},
+	} {
+		frames := [][]byte{fmt.Appendf(nil, `{"type":%q,"output_index":0,"content_index":0,"delta":"partial"}`, tc.event), fmt.Appendf(nil, `{"type":"response.incomplete","response":{"output":[%s]}}`, tc.shell)}
+		if got, ok := reconstruct(frames); ok && !bytes.Contains(got, []byte("partial")) {
+			t.Fatalf("%s discarded delta: %s", tc.event, got)
+		}
+	}
+}
+
+func TestArchiveOutsideAuthTreeAndNonJSONManifest(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.AuthDir = filepath.Join(t.TempDir(), "auth")
+	dir, err := Directory(cfg)
+	check(t, err)
+	if filepath.Dir(dir) != filepath.Dir(cfg.AuthDir) || dir == cfg.AuthDir {
+		t.Errorf("expected sibling of %s, got %s", cfg.AuthDir, dir)
+	}
+	cfg.TraceArchive.Dir = filepath.Join(cfg.AuthDir, "custom")
+	dir, err = Directory(cfg)
+	check(t, err)
+	if dir != cfg.TraceArchive.Dir {
+		t.Fatal(dir)
+	}
+	r := recorder(t, config.TraceArchiveConfig{Dir: dir})
+	submit(t, r, `{}`, `{}`)
+	check(t, r.Seal(context.Background()))
+	matches, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	check(t, err)
+	if len(matches) > 0 {
+		t.Fatalf("auth store would read %v", matches)
+	}
+	r.Close()
+	ms, err := listManifests(dir)
+	check(t, err)
+	if len(ms) != 1 {
+		t.Fatalf("sealed manifests = %v", ms)
+	}
+	path := filepath.Join(dir, ms[0].File+manifestSuffix)
+	check(t, os.Rename(path, path+".json"))
+	check(t, readArchive(dir, "", "", "stats", "calls", nil, io.Discard))
+	r = recorder(t, config.TraceArchiveConfig{Dir: dir})
+	if len(r.Status().Segments) != 1 {
+		t.Fatal("lost legacy manifest")
+	}
+	if _, err = os.Stat(path + ".json"); !os.IsNotExist(err) {
+		t.Fatalf("legacy JSON sidecar remains: %v", err)
+	}
+}
+
+func TestRecoverEvictionBeforeLiveReconciliation(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.TraceArchiveConfig{Dir: dir, Recipients: []string{archiveIdentity(t).Recipient().String()}}
+	s, err := newSegment(dir, today())
+	check(t, err)
+	check(t, s.append(&call{Metadata: Metadata{SchemaVersion: 1}, client: []byte(`{}`)}))
+	live, err := os.ReadFile(s.path)
+	check(t, err)
+	check(t, s.seal(cfg))
+	ms, err := listManifests(dir)
+	check(t, err)
+	path := filepath.Join(dir, ms[0].File)
+	check(t, os.Rename(path, path+".evicting"))
+	check(t, os.WriteFile(s.path, live, 0600))
+	r := recorder(t, cfg)
+	if r.Status().Calls != 1 {
+		t.Fatal(r.Status())
+	}
+	if _, err = os.Stat(s.path); !os.IsNotExist(err) {
+		t.Fatalf("live segment remains: %v", err)
+	}
+	_, err = os.Stat(path)
+	check(t, err)
 }
