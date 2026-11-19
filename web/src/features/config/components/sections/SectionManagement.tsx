@@ -48,7 +48,7 @@ export function SectionManagement({ values, disabled, onChange }: ConfigSectionP
           size="lg"
           label={t('config_management.visual.sections.remote.panel_repo')}
           description={t('config_management.visual.sections.remote.panel_repo_desc')}
-          placeholder="https://github.com/rune-oai/t3code-proxy"
+          placeholder="https://github.com/rune-gh/t3code-proxy"
           value={values.rmPanelRepo}
           onChange={(rmPanelRepo) => onChange({ rmPanelRepo })}
           disabled={disabled}

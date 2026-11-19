@@ -60,7 +60,7 @@ func TestResolveReleaseURLRejectsNonGitHub(t *testing.T) {
 			t.Errorf("resolveReleaseURL(%q) = %q, want empty", in, got)
 		}
 	}
-	if got, want := resolveReleaseURL("https://github.com/rune-oai/t3code-proxy.git"), "https://api.github.com/repos/rune-oai/t3code-proxy/releases/latest"; got != want {
+	if got, want := resolveReleaseURL("https://github.com/rune-gh/t3code-proxy.git"), "https://api.github.com/repos/rune-gh/t3code-proxy/releases/latest"; got != want {
 		t.Errorf("resolveReleaseURL() = %q, want %q", got, want)
 	}
 }

@@ -67,8 +67,8 @@ def registration_result(cap: Capability, lang: str) -> str:
         '"metadata":{'
         f'"Name":{json.dumps(pid)},'
         '"Version":"0.1.0",'
-        '"Author":"rune-oai",'
-        '"GitHubRepository":"https://github.com/rune-oai/t3code-proxy",'
+        '"Author":"rune-gh",'
+        '"GitHubRepository":"https://github.com/rune-gh/t3code-proxy",'
         f'"Logo":"https://example.invalid/{pid}.png",'
         '"ConfigFields":[]'
         "},"

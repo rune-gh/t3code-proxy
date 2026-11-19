@@ -43,9 +43,9 @@ static long usage_count = 0;
 
 static const char* REGISTRATION_RESPONSE =
     "{\"ok\":true,\"result\":{\"schema_version\":1,\"metadata\":{\"Name\":\"example-simple-c\","
-    "\"Version\":\"0.1.0\",\"Author\":\"rune-oai\","
-    "\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\","
-    "\"Logo\":\"https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/assets/brand/icon.svg\","
+    "\"Version\":\"0.1.0\",\"Author\":\"rune-gh\","
+    "\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\","
+    "\"Logo\":\"https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/assets/brand/icon.svg\","
     "\"ConfigFields\":["
     "{\"Name\":\"config1\",\"Type\":\"boolean\",\"Description\":\"Enables the example boolean option.\"},"
     "{\"Name\":\"config2\",\"Type\":\"string\",\"Description\":\"Stores the example string option.\"},"

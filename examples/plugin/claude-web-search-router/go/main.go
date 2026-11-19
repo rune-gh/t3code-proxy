@@ -261,8 +261,8 @@ func pluginRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             "claude-web-search-router",
 			Version:          "0.1.0",
-			Author:           "rune-oai",
-			GitHubRepository: "https://github.com/rune-oai/t3code-proxy",
+			Author:           "rune-gh",
+			GitHubRepository: "https://github.com/rune-gh/t3code-proxy",
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "enabled", Type: pluginapi.ConfigFieldTypeBoolean, Description: "When false, the router declines all Claude web_search requests."},
 				{Name: "route", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{

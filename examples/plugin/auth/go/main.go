@@ -127,9 +127,9 @@ func handleMethod(method string) ([]byte, error) {
 	_ = time.Second
 	switch method {
 	case "plugin.register":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-auth-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-auth-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"auth_provider\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-auth-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-auth-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"auth_provider\":true}}")
 	case "plugin.reconfigure":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-auth-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-auth-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"auth_provider\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-auth-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-auth-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"auth_provider\":true}}")
 	case "auth.identifier":
 		return okEnvelopeJSON("{\"identifier\":\"example-auth-go\"}")
 	case "auth.parse":

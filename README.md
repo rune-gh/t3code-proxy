@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rune-oai/t3code-proxy/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rune-oai/t3code-proxy/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/rune-gh/t3code-proxy/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rune-gh/t3code-proxy/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
@@ -88,7 +88,7 @@ T3 Code can run agents on any connected home or cloud [environment](docs/environ
 On the hub (Linux or macOS; Windows and Docker are in the [setup guide](docs/setup.md)):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.sh | sh
 CONFIG=~/.local/share/t3code-proxy/config.yaml
 
 # Sign in each subscription. You finish each login in a browser.

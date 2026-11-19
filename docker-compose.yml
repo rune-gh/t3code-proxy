@@ -13,7 +13,7 @@
 # write to the bind-mounted data/ directory.
 services:
   t3code-proxy:
-    image: ${T3CODE_PROXY_IMAGE:-ghcr.io/rune-oai/t3code-proxy:latest}
+    image: ${T3CODE_PROXY_IMAGE:-ghcr.io/rune-gh/t3code-proxy:latest}
     build:
       context: .
       dockerfile: Dockerfile

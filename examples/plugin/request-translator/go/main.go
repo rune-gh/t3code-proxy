@@ -127,9 +127,9 @@ func handleMethod(method string) ([]byte, error) {
 	_ = time.Second
 	switch method {
 	case "plugin.register":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-request-translator-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-request-translator-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"request_translator\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-request-translator-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-request-translator-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"request_translator\":true}}")
 	case "plugin.reconfigure":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-request-translator-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-request-translator-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"request_translator\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-request-translator-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-request-translator-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"request_translator\":true}}")
 	case "request.translate":
 		return okEnvelopeJSON("{\"Body\":\"eyJ0cmFuc2xhdGVkX2J5IjoiZXhhbXBsZS1yZXF1ZXN0LXRyYW5zbGF0b3ItZ28ifQ==\"}")
 	default:

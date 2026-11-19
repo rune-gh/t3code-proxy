@@ -3,7 +3,7 @@
 t3code-proxy: a Go 1.26+ hub that holds Claude and Codex subscription logins on one always-on machine and exposes OpenAI/Claude/Gemini/Codex-compatible APIs, with OAuth refresh, soonest-reset-first routing, session affinity, a quota-history recorder and an embedded web panel.
 
 ## Repository
-- GitHub: https://github.com/rune-oai/t3code-proxy
+- GitHub: https://github.com/rune-gh/t3code-proxy
 - Go module: `github.com/rune-oai/t3code-proxy`
 
 ## Commands

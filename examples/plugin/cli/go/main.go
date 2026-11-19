@@ -127,9 +127,9 @@ func handleMethod(method string) ([]byte, error) {
 	_ = time.Second
 	switch method {
 	case "plugin.register":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-cli-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-cli-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"command_line_plugin\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-cli-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-cli-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"command_line_plugin\":true}}")
 	case "plugin.reconfigure":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-cli-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-cli-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"command_line_plugin\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-cli-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-cli-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"command_line_plugin\":true}}")
 	case "command_line.register":
 		return okEnvelopeJSON("{\"Flags\":[{\"Name\":\"example-cli-go-command\",\"Usage\":\"Run the example plugin command\",\"Type\":\"bool\"}]}")
 	case "command_line.execute":

@@ -1,6 +1,6 @@
 # t3code-proxy web panel
 
-The management panel for [t3code-proxy](https://github.com/rune-oai/t3code-proxy): a React 19 +
+The management panel for [t3code-proxy](https://github.com/rune-gh/t3code-proxy): a React 19 +
 TypeScript + Vite app that talks to the server's Management API under `/v8/management`. It lets you
 manage provider keys, OAuth logins and auth files, quotas, routing, configuration and logs. The panel
 ships in English only.

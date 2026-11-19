@@ -76,11 +76,11 @@ static int plugin_call(const char* method, const uint8_t* request, size_t reques
 		return 1;
 	}
 	if (strcmp(method, "plugin.register") == 0) {
-		write_response(response, "{\"ok\":true,\"result\":{\"schema_version\":1,\"metadata\":{\"Name\":\"example-host-callback-c\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-host-callback-c.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}}");
+		write_response(response, "{\"ok\":true,\"result\":{\"schema_version\":1,\"metadata\":{\"Name\":\"example-host-callback-c\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-host-callback-c.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}}");
 		return 0;
 	}
 	if (strcmp(method, "plugin.reconfigure") == 0) {
-		write_response(response, "{\"ok\":true,\"result\":{\"schema_version\":1,\"metadata\":{\"Name\":\"example-host-callback-c\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-host-callback-c.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}}");
+		write_response(response, "{\"ok\":true,\"result\":{\"schema_version\":1,\"metadata\":{\"Name\":\"example-host-callback-c\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-host-callback-c.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}}");
 		return 0;
 	}
 	if (strcmp(method, "management.register") == 0) {

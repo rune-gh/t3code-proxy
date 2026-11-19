@@ -6,7 +6,7 @@ and how to expose a hub so that only your own devices can reach it.
 ## Report a vulnerability
 
 Report vulnerabilities privately through GitHub security advisories:
-[report a vulnerability](https://github.com/rune-oai/t3code-proxy/security/advisories/new).
+[report a vulnerability](https://github.com/rune-gh/t3code-proxy/security/advisories/new).
 Do not open a public issue, pull request or discussion for a security problem.
 
 Include what you found, the version (`t3code-proxy -h` prints it on the first line), steps to

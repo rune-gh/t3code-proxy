@@ -138,8 +138,8 @@ func exampleRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             "example-frontend-auth-exclusive-go",
 			Version:          "0.1.0",
-			Author:           "rune-oai",
-			GitHubRepository: "https://github.com/rune-oai/t3code-proxy",
+			Author:           "rune-gh",
+			GitHubRepository: "https://github.com/rune-gh/t3code-proxy",
 			Logo:             "https://example.invalid/example-frontend-auth-exclusive-go.png",
 			ConfigFields:     []pluginapi.ConfigField{},
 		},

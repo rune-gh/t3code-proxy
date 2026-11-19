@@ -7,8 +7,9 @@ const pluginEntry = (sourceId: string, repository: string) =>
 
 describe('plugin store trust', () => {
   test('trusts only the official source with an official repository', () => {
-    expect(isOfficialPlugin(pluginEntry('official', 'rune-oai/example-plugin'))).toBe(true);
-    expect(isOfficialPlugin(pluginEntry('third-party', 'rune-oai/example-plugin'))).toBe(false);
+    expect(isOfficialPlugin(pluginEntry('official', 'rune-gh/example-plugin'))).toBe(true);
+    expect(isOfficialPlugin(pluginEntry('third-party', 'rune-gh/example-plugin'))).toBe(false);
     expect(isOfficialPlugin(pluginEntry('official', 'someone-else/example-plugin'))).toBe(false);
+    expect(isOfficialPlugin(pluginEntry('official', 'rune-oai/example-plugin'))).toBe(false);
   });
 });

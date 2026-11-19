@@ -3,7 +3,7 @@
   Install, update, or remove the t3code-proxy hub on Windows.
 
 .DESCRIPTION
-  irm https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.ps1 | iex
+  irm https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.ps1 | iex
   .\install.ps1 [-Version 0.1.0] [-Dir <path>] [-Archive <zip>] [-NoService] [-DryRun] [-Uninstall]
 
   Downloads the release zip for this CPU, verifies it against checksums.txt,
@@ -41,7 +41,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$Repo = "rune-oai/t3code-proxy"
+$Repo = "rune-gh/t3code-proxy"
 $Name = "t3code-proxy"
 $TaskName = "t3code-proxy"
 

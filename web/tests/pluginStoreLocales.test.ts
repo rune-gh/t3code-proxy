@@ -26,7 +26,7 @@ const storeEntry = (overrides: Partial<PluginStoreEntry>): PluginStoreEntry => (
   description: 'An English description.',
   author: 'someone',
   version: '1.0.0',
-  repository: 'rune-oai/example-plugin',
+  repository: 'rune-gh/example-plugin',
   installType: 'github-release',
   authRequired: false,
   authConfigured: false,
@@ -53,7 +53,7 @@ const unrelatedEntry = (id: string) =>
     name: id.toUpperCase(),
     description: 'Unrelated.',
     author: 'nobody',
-    repository: `rune-oai/${id}`,
+    repository: `rune-gh/${id}`,
     license: 'Apache-2.0',
     tags: [],
   });
@@ -183,7 +183,7 @@ describe('store entry display metadata', () => {
     expect(search('示例插件', 'en')).toEqual([]);
 
     const text = getStoreSearchText(localized, 'zh-CN');
-    for (const field of ['example', 'someone', 'rune-oai/example-plugin', 'mit', 'official']) {
+    for (const field of ['example', 'someone', 'rune-gh/example-plugin', 'mit', 'official']) {
       expect(text).toContain(field);
     }
   });

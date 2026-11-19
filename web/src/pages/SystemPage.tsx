@@ -26,7 +26,7 @@ import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
 import styles from './SystemPage.module.scss';
 
-const PROJECT_REPOSITORY_URL = 'https://github.com/rune-oai/t3code-proxy';
+const PROJECT_REPOSITORY_URL = 'https://github.com/rune-gh/t3code-proxy';
 
 type HubFacts = { commit: string; authDir: string };
 
@@ -252,7 +252,7 @@ export function SystemPage() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          rune-oai/t3code-proxy
+          rune-gh/t3code-proxy
           <IconExternalLink size={14} aria-hidden="true" />
         </a>
       ),

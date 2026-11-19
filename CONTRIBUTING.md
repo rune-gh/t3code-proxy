@@ -22,7 +22,7 @@ You need Go (version in `go.mod`), Bun 1.4.3 for the web panel, and optionally `
 web panel dev loop.
 
 ```sh
-git clone https://github.com/rune-oai/t3code-proxy.git
+git clone https://github.com/rune-gh/t3code-proxy.git
 cd t3code-proxy
 make verify
 ```

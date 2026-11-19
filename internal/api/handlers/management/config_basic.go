@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	latestReleaseURL       = "https://api.github.com/repos/rune-oai/t3code-proxy/releases/latest"
+	latestReleaseURL       = "https://api.github.com/repos/rune-gh/t3code-proxy/releases/latest"
 	latestReleaseUserAgent = "t3code-proxy"
 )
 

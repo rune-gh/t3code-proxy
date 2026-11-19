@@ -44,7 +44,7 @@ use it, all signed in to the same tailnet.
 ### Linux and macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.sh | sh
 ```
 
 The installer downloads the release archive for your CPU, verifies it against `checksums.txt`,
@@ -68,7 +68,7 @@ Options, from `sh install.sh --help`:
 To pass options through the pipe, use `sh -s --`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.sh | sh -s -- --version 0.1.0
+curl -fsSL https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.sh | sh -s -- --version 0.1.0
 ```
 
 ### Windows
@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/
 In PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.ps1 | iex
 ```
 
 This installs to `%LOCALAPPDATA%\t3code-proxy`, adds that directory to your user `PATH`, writes
@@ -88,7 +88,7 @@ first to pass options: `.\install.ps1 -Version 0.1.0`, `-Dir`, `-Archive`, `-NoS
 
 ### Docker
 
-The image is `ghcr.io/rune-oai/t3code-proxy`. The repository's `docker-compose.yml` keeps every
+The image is `ghcr.io/rune-gh/t3code-proxy`. The repository's `docker-compose.yml` keeps every
 mutable file in `./data` and publishes the API and the two OAuth callback ports on the host's
 loopback only:
 

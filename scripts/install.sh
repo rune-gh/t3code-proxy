@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install, update, or remove the t3code-proxy hub on Linux or macOS.
 #
-#   curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.sh | sh
 #   sh install.sh [options]
 #
 # Options:
@@ -21,7 +21,7 @@
 # config.yaml (mode 600) and never printed.
 set -eu
 
-REPO="rune-oai/t3code-proxy"
+REPO="rune-gh/t3code-proxy"
 NAME="t3code-proxy"
 LABEL="com.t3code-proxy.hub"
 

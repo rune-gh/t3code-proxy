@@ -8,7 +8,7 @@ reviews and any other channel run by the project.
 
 To report behavior that breaks the code of conduct, contact the maintainers privately through
 GitHub. Use the private vulnerability reporting form of the repository,
-[report privately](https://github.com/rune-oai/t3code-proxy/security/advisories/new), and start the
+[report privately](https://github.com/rune-gh/t3code-proxy/security/advisories/new), and start the
 title with `Conduct:`, or message a maintainer directly on GitHub. Do not report conduct problems
 in a public issue.
 

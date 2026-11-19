@@ -3,7 +3,7 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
-IMAGE ?= ghcr.io/rune-oai/t3code-proxy
+IMAGE ?= ghcr.io/rune-gh/t3code-proxy
 CONFIG ?= config.yaml
 # Space-separated goos/goarch list for `make release`; empty means all targets.
 TARGETS ?=

@@ -48,7 +48,7 @@ Run `make` or `make help` for the list:
 | `make verify` | Everything CI runs: `lint`, `test`, `build`, `test-web`. |
 | `make run` | Run the server from source with `CONFIG` (default `config.yaml`). |
 | `make release` | Cross-build archives and `checksums.txt` into `dist/`. |
-| `make docker` | Build the container image `ghcr.io/rune-oai/t3code-proxy:dev`. |
+| `make docker` | Build the container image `ghcr.io/rune-gh/t3code-proxy:dev`. |
 | `make clean` | Remove build outputs. |
 
 A typical loop:
@@ -113,7 +113,7 @@ untagged builds report `dev`.
 3. The `release` workflow runs the tests, builds the archives with `make release`, attests their
    provenance, and publishes a GitHub release with the archives and `checksums.txt`. A tag that
    contains `-`, such as `v0.2.0-rc.1`, is published as a prerelease.
-4. The same workflow builds and pushes the multi-platform image to `ghcr.io/rune-oai/t3code-proxy`.
+4. The same workflow builds and pushes the multi-platform image to `ghcr.io/rune-gh/t3code-proxy`.
 
 To build release archives locally, run `make release`. Set `TARGETS` to limit the platforms, for
 example `make release TARGETS="linux/amd64 darwin/arm64"`. Cross-built Linux and macOS archives

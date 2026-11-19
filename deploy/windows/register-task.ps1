@@ -117,7 +117,7 @@ $triggers = @(New-ScheduledTaskTrigger -AtLogOn -User $user)
 if ($elevated) { $triggers += New-ScheduledTaskTrigger -AtStartup }
 
 $arguments = "-config `"$Config`""
-$description = "t3code-proxy hub (https://github.com/rune-oai/t3code-proxy)"
+$description = "t3code-proxy hub (https://github.com/rune-gh/t3code-proxy)"
 
 if (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue) {
   Stop-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue

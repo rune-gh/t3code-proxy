@@ -231,9 +231,9 @@ func exampleRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             "example",
 			Version:          "0.1.0",
-			Author:           "rune-oai",
-			GitHubRepository: "https://github.com/rune-oai/t3code-proxy",
-			Logo:             "https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/assets/brand/icon.svg",
+			Author:           "rune-gh",
+			GitHubRepository: "https://github.com/rune-gh/t3code-proxy",
+			Logo:             "https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/assets/brand/icon.svg",
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "config1", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Enables the example boolean option."},
 				{Name: "config2", Type: pluginapi.ConfigFieldTypeString, Description: "Stores the example string option."},

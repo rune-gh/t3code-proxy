@@ -335,7 +335,7 @@ the installer for your platform from the [setup guide](setup.md#2-install):
 ```sh
 mkdir -p ~/.local/share/t3code-proxy
 cp <old config.yaml> ~/.local/share/t3code-proxy/config.yaml
-curl -fsSL https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/scripts/install.sh | sh
 ```
 
 The Windows migration keeps the original config path and working directory.

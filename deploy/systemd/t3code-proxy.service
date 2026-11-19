@@ -11,7 +11,7 @@
 
 [Unit]
 Description=t3code-proxy hub
-Documentation=https://github.com/rune-oai/t3code-proxy
+Documentation=https://github.com/rune-gh/t3code-proxy
 Wants=network-online.target
 After=network-online.target
 # Never give up restarting.

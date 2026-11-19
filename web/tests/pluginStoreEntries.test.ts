@@ -15,7 +15,7 @@ import type { PluginListEntry, PluginStoreEntry } from '@/types';
 
 const installedPlugin = (
   overrides: Partial<PluginListEntry> = {},
-  repository = 'https://github.com/rune-oai/gemini-bridge'
+  repository = 'https://github.com/rune-gh/gemini-bridge'
 ): PluginListEntry => ({
   id: 'gemini-bridge',
   path: '/plugins/gemini-bridge.so',
@@ -31,7 +31,7 @@ const installedPlugin = (
   metadata: {
     name: 'Gemini Bridge',
     version: '1.4.2',
-    author: 'rune-oai',
+    author: 'rune-gh',
     githubRepository: repository,
     logo: '',
     configFields: [],
@@ -49,7 +49,7 @@ const storeEntry = (overrides: Partial<PluginStoreEntry> = {}): PluginStoreEntry
   description: '',
   author: '',
   version: '1.5.0',
-  repository: 'rune-oai/gemini-bridge',
+  repository: 'rune-gh/gemini-bridge',
   installType: 'github-release',
   authRequired: false,
   authConfigured: false,
@@ -160,9 +160,9 @@ describe('installed plugin to registry update match', () => {
     ).toBe(null);
     expect(findPluginUpdate(installedPlugin(), [storeEntry({ repository: '' })])).toBe(null);
     for (const repository of [
-      'rune-oai/gemini-bridge',
-      'https://github.com/rune-oai/gemini-bridge.git',
-      'https://github.com/Rune-OAI/gemini-bridge/',
+      'rune-gh/gemini-bridge',
+      'https://github.com/rune-gh/gemini-bridge.git',
+      'https://github.com/Rune-GH/gemini-bridge/',
     ]) {
       expect(findPluginUpdate(installedPlugin(), [storeEntry({ repository })])).not.toBe(null);
     }

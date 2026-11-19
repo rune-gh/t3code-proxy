@@ -127,9 +127,9 @@ func handleMethod(method string) ([]byte, error) {
 	_ = time.Second
 	switch method {
 	case "plugin.register":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-management-api-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-management-api-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-management-api-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-management-api-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}")
 	case "plugin.reconfigure":
-		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-management-api-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-oai\",\"GitHubRepository\":\"https://github.com/rune-oai/t3code-proxy\",\"Logo\":\"https://example.invalid/example-management-api-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}")
+		return okEnvelopeJSON("{\"schema_version\":1,\"metadata\":{\"Name\":\"example-management-api-go\",\"Version\":\"0.1.0\",\"Author\":\"rune-gh\",\"GitHubRepository\":\"https://github.com/rune-gh/t3code-proxy\",\"Logo\":\"https://example.invalid/example-management-api-go.png\",\"ConfigFields\":[]},\"capabilities\":{\"management_api\":true}}")
 	case "management.register":
 		return okEnvelopeJSON("{\"resources\":[{\"Path\":\"/status\",\"Menu\":\"Management API\",\"Description\":\"t3code-proxy exposes this menu resource under /v0/resource/plugins/example-management-api-go/status.\"}]}")
 	case "management.handle":

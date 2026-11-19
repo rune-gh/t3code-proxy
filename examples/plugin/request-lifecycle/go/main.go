@@ -191,9 +191,9 @@ func pluginRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             "request-lifecycle",
 			Version:          "0.1.0",
-			Author:           "rune-oai",
-			GitHubRepository: "https://github.com/rune-oai/t3code-proxy",
-			Logo:             "https://raw.githubusercontent.com/rune-oai/t3code-proxy/main/assets/brand/icon.svg",
+			Author:           "rune-gh",
+			GitHubRepository: "https://github.com/rune-gh/t3code-proxy",
+			Logo:             "https://raw.githubusercontent.com/rune-gh/t3code-proxy/main/assets/brand/icon.svg",
 			ConfigFields: []pluginapi.ConfigField{
 				{
 					Name:        "max_concurrency",
