@@ -17,6 +17,7 @@ import type {
   MetaQuotaState,
   XaiQuotaState,
 } from '@/types';
+import { claudeHubPlan } from '@/utils/quota/claudePlans';
 
 export interface LiveWindow {
   /** Quota-history window key (`seven_day`, `weekly`, `group_gemini_models_gemini_5h`, ...). */
@@ -209,7 +210,7 @@ export function liveReadFor(provider: string, quota: unknown): LiveRead | null {
     case 'claude': {
       const claude = quota as ClaudeQuotaState;
       windows = percentWindows(claude.windows ?? [], CLAUDE_KEYS);
-      plan = claude.planType ?? null;
+      plan = claudeHubPlan(claude.planType);
       break;
     }
     case 'codex': {

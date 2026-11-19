@@ -362,6 +362,32 @@ func parseClaudeRateLimitResetWithFuzz(headers http.Header, now time.Time, minFu
 	return &effectiveDuration
 }
 
+// maxClaudeCreditsRequiredWindow bounds the reset of a credits-required refusal.
+// Anthropic stamps it with the next billing-period boundary, at most a month away.
+const maxClaudeCreditsRequiredWindow = 32 * 24 * time.Hour
+
+// ParseClaudeCreditsRequiredReset returns how long a "credits_required" refusal
+// lasts. Unlike a rate-limit window, that refusal is anchored to the billing
+// period, so its Anthropic-Ratelimit-Unified-Reset may lie beyond seven days
+// and is still the right deadline for the refused model. Retry-After is used
+// when the unified reset is absent. It returns nil when neither is usable.
+func ParseClaudeCreditsRequiredReset(headers http.Header, now time.Time) *time.Duration {
+	if headers == nil {
+		return nil
+	}
+	var deadline time.Time
+	if t, ok := parseUnixOrTimestamp(getHeaderCaseInsensitive(headers, "Anthropic-Ratelimit-Unified-Reset")); ok {
+		deadline = t
+	} else if t, okRetry := parseRetryAfterHeader(getHeaderCaseInsensitive(headers, "Retry-After"), now); okRetry {
+		deadline = t
+	}
+	if !deadline.After(now) || deadline.Sub(now) > maxClaudeCreditsRequiredWindow {
+		return nil
+	}
+	wait := deadline.Sub(now)
+	return &wait
+}
+
 func claudeUnifiedResetIsOverageBillingBoundary(headers http.Header, unifiedReset string) bool {
 	claim := strings.ToLower(strings.TrimSpace(getHeaderCaseInsensitive(headers, "Anthropic-Ratelimit-Unified-Representative-Claim")))
 	if !strings.Contains(claim, "overage") {

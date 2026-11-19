@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginsApi } from '@/services/api';
 import { useAuthStore } from '@/stores';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
@@ -69,7 +68,6 @@ export function PluginResourcePage() {
     }
   }, [connected, t]);
 
-  useHeaderRefresh(loadResource, connected);
 
   useEffect(() => {
     void loadResource();

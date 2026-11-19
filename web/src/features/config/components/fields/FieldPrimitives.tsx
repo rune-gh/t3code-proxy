@@ -1,4 +1,4 @@
-import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useContext, useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/Badge';
 import { IconButton } from '@/components/ui/Button';
@@ -9,6 +9,7 @@ import { useNotificationStore } from '@/stores';
 import { copyToClipboard } from '@/utils/clipboard';
 import { RESTART_REQUIRED_FIELD_IDS } from '../../constants';
 import { configFieldDomId } from '../../searchIndex';
+import { DirtyFieldIdsContext } from './dirtyFieldIds';
 import styles from './Field.module.scss';
 
 /** Pulse class added by useFieldJump to the row a search result points at. */
@@ -59,7 +60,12 @@ function describedBy(ids: SettingIds, description: ReactNode, error?: string) {
 type RowKind = 'toggle' | 'input' | 'block';
 type ControlSize = 'sm' | 'md' | 'lg';
 
-/** "Restart required" marker shown next to controls the hub reads only at startup. */
+function useRestartMarker(fieldId: string): boolean {
+  const dirtyFieldIds = useContext(DirtyFieldIdsContext);
+  return RESTART_REQUIRED_FIELD_IDS.has(fieldId) && dirtyFieldIds.has(fieldId);
+}
+
+/** "Restart required" marker shown next to an edited control the hub reads only at startup. */
 export function RestartBadge() {
   const { t } = useTranslation();
   return (
@@ -88,7 +94,7 @@ function SettingRow({
   labelFor?: string;
   control: ReactNode;
 }) {
-  const restart = RESTART_REQUIRED_FIELD_IDS.has(fieldId);
+  const restart = useRestartMarker(fieldId);
   return (
     <div
       id={configFieldDomId(fieldId)}
@@ -354,7 +360,7 @@ export function BlockSetting({
     describedBy: describedBy(ids, copy.description, copy.error),
     invalid: Boolean(copy.error),
   };
-  const restart = RESTART_REQUIRED_FIELD_IDS.has(copy.fieldId);
+  const restart = useRestartMarker(copy.fieldId);
   return (
     <SettingRow
       {...copy}

@@ -194,3 +194,53 @@ func TestApplyForgetsReadingsOfUntrackedAccounts(t *testing.T) {
 		t.Fatalf("after turning the recorder off: codex %d; want 0", count(codex.ID))
 	}
 }
+
+// A plan without Fable (Pro) still gets a Fable weekly limit from the usage
+// endpoint, but that limit is not capacity: the recorder drops it, while a Max
+// account keeps it.
+func TestRecorderDropsFableWindowForPlansWithoutFable(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	pro := &coreauth.Auth{ID: "qh-fable-pro", Index: "qh-fable-pro", Provider: "claude", Metadata: map[string]any{"access_token": "a"}}
+	maxAuth := &coreauth.Auth{ID: "qh-fable-max", Index: "qh-fable-max", Provider: "claude", Metadata: map[string]any{"access_token": "b"}}
+	t.Cleanup(func() {
+		for _, auth := range []*coreauth.Auth{pro, maxAuth} {
+			coreauth.ObserveAuthPlan(auth.ID, "")
+			coreauth.ForgetShortWindowUsage(auth.ID)
+			coreauth.ForgetQuotaWindows(auth.ID)
+			coreauth.ForgetScopedWeeklyWindows(auth.ID)
+		}
+	})
+	request := func(_ context.Context, auth *coreauth.Auth, _, url string, _ map[string]string, _ []byte) (int, []byte, error) {
+		switch url {
+		case ClaudeUsageURL:
+			return 200, []byte(`{"seven_day":{"utilization":23,"resets_at":"2027-01-15T10:00:00Z"},"limits":[{"kind":"weekly_scoped","scope":{"model":{"display_name":"Fable"}},"percent":31,"resets_at":"2027-01-15T10:00:00Z","is_active":true}]}`), nil
+		case ClaudeProfileURL:
+			if auth.ID == pro.ID {
+				return 200, []byte(`{"account":{"has_claude_max":false,"has_claude_pro":true},"organization":{"rate_limit_tier":"default_claude_ai"}}`), nil
+			}
+			return 200, []byte(`{"organization":{"rate_limit_tier":"default_claude_max_5x"}}`), nil
+		}
+		return 404, nil, nil
+	}
+	r := NewRecorder(Deps{DoRequest: request, ListAuths: func() []*coreauth.Auth { return []*coreauth.Auth{pro, maxAuth} }})
+	r.now = func() time.Time { return now }
+
+	recPro := r.sample(context.Background(), pro)
+	if recPro.Error != "" || recPro.Plan != "pro" {
+		t.Fatalf("pro sample = %+v", recPro)
+	}
+	if _, ok := recPro.Windows[WindowSevenDayFable]; ok {
+		t.Fatalf("pro windows = %v; want no %s", recPro.Windows, WindowSevenDayFable)
+	}
+	if _, ok := recPro.Windows[WindowSevenDay]; !ok {
+		t.Fatalf("pro windows = %v; want %s kept", recPro.Windows, WindowSevenDay)
+	}
+
+	recMax := r.sample(context.Background(), maxAuth)
+	if recMax.Error != "" || recMax.Plan != "max_5x" {
+		t.Fatalf("max sample = %+v", recMax)
+	}
+	if w, ok := recMax.Windows[WindowSevenDayFable]; !ok || w.UsedPercent != 31 {
+		t.Fatalf("max windows = %v; want %s at 31%%", recMax.Windows, WindowSevenDayFable)
+	}
+}

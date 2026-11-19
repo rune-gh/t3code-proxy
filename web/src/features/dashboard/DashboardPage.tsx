@@ -14,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { formatPercent } from '@/utils/format';
 import { ThroughputChart } from './components/ThroughputChart';
 import { useDashboardOverview } from './hooks/useDashboardOverview';
@@ -28,7 +27,6 @@ export function DashboardPage() {
   const { connected, loading, error, counts, traffic, providers, credentials, refresh } =
     useDashboardOverview();
 
-  useHeaderRefresh(refresh, connected);
 
   const windowLabel = (() => {
     if (traffic.windowMinutes <= 0) return '';

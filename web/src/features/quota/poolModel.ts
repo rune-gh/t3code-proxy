@@ -20,6 +20,7 @@ import type {
 } from '@/services/api/quotaHistory';
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@/utils/time/durations';
 import type { LiveWindow } from './liveWindows';
+import { claudePlanIncludesFable } from '@/utils/quota/claudePlans';
 import { planKey } from './poolPrefs';
 
 export { DAY_MS, HOUR_MS, MINUTE_MS };
@@ -357,6 +358,17 @@ export function weightForAccount(
   return 1;
 }
 
+/**
+ * Whether an account can draw on a window choice at all. A Claude plan without
+ * Fable (Pro, Free) is left out of the Fable pool entirely, rather than falling
+ * back to its overall weekly window.
+ */
+export const accountServesChoice = (
+  provider: PoolProvider,
+  choice: PoolWindowChoice,
+  plan: string | null
+): boolean => !(provider === 'claude' && choice === 'fable' && !claudePlanIncludesFable(plan));
+
 /* ---------------------------------------------------------------------------
  * Account tracks
  * ------------------------------------------------------------------------- */
@@ -430,7 +442,10 @@ export function buildAccountTracks(
   const byAccount = samplesByAccount(history);
   const tracks: AccountTrack[] = [];
   const enabled = history.accounts.filter(
-    (account) => account.provider === provider && !account.disabled
+    (account) =>
+      account.provider === provider &&
+      !account.disabled &&
+      accountServesChoice(provider, choice, account.plan)
   );
   enabled.forEach((account) => {
     const samples = byAccount.get(account.authIndex) ?? [];

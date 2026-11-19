@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useInterval } from '@/hooks/useInterval';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Button, IconButton } from '@/components/ui/Button';
 import { DropdownMenu, DropdownMenuItem } from '@/components/ui/DropdownMenu';
@@ -233,11 +232,9 @@ export function AuthFilesPage() {
 
   const initialLoadDoneRef = useRef(false);
 
-  const handleHeaderRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     await Promise.all([loadFiles({ background: true }), loadExcluded(), loadModelAlias()]);
   }, [loadFiles, loadExcluded, loadModelAlias]);
-
-  useHeaderRefresh(handleHeaderRefresh);
 
   useEffect(() => {
     if (!isCurrentLayer) return;
@@ -434,7 +431,7 @@ export function AuthFilesPage() {
                 size="sm"
                 aria-label={t('auth_files.reload_list')}
                 icon={<IconRefreshCw size={16} />}
-                onClick={() => void handleHeaderRefresh()}
+                onClick={() => void handleRefresh()}
                 disabled={loading}
               />
             </Tooltip>

@@ -24,6 +24,16 @@ const FIELD_ID_TO_SECTION: ReadonlyMap<string, ConfigSectionId> = new Map(
   CONFIG_FIELD_SEARCH_INDEX.map((entry) => [entry.fieldId, entry.sectionId])
 );
 
+/** Dirty value keys to the field ids that own them (restart markers). */
+export function resolveDirtyFieldIds(dirtyFields: ReadonlySet<string>): ReadonlySet<string> {
+  const fieldIds = new Set<string>();
+  for (const valueKey of dirtyFields) {
+    const fieldId = VALUE_KEY_TO_FIELD_ID.get(valueKey);
+    if (fieldId) fieldIds.add(fieldId);
+  }
+  return fieldIds;
+}
+
 /** Dirty value keys to the sections that contain them (navigation dots). */
 export function resolveDirtySections(
   dirtyFields: ReadonlySet<string>

@@ -49,7 +49,12 @@ func (s *Server) setupProviderRoutes(openaiHandler *openai.OpenAIAPIHandler, cla
 	})
 	group.POST("/v1/chat/completions", openaiHandler.ChatCompletions)
 	group.POST("/v1/completions", openaiHandler.Completions)
+	// The Responses WebSocket, compaction and search make /provider/codex/v1 a complete Codex
+	// base URL, so Codex can read its model list live from the hub instead of a pinned file.
+	group.GET("/v1/responses", responsesHandler.ResponsesWebsocket)
 	group.POST("/v1/responses", responsesHandler.Responses)
+	group.POST("/v1/responses/compact", responsesHandler.Compact)
+	group.POST("/v1/alpha/search", s.codexAlphaSearch)
 	group.POST("/v1/messages", claudeHandler.ClaudeMessages)
 	group.POST("/v1/messages/count_tokens", claudeHandler.ClaudeCountTokens)
 	group.GET("/v1beta/models", s.geminiModelsHandler(geminiHandler))

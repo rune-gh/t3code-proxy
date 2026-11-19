@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `/provider/<name>/v1` serves the Responses WebSocket, `/responses/compact` and `/alpha/search`,
+  so Codex can use `/provider/codex/v1` as its base URL. With `model_catalog_url` pointed at
+  `/provider/codex/v1/models`, Codex signed in with a hub access key reads its model list live
+  from the hub, so new models appear without a fixed catalog file.
 - Models newer than the catalog now route instead of failing with `unknown provider for model`.
   A request for a model no credential lists is adopted on the provider it belongs to: the
   request's `/provider/<name>` scope, a credential prefix or ID namespace (`vibe/...`,

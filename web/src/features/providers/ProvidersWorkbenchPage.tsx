@@ -5,7 +5,6 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useProviderRecentRequests } from '@/components/providers/hooks/useProviderRecentRequests';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +15,6 @@ import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Toolbar } from '@/components/ui/Toolbar';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import { clearConnectivityLog, useConnectivityLog } from './connectivityLog';
 import { PROVIDER_BRAND_ORDER } from './descriptors';
@@ -52,9 +50,6 @@ export function ProvidersWorkbenchPage() {
   const { showNotification, showConfirmation } = useNotificationStore();
   const tests = useConnectivityLog();
 
-  const pageTransitionLayer = usePageTransitionLayer();
-  const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
-
   const workbench = useProviderWorkbench();
   const [filter, setFilter] = useState('');
   const [sheetState, setSheetState] = useState<ProviderSheetState>(CLOSED_SHEET);
@@ -68,8 +63,6 @@ export function ProvidersWorkbenchPage() {
   const handleRefresh = useCallback(async () => {
     await Promise.allSettled([workbench.refetch(), refreshRecentRequests().catch(() => undefined)]);
   }, [refreshRecentRequests, workbench]);
-
-  useHeaderRefresh(handleRefresh, isCurrentLayer);
 
   const disableMutations =
     !connected || workbench.mutating || workbench.isFetching || workbench.isError;

@@ -122,6 +122,30 @@ describe('pooling and weights', () => {
     expect(pooledAt(tracks, NOW)).toBe(75);
   });
 
+  test('leaves Claude plans without Fable out of the Fable pool, but not the weekly one', () => {
+    const h = history(
+      [
+        { id: 'max', plan: 'max_5x' },
+        // Anthropic still reports a Fable limit for Pro, which cannot use the model.
+        { id: 'pro', plan: 'pro' },
+        { id: 'free', plan: 'plan_free' },
+        { id: 'unknown' },
+      ],
+      [
+        sample(NOW, 'max', { seven_day: { used: 90 }, seven_day_fable: { used: 100 } }),
+        sample(NOW, 'pro', { seven_day: { used: 23 }, seven_day_fable: { used: 31 } }),
+        sample(NOW, 'free', { seven_day: { used: 0 } }),
+        sample(NOW, 'unknown', { seven_day: { used: 50 } }),
+      ]
+    );
+    const weights = { max_5x: 5, pro: 1 };
+    const fable = buildAccountTracks(h, 'claude', 'fable', weights);
+    expect(fable.map((t) => t.authIndex)).toEqual(['max', 'unknown']);
+    expect(fable.map((t) => t.windowKey)).toEqual(['seven_day_fable', 'seven_day']);
+    const weekly = buildAccountTracks(h, 'claude', 'weekly', weights);
+    expect(weekly.map((t) => t.authIndex)).toEqual(['max', 'pro', 'free', 'unknown']);
+  });
+
   test('carries the last sample forward and refills once its reset has passed', () => {
     const h = history(
       [{ id: 'a' }],

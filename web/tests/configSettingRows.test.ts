@@ -11,6 +11,7 @@ import {
   TextSetting,
   ToggleSetting,
 } from '@/features/config/components/fields/FieldPrimitives';
+import { DirtyFieldIdsContext } from '@/features/config/components/fields/dirtyFieldIds';
 
 const noop = () => {};
 const render = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(element);
@@ -124,13 +125,29 @@ describe('setting row accessibility', () => {
     expect(attr(group, 'aria-describedby')).toBe(received?.describedBy);
   });
 
-  test('restart-required settings carry a marker next to the control', () => {
-    const markup = render(
-      createElement(TextSetting, { fieldId: 'port', label: 'Port', value: '', onChange: noop })
+  test('restart-required settings carry a marker only while edited', () => {
+    const port = createElement(TextSetting, {
+      fieldId: 'port',
+      label: 'Port',
+      value: '',
+      onChange: noop,
+    });
+    expect(render(port)).not.toContain('Restart required');
+    const edited = render(
+      createElement(DirtyFieldIdsContext.Provider, { value: new Set(['port', 'proxyUrl']) }, port)
     );
-    expect(markup).toContain('Restart required');
+    expect(edited).toContain('Restart required');
     const plain = render(
-      createElement(TextSetting, { fieldId: 'proxyUrl', label: 'Proxy', value: '', onChange: noop })
+      createElement(
+        DirtyFieldIdsContext.Provider,
+        { value: new Set(['proxyUrl']) },
+        createElement(TextSetting, {
+          fieldId: 'proxyUrl',
+          label: 'Proxy',
+          value: '',
+          onChange: noop,
+        })
+      )
     );
     expect(plain).not.toContain('Restart required');
   });

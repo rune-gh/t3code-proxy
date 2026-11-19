@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '@/components/ui/Button';
 import { StatusDot, type BadgeTone } from '@/components/ui/Badge';
 import { DropdownMenu, DropdownMenuItem } from '@/components/ui/DropdownMenu';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { IconLogOut, IconMonitor, IconMoon, IconRefreshCw, IconSun } from '@/components/ui/icons';
+import { IconLogOut, IconMonitor, IconMoon, IconSun } from '@/components/ui/icons';
 import { useAuthStore, useThemeStore } from '@/stores';
 import type { Theme } from '@/types';
 
@@ -20,10 +20,9 @@ const displayAddress = (apiBase: string) => apiBase.replace(/^https?:\/\//, '').
 
 interface SidebarFooterProps {
   collapsed: boolean;
-  onRefresh: () => Promise<void>;
 }
 
-export function SidebarFooter({ collapsed, onRefresh }: SidebarFooterProps) {
+export function SidebarFooter({ collapsed }: SidebarFooterProps) {
   const { t } = useTranslation();
   const apiBase = useAuthStore((state) => state.apiBase);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
@@ -31,7 +30,6 @@ export function SidebarFooter({ collapsed, onRefresh }: SidebarFooterProps) {
   const logout = useAuthStore((state) => state.logout);
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
-  const [refreshing, setRefreshing] = useState(false);
 
   const statusLabel = t(`common.${connectionStatus}_status`, { defaultValue: connectionStatus });
   const address = displayAddress(apiBase || window.location.host);
@@ -43,16 +41,6 @@ export function SidebarFooter({ collapsed, onRefresh }: SidebarFooterProps) {
     { value: 'auto', label: t('theme.auto'), icon: <IconMonitor size={16} /> },
   ];
   const current = themeOptions.find((option) => option.value === theme) ?? themeOptions[2];
-
-  const handleRefresh = async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      await onRefresh();
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const status = (
     <div className="sidebar-status" role="status">
@@ -121,13 +109,6 @@ export function SidebarFooter({ collapsed, onRefresh }: SidebarFooterProps) {
             </DropdownMenuItem>
           ))}
         </DropdownMenu>
-        <IconButton
-          size="sm"
-          aria-label={t('header.refresh_all')}
-          icon={<IconRefreshCw size={16} />}
-          loading={refreshing}
-          onClick={handleRefresh}
-        />
         <IconButton
           size="sm"
           aria-label={t('header.logout')}

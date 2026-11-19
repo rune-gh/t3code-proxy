@@ -29,6 +29,8 @@ The prefix supports these routes.
 - `GET /provider/<name>/v1beta/models` and `/v1beta/models/<model>` return Gemini model metadata.
 - `POST /provider/<name>/v1/chat/completions`, `/v1/completions`, `/v1/responses`, `/v1/messages`
   and `/v1/messages/count_tokens` use the existing HTTP handlers, including streaming.
+- `GET /provider/<name>/v1/responses` (Responses over WebSocket), `POST /v1/responses/compact` and
+  `POST /v1/alpha/search` serve Codex, so `/provider/codex/v1` works as a complete Codex base URL.
 - `POST /provider/<name>/v1beta/models/<model>:generateContent`, `:streamGenerateContent` and
   `:countTokens` use the Gemini handlers.
 

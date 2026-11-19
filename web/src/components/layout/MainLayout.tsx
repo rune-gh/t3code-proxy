@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageTransition } from '@/components/common/PageTransition';
 import { MainRoutes } from '@/router/MainRoutes';
-import { useConfigStore, useNotificationStore } from '@/stores';
-import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { useConfigStore } from '@/stores';
 import { Sidebar } from './Sidebar';
 import { MobileTopBar } from './MobileTopBar';
 import { useNavigation } from './navigation';
@@ -44,9 +43,7 @@ function useContentCenter(ref: RefObject<HTMLElement | null>) {
 export function MainLayout() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
-  const showNotification = useNotificationStore((state) => state.showNotification);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
-  const clearCache = useConfigStore((state) => state.clearCache);
   const sidebar = useSidebarState();
   const navigation = useNavigation();
   const mainRef = useRef<HTMLDivElement | null>(null);
@@ -60,30 +57,6 @@ export function MainLayout() {
       // The login flow surfaces connection errors; nothing to show here.
     });
   }, [fetchConfig]);
-
-  const refreshNavigation = navigation.refresh;
-  const handleRefresh = useCallback(async () => {
-    clearCache();
-    const results = await Promise.allSettled([
-      fetchConfig(true),
-      refreshNavigation(),
-      triggerHeaderRefresh(),
-    ]);
-    const rejected = results.find(
-      (result): result is PromiseRejectedResult => result.status === 'rejected'
-    );
-    if (rejected) {
-      const reason = rejected.reason;
-      const message =
-        typeof reason === 'string' ? reason : reason instanceof Error ? reason.message : '';
-      showNotification(
-        `${t('notification.refresh_failed')}${message ? `: ${message}` : ''}`,
-        'error'
-      );
-      return;
-    }
-    showNotification(t('notification.data_refreshed'), 'success');
-  }, [clearCache, fetchConfig, refreshNavigation, showNotification, t]);
 
   return (
     <div
@@ -102,7 +75,6 @@ export function MainLayout() {
         drawerOpen={sidebar.drawerOpen}
         onToggleCollapsed={sidebar.toggleCollapsed}
         onCloseDrawer={sidebar.closeDrawer}
-        onRefresh={handleRefresh}
       />
 
       {sidebar.isMobile && sidebar.drawerOpen ? (

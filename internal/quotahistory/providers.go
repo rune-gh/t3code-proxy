@@ -44,6 +44,12 @@ var providerPollers = map[string]providerPoller{
 		plan := ""
 		if err == nil {
 			plan = r.claudePlan(ctx, auth)
+			if claudePlanExcludesFable(plan) {
+				// Anthropic still reports a Fable weekly limit on these plans, but
+				// refuses Fable requests, so the limit is neither capacity to chart
+				// nor a cap to route on.
+				delete(windows, WindowSevenDayFable)
+			}
 		}
 		return windows, plan, err
 	},
@@ -397,4 +403,11 @@ func indexedKey(value string, index int) string {
 		return key
 	}
 	return fmt.Sprintf("%d", index)
+}
+
+// claudePlanExcludesFable reports whether a Claude plan id from ParseClaudePlan
+// leaves Fable out: those plans can use it only with usage credits. An unknown
+// plan keeps Fable. Mirrors claudePlanIncludesFable in web/src/utils/quota/claudePlans.ts.
+func claudePlanExcludesFable(plan string) bool {
+	return plan == "pro" || plan == "free"
 }

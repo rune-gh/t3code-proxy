@@ -17,7 +17,6 @@ interface SidebarProps {
   drawerOpen: boolean;
   onToggleCollapsed: () => void;
   onCloseDrawer: () => void;
-  onRefresh: () => Promise<void>;
 }
 
 const isMac = () =>
@@ -31,7 +30,6 @@ export function Sidebar({
   drawerOpen,
   onToggleCollapsed,
   onCloseDrawer,
-  onRefresh,
 }: SidebarProps) {
   const { t } = useTranslation();
   const asideRef = useRef<HTMLElement | null>(null);
@@ -85,7 +83,7 @@ export function Sidebar({
 
       <SidebarNav groups={groups} collapsed={collapsed} onNavigate={onCloseDrawer} />
 
-      <SidebarFooter collapsed={collapsed} onRefresh={onRefresh} />
+      <SidebarFooter collapsed={collapsed} />
     </aside>
   );
 }
