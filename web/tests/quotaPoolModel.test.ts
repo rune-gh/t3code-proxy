@@ -534,10 +534,33 @@ describe('pools for every provider', () => {
     ]);
   });
 
+  test('Gemini defaults to its own weekly models even when the shared group arrives first', () => {
+    const h = history(
+      [{ id: 'g', provider: 'antigravity' }],
+      [sample(NOW, 'g', {
+        group_claude_and_gpt_models_3p_weekly: { used: 20, period: 168 },
+        group_gemini_models_gemini_5h: { used: 30, period: 5 },
+        group_gemini_models_gemini_weekly: { used: 40, period: 168 },
+      })]
+    );
+    expect(defaultPoolWindow('antigravity', h)).toBe('group_gemini_models_gemini_weekly');
+    expect(resolvePoolWindow('antigravity', h, 'group_claude_and_gpt_models_3p_weekly'))
+      .toBe('group_claude_and_gpt_models_3p_weekly');
+  });
+
+  test('Gemini falls back to an available window when its own models are absent', () => {
+    const h = history(
+      [{ id: 'g', provider: 'antigravity' }],
+      [sample(NOW, 'g', { seven_day_claude: { used: 20 } })]
+    );
+    expect(defaultPoolWindow('antigravity', h)).toBe('seven_day_claude');
+    expect(defaultPoolWindow('antigravity')).toBeNull();
+  });
+
   test('Claude and Codex keep their named choices and defaults', () => {
     const h = multi();
     expect(poolWindowChoices('claude', h)).toEqual(['weekly', 'fable', 'five_hour']);
-    expect(defaultPoolWindow('claude')).toBe('fable');
+    expect(defaultPoolWindow('claude')).toBe('weekly');
     expect(poolWindowChoices('codex')).toEqual(['weekly', 'five_hour']);
     expect(defaultPoolWindow('codex')).toBe('weekly');
   });
@@ -547,7 +570,7 @@ describe('pools for every provider', () => {
     expect(resolvePoolWindow('xai', h, 'seven_day')).toBe('seven_day');
     expect(resolvePoolWindow('xai', h, 'fable')).toBe('monthly');
     expect(resolvePoolWindow('xai', h, undefined)).toBe('monthly');
-    expect(resolvePoolWindow('claude', h, undefined)).toBe('fable');
+    expect(resolvePoolWindow('claude', h, undefined)).toBe('weekly');
   });
 
   test('xAI pools by the weight the hub reports per account', () => {

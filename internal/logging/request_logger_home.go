@@ -142,10 +142,7 @@ func (w *homeStreamingLogWriter) WriteChunkAsync(chunk []byte) {
 	if w == nil || w.chunkChan == nil || len(chunk) == 0 {
 		return
 	}
-	select {
-	case w.chunkChan <- append([]byte(nil), chunk...):
-	default:
-	}
+	w.chunkChan <- append([]byte(nil), chunk...)
 }
 
 func (w *homeStreamingLogWriter) WriteStatus(status int, headers map[string][]string) error {

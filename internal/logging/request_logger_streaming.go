@@ -83,7 +83,8 @@ type FileStreamingLogWriter struct {
 	apiResponseTimestamp time.Time
 }
 
-// WriteChunkAsync writes a response chunk asynchronously (non-blocking).
+// WriteChunkAsync queues a response chunk for asynchronous writing.
+// A full queue applies backpressure so recorded streams never silently lose chunks.
 //
 // Parameters:
 //   - chunk: The response chunk to write
@@ -96,12 +97,7 @@ func (w *FileStreamingLogWriter) WriteChunkAsync(chunk []byte) {
 	chunkCopy := make([]byte, len(chunk))
 	copy(chunkCopy, chunk)
 
-	// Non-blocking send
-	select {
-	case w.chunkChan <- chunkCopy:
-	default:
-		// Channel is full, skip this chunk to avoid blocking
-	}
+	w.chunkChan <- chunkCopy
 }
 
 // WriteStatus buffers the response status and headers for later writing.
@@ -227,7 +223,6 @@ func (w *FileStreamingLogWriter) Close() error {
 
 	select {
 	case errWrite := <-w.errorChan:
-		w.cleanupTempFiles()
 		return errWrite
 	default:
 	}
@@ -242,7 +237,6 @@ func (w *FileStreamingLogWriter) Close() error {
 
 	logFile, _, errOpen := createUniqueLogFile(w.logsDir, w.logFilename)
 	if errOpen != nil {
-		w.cleanupTempFiles()
 		return fmt.Errorf("failed to create log file: %w", errOpen)
 	}
 
@@ -254,7 +248,10 @@ func (w *FileStreamingLogWriter) Close() error {
 		}
 	}
 
-	w.cleanupTempFiles()
+	// Keep the spool files recoverable if final assembly or closing fails.
+	if writeErr == nil {
+		w.cleanupTempFiles()
+	}
 	return writeErr
 }
 

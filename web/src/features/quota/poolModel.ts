@@ -76,7 +76,7 @@ const LEGACY_WINDOW_CHOICES: Record<string, PoolWindowChoice[]> = {
 };
 
 const LEGACY_DEFAULT_WINDOW: Record<string, PoolWindowChoice> = {
-  claude: 'fable',
+  claude: 'weekly',
   codex: 'weekly',
 };
 
@@ -301,12 +301,18 @@ export function poolWindowChoices(
   return history ? providerWindows(history, provider).map((window) => window.key) : [];
 }
 
-/** Claude: Fable weekly; Codex: weekly; others: their longest window, first group first. */
+/** Claude/Codex: weekly; Gemini: its own models; others: their longest window. */
 export function defaultPoolWindow(
   provider: PoolProvider,
   history?: QuotaHistory
 ): PoolWindowChoice | null {
-  return LEGACY_DEFAULT_WINDOW[provider] ?? poolWindowChoices(provider, history)[0] ?? null;
+  if (LEGACY_DEFAULT_WINDOW[provider]) return LEGACY_DEFAULT_WINDOW[provider];
+  const windows = history ? providerWindows(history, provider) : [];
+  if (provider === 'antigravity' || provider === 'gemini-cli' || provider === 'gemini') {
+    const gemini = windows.find((window) => /(?:^|[\s_.:-])gemini(?:$|[\s_.:-])/i.test(window.key));
+    if (gemini) return gemini.key;
+  }
+  return windows[0]?.key ?? null;
 }
 
 /** A remembered choice when it is still offered, else the provider default. */
