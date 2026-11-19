@@ -13,6 +13,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so Codex can use `/provider/codex/v1` as its base URL. With `model_catalog_url` pointed at
   `/provider/codex/v1/models`, Codex signed in with a hub access key reads its model list live
   from the hub, so new models appear without a fixed catalog file.
+- Codex models now appear as soon as your ChatGPT accounts can use them, before the community
+  catalog lists them (GPT-6.2-Sol and GPT-6.2-Astra were missing from T3 Code and Codex model
+  pickers). Each Codex login reads its own model list from ChatGPT when it registers and every
+  3 hours, and models the catalog lacks are added for that account's plan with the capabilities
+  of their closest catalog sibling. Catalog entries keep precedence. Discovery is off with
+  `--local-model` and in Home mode.
 - Models newer than the catalog now route instead of failing with `unknown provider for model`.
   A request for a model no credential lists is adopted on the provider it belongs to: the
   request's `/provider/<name>` scope, a credential prefix or ID namespace (`vibe/...`,

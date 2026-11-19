@@ -161,6 +161,9 @@ type Service struct {
 	// adoptedModels holds models requested by clients before the catalog listed
 	// them; see service_model_adoption.go.
 	adoptedModels adoptedModelSet
+	// codexAccountModels schedules Codex credential model list reads; see
+	// codex_account_models.go.
+	codexAccountModels codexAccountModelsState
 }
 
 // SetResultPolicy sets an execution result policy on the underlying core auth manager.
