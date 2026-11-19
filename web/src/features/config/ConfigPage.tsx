@@ -29,6 +29,7 @@ import {
   countSectionErrors,
   countTotalErrors,
   readSavedMode,
+  resolveDirtyFieldIds,
   resolveDirtySections,
   resolveStatus,
 } from './uiState';
@@ -38,6 +39,7 @@ import { useFieldJump } from './hooks/useFieldJump';
 import { useSourceSearch } from './hooks/useSourceSearch';
 import { ConfigNavList, ConfigNavSelect } from './components/ConfigNav';
 import { ConfigSearch } from './components/ConfigSearch';
+import { DirtyFieldIdsContext } from './components/fields/dirtyFieldIds';
 import { DiffModal } from './components/DiffModal';
 import { SourcePanel, SourceSearchBar } from './components/SourcePanel';
 import type { ConfigSectionProps } from './types';
@@ -138,6 +140,7 @@ export function ConfigPage() {
     [visualHasPayloadValidationErrors, visualValidationErrors]
   );
   const dirtySections = useMemo(() => resolveDirtySections(visualDirtyFields), [visualDirtyFields]);
+  const dirtyFieldIds = useMemo(() => resolveDirtyFieldIds(visualDirtyFields), [visualDirtyFields]);
   const advancedErrors = ADVANCED_SECTION_IDS.some((id) => errorCounts[id] > 0);
 
   const unsavedChangesDialog = useMemo(
@@ -448,23 +451,27 @@ export function ConfigPage() {
             </div>
           </aside>
 
-          <div className={styles.content}>
-            {PRIMARY_SECTION_IDS.map(renderSection)}
+          <DirtyFieldIdsContext.Provider value={dirtyFieldIds}>
+            <div className={styles.content}>
+              {PRIMARY_SECTION_IDS.map(renderSection)}
 
-            <details
-              className={styles.advanced}
-              open={advancedOpen || advancedErrors}
-              onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
-            >
-              <summary className={styles.advancedSummary}>
-                <span className={styles.advancedTitle}>
-                  {t('config_management.advanced.title')}
-                </span>
-                <span className={styles.advancedHint}>{t('config_management.advanced.hint')}</span>
-              </summary>
-              <div className={styles.advancedBody}>{ADVANCED_SECTION_IDS.map(renderSection)}</div>
-            </details>
-          </div>
+              <details
+                className={styles.advanced}
+                open={advancedOpen || advancedErrors}
+                onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+              >
+                <summary className={styles.advancedSummary}>
+                  <span className={styles.advancedTitle}>
+                    {t('config_management.advanced.title')}
+                  </span>
+                  <span className={styles.advancedHint}>
+                    {t('config_management.advanced.hint')}
+                  </span>
+                </summary>
+                <div className={styles.advancedBody}>{ADVANCED_SECTION_IDS.map(renderSection)}</div>
+              </details>
+            </div>
+          </DirtyFieldIdsContext.Provider>
         </div>
       )}
 

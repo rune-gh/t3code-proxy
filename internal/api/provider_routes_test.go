@@ -163,6 +163,7 @@ func TestProviderScopedExecution(t *testing.T) {
 		{path: "/v1/completions", body: `{"model":"MODEL","prompt":"hi"}`},
 		{path: "/v1/responses", body: `{"model":"MODEL","input":"hi"}`},
 		{path: "/v1/responses", body: `{"model":"MODEL","input":"hi","stream":true}`},
+		{path: "/v1/responses/compact", body: `{"model":"MODEL","input":"hi"}`},
 		{path: "/v1/messages", body: `{"model":"MODEL","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}`},
 		{path: "/v1/messages", body: `{"model":"MODEL","max_tokens":32,"messages":[{"role":"user","content":"hi"}],"stream":true}`},
 		{path: "/v1/messages/count_tokens", body: `{"model":"MODEL","messages":[{"role":"user","content":"hi"}]}`},
@@ -200,6 +201,9 @@ func TestProviderScopedErrorsAndAuth(t *testing.T) {
 	}{
 		{http.MethodGet, "/v1/models", "error.message"},
 		{http.MethodPost, "/v1/chat/completions", "error.message"},
+		{http.MethodGet, "/v1/responses", "error.message"},
+		{http.MethodPost, "/v1/responses/compact", "error.message"},
+		{http.MethodPost, "/v1/alpha/search", "error.message"},
 		{http.MethodPost, "/v1/messages", "error.message"},
 		{http.MethodGet, "/v1beta/models", "error.message"},
 		{http.MethodPost, "/v1beta/models/x:generateContent", "error.message"},

@@ -67,6 +67,32 @@ describe('pool account rows', () => {
     expect(rows.find((row) => row.authIndex === 'b')?.weekly?.remaining).toBe(80);
   });
 
+  test('shows no Fable weekly reading for a Claude plan without Fable', () => {
+    const withFable = (authIndex: string, used: number): QuotaHistorySample => {
+      const base = sample(authIndex, NOW - HOUR, 20, 30);
+      return {
+        ...base,
+        windows: {
+          ...base.windows,
+          seven_day_fable: { usedPercent: used, resetsAt: NOW + 30 * HOUR, periodHours: 168 },
+        },
+      };
+    };
+    const rows = buildPoolAccountRows(
+      history([withFable('max', 40), withFable('pro', 31)]),
+      'claude',
+      [
+        { ...account('max'), plan: 'max_5x' },
+        { ...account('pro'), plan: 'pro' },
+      ],
+      NOW
+    );
+    const byId = Object.fromEntries(rows.map((row) => [row.authIndex, row]));
+    expect(byId.max.scopedWeekly?.remaining).toBe(60);
+    expect(byId.pro.scopedWeekly).toBeNull();
+    expect(byId.pro.weekly?.remaining).toBe(80);
+  });
+
   test('keeps the last good reading and surfaces a newer failure', () => {
     const rows = buildPoolAccountRows(
       history([

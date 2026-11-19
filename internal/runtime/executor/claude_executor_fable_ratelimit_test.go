@@ -913,3 +913,147 @@ func TestClaudeExecutor_AuthManager_FableOnlyRejectionWithout5hHeadersAllowsOpus
 		t.Fatalf("auth remained unavailable after Opus succeeded; want unavailable = false")
 	}
 }
+
+// claudeCreditsRequiredBody is the refusal Anthropic sends when the account's
+// plan does not include the model and usage credits are off (captured from a
+// Pro account asking for Fable 5.2 on 2026-11-17).
+const claudeCreditsRequiredBody = `{"type":"error","error":{"type":"rate_limit_error","message":"Usage credits are required for this model.","details":{"error_code":"credits_required","can_user_purchase_credits":true,"has_chargeable_saved_payment_method":true,"disabled_reason":"org_level_disabled","exhausted_included_allowance":false,"model":"claude-fable-5-2","model_display_name":"Fable"}}}`
+
+func claudeCreditsRequiredHeaders(reset time.Time) http.Header {
+	return http.Header{
+		"Anthropic-Ratelimit-Unified-Credits-Can-Purchase":       []string{"true"},
+		"Anthropic-Ratelimit-Unified-Credits-Exhausted-Included": []string{"false"},
+		"Anthropic-Ratelimit-Unified-Overage-Disabled-Reason":    []string{"org_level_disabled"},
+		"Anthropic-Ratelimit-Unified-Reset":                      []string{strconv.FormatInt(reset.Unix(), 10)},
+		"X-Should-Retry":                                         []string{"false"},
+	}
+}
+
+func TestClassifyClaudeUpstreamError_CreditsRequiredCoolsModelUntilReset(t *testing.T) {
+	// The billing-period reset is two weeks out, past the seven-day bound that
+	// ordinary rate-limit resets are held to.
+	reset := time.Now().Add(14 * 24 * time.Hour)
+
+	err := classifyClaudeUpstreamError(http.StatusTooManyRequests, claudeCreditsRequiredHeaders(reset), []byte(claudeCreditsRequiredBody))
+
+	var scoped interface {
+		IsCredentialScoped() bool
+		IsRequestScoped() bool
+	}
+	if !errors.As(err, &scoped) || scoped == nil {
+		t.Fatalf("expected %T to expose its scope", err)
+	}
+	if scoped.IsCredentialScoped() || scoped.IsRequestScoped() {
+		t.Fatalf("credits_required scope: credential=%v request=%v, want model-scoped", scoped.IsCredentialScoped(), scoped.IsRequestScoped())
+	}
+	var retry retryAfterProvider
+	if !errors.As(err, &retry) || retry == nil || retry.RetryAfter() == nil {
+		t.Fatal("credits_required refusal carried no retry deadline; the generic backoff would retry it within seconds")
+	}
+	if got := time.Now().Add(*retry.RetryAfter()); got.Before(reset.Add(-time.Minute)) || got.After(reset.Add(time.Minute)) {
+		t.Fatalf("retry deadline = %v, want the upstream reset %v", got, reset)
+	}
+	if err.Error() != claudeCreditsRequiredBody {
+		t.Fatalf("body was rewritten:\n got  %s\n want %s", err.Error(), claudeCreditsRequiredBody)
+	}
+}
+
+func TestClassifyClaudeUpstreamError_CreditsRequiredWithoutResetStaysModelScoped(t *testing.T) {
+	err := classifyClaudeUpstreamError(http.StatusTooManyRequests, nil, []byte(claudeCreditsRequiredBody))
+
+	var scoped interface{ IsCredentialScoped() bool }
+	if !errors.As(err, &scoped) || scoped == nil || scoped.IsCredentialScoped() {
+		t.Fatalf("credits_required without headers = %T, want a model-scoped rate-limit error", err)
+	}
+	var retry retryAfterProvider
+	if errors.As(err, &retry) && retry != nil && retry.RetryAfter() != nil {
+		t.Fatalf("expected nil RetryAfter without a reset header, got %v", *retry.RetryAfter())
+	}
+}
+
+func TestClaudeExecutor_AuthManager_CreditsRequiredSkipsModelUntilReset(t *testing.T) {
+	var fableAttempts, opusAttempts atomic.Int32
+	reset := time.Now().Add(14 * 24 * time.Hour)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, errRead := io.ReadAll(r.Body)
+		if errRead != nil {
+			http.Error(w, "failed to read sanitized test request", http.StatusBadRequest)
+			return
+		}
+		switch {
+		case strings.Contains(string(body), `"model":"claude-fable-5-2"`):
+			fableAttempts.Add(1)
+			for key, values := range claudeCreditsRequiredHeaders(reset) {
+				w.Header()[key] = values
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(claudeCreditsRequiredBody))
+		case strings.Contains(string(body), `"model":"claude-opus-5"`):
+			opusAttempts.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"msg-opus-ok","type":"message","model":"claude-opus-5","role":"assistant","content":[{"type":"text","text":"ok"}]}`))
+		default:
+			http.Error(w, "unexpected sanitized test model", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	manager := cliproxyauth.NewManager(nil, nil, nil)
+	manager.SetRetryConfig(0, 0, 0)
+	manager.RegisterExecutor(NewClaudeExecutor(&config.Config{DisableCooling: false}))
+
+	auth := &cliproxyauth.Auth{
+		ID:       uuid.NewString() + "-credits-required",
+		Provider: "claude",
+		Attributes: map[string]string{
+			"api_key":  "sanitized-test-key",
+			"base_url": server.URL,
+		},
+	}
+	reg := registry.GetGlobalRegistry()
+	reg.RegisterClient(auth.ID, "claude", []*registry.ModelInfo{{ID: "claude-fable-5-2"}, {ID: "claude-opus-5"}})
+	t.Cleanup(func() { reg.UnregisterClient(auth.ID) })
+	if _, err := manager.Register(context.Background(), auth); err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+
+	execute := func(model string) error {
+		_, err := manager.Execute(context.Background(), []string{"claude"}, cliproxyexecutor.Request{
+			Model:   model,
+			Payload: []byte(`{"model":"` + model + `","messages":[{"role":"user","content":[{"type":"text","text":"test"}]}]}`),
+		}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatClaude})
+		return err
+	}
+
+	if err := execute("claude-fable-5-2"); err == nil {
+		t.Fatal("expected the Fable request to be refused")
+	}
+	updatedAuth, ok := manager.GetByID(auth.ID)
+	if !ok || updatedAuth == nil {
+		t.Fatal("auth not found")
+	}
+	fableState := updatedAuth.ModelStates["claude-fable-5-2"]
+	if fableState == nil {
+		t.Fatal("fable model state not found")
+	}
+	if fableState.NextRetryAfter.Before(reset.Add(-time.Minute)) {
+		t.Fatalf("fable cooldown ends %v, want the upstream reset %v", fableState.NextRetryAfter, reset)
+	}
+
+	// A second Fable request must not pay another round trip to the same refusal.
+	if err := execute("claude-fable-5-2"); err == nil {
+		t.Fatal("expected the second Fable request to be refused")
+	}
+	if got := fableAttempts.Load(); got != 1 {
+		t.Fatalf("Fable upstream attempts = %d, want 1", got)
+	}
+
+	if err := execute("claude-opus-5"); err != nil {
+		t.Fatalf("expected Opus to keep working on the same credential, got: %v", err)
+	}
+	if got := opusAttempts.Load(); got != 1 {
+		t.Fatalf("Opus upstream attempts = %d, want 1", got)
+	}
+}

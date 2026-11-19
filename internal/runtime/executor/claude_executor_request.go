@@ -899,6 +899,18 @@ func classifyClaudeUpstreamErrorWithCooling(statusCode int, headers http.Header,
 		if claudeBodyIndicatesFastModeCredits(body) {
 			return claudeEntitlementError{err}
 		}
+		if claudeBodyIndicatesModelCreditsRequired(body) {
+			// The account's plan no longer includes this model (Fable on a Pro
+			// plan, for example) and usage credits are off. The rest of the
+			// account stays healthy, so cool only this model on this credential,
+			// until the reset Anthropic names. Without that deadline the generic
+			// backoff restarts at one second and every request pays a round trip
+			// to the same refusal.
+			if reset := helps.ParseClaudeCreditsRequiredReset(headers, time.Now()); reset != nil {
+				err.retryAfter = reset
+			}
+			return claudeRateLimitError{statusErr: err, credentialScoped: false}
+		}
 		// Ordinary model-level Claude 429 (not a unified 5h/7d rejection)
 		return claudeRateLimitError{statusErr: err, credentialScoped: false}
 	}
@@ -915,6 +927,19 @@ func claudeBodyIndicatesFastModeCredits(body []byte) bool {
 	return strings.Contains(message, "fast request rejected") ||
 		(strings.Contains(message, "fast") &&
 			(strings.Contains(message, "usage credits") || strings.Contains(message, "credits are required")))
+}
+
+// claudeBodyIndicatesModelCreditsRequired matches Anthropic's refusal of a model
+// the account can only use with usage credits:
+// {"error":{"message":"Usage credits are required for this model.",
+// "details":{"error_code":"credits_required",...}}}. Fast-mode refusals are
+// matched first by claudeBodyIndicatesFastModeCredits.
+func claudeBodyIndicatesModelCreditsRequired(body []byte) bool {
+	if strings.EqualFold(strings.TrimSpace(ojson.GetBytesNoCopy(body, "error.details.error_code").String()), "credits_required") {
+		return true
+	}
+	message := strings.ToLower(ojson.GetBytesNoCopy(body, "error.message").String())
+	return strings.Contains(message, "usage credits are required for this model")
 }
 
 // claudeRequestedBetas collects every beta the caller asked for, from the

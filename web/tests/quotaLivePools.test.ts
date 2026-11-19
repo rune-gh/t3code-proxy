@@ -66,6 +66,13 @@ describe('live reads as history windows', () => {
 
   test('nothing until a read succeeds', () => {
     expect(liveReadFor('xai', undefined)).toBeNull();
+    // Claude plans read as the panel's i18n ids map onto the hub's plan keys.
+    expect(
+      liveReadFor('claude', { status: 'success', windows: [], planType: 'plan_max5' })?.plan
+    ).toBe('max_5x');
+    expect(
+      liveReadFor('claude', { status: 'success', windows: [], planType: 'plan_pro' })?.plan
+    ).toBe('pro');
     expect(liveReadFor('xai', { status: 'error', billing: null })).toBeNull();
     expect(liveReadFor('xai', { status: 'loading', billing: null })).toBeNull();
   });

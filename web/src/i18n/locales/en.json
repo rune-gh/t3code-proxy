@@ -95,7 +95,6 @@
     "restoring": "Signing in…"
   },
   "header": {
-    "refresh_all": "Refresh data",
     "logout": "Sign out"
   },
   "connection": {
@@ -1755,7 +1754,7 @@
     "window_group_account": "Whole account",
     "plan_weights": "Plan weights",
     "plan_weights_for": "{{provider}} plan weights",
-    "plan_weights_hint": "How much one account on each plan counts toward the pool.",
+    "plan_weights_hint": "How big each plan's allowance is next to the others. A Max 5x account has five times a Pro account's allowance, so 10% left on it is worth 50% of a Pro. Pool totals and routing both scale accounts by these weights; the defaults match the plans, so change one only if an account's real allowance differs.",
     "plan_weights_hub": "Saved on the hub, which routes with the same weights.",
     "plan_weights_local": "Saved in this browser only: this hub does not store plan weights.",
     "plan_weights_loading": "Loading weights from the hub…",
@@ -1873,8 +1872,6 @@
   },
   "routing": {
     "title": "Routing",
-    "refresh": "Refresh",
-    "refresh_discards": "Refreshing discards the unsaved arrangement.",
     "loading": "Loading routing…",
     "load_failed": "Could not load routing: {{message}}",
     "retry": "Retry",
@@ -2231,7 +2228,6 @@
     "type_error": "Error",
     "request_log_updated": "Request logging setting updated",
     "login_storage_cleared": "Local login data cleared",
-    "data_refreshed": "Data refreshed successfully",
     "connection_required": "Please establish connection first",
     "refresh_failed": "Refresh failed",
     "update_failed": "Update failed",

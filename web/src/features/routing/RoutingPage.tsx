@@ -15,7 +15,6 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import {
   RoutingConflictError,
@@ -74,7 +73,6 @@ export function RoutingPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
   const showNotification = useNotificationStore((state) => state.showNotification);
-  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const nowMs = useSyncExternalStore(
     cooldownClock.subscribe,
@@ -177,21 +175,6 @@ export function RoutingPage() {
   const invalid = draft ? Object.keys(settingsErrors(draft.settings)).length > 0 : false;
   const strategy = draft?.settings.strategy ?? null;
   const resetOrder = useResetOrder(connected && strategy === 'soonest-reset-first');
-
-  // The global header refresh reloads the board; with a draft it asks first.
-  const refresh = useCallback(() => {
-    if (!dirty) return load();
-    showConfirmation({
-      title: t('routing.unsaved_title'),
-      message: t('routing.refresh_discards'),
-      confirmText: t('routing.refresh'),
-      cancelText: t('routing.unsaved_cancel'),
-      variant: 'danger',
-      onConfirm: () => load(),
-    });
-  }, [dirty, load, showConfirmation, t]);
-
-  useHeaderRefresh(refresh);
 
   const { allowNextNavigation } = useUnsavedChangesGuard({
     shouldBlock: dirty,

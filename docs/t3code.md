@@ -39,6 +39,27 @@ Point the machine's Codex at the hub in `~/.codex/config.toml` as in the setup g
 choose **Use existing CLI** for Codex. That option reads `config.toml`. **Continue with ChatGPT**
 signs in directly and does not go through the hub.
 
+Codex signed in with a hub access key downloads a model list only when its provider names one
+with `model_catalog_url`. Without it Codex offers only its built-in list, so models the hub gains
+later (a new GPT release) never appear. Point `model_catalog_url` at the hub:
+
+```toml
+model_provider = "hub"
+
+[model_providers.hub]
+name = "t3code-proxy hub"
+base_url = "https://<hub>.<tailnet>.ts.net:8317/provider/codex/v1"
+model_catalog_url = "https://<hub>.<tailnet>.ts.net:8317/provider/codex/v1/models"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = true
+```
+
+Codex then reads the catalog from the hub with the same access key, keeps it for five minutes and
+refreshes it on its own, so nothing has to run on a timer. Do not also set `model_catalog_json`:
+a fixed catalog file replaces the live one. `/provider/codex/v1` lists only the Codex accounts'
+models and serves everything Codex calls (Responses over HTTP and WebSocket, compaction, search).
+
 ## Antigravity (Gemini)
 
 The hub can serve a Google account's whole Antigravity catalogue (Gemini, and the Claude and

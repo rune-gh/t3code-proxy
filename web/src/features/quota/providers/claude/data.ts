@@ -32,6 +32,7 @@ import {
   isDisabledAuthFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import { claudePlanIncludesFable } from '@/utils/quota/claudePlans';
 import type { QuotaProviderData } from '../types';
 
 export type ClaudeQuotaData = {
@@ -247,12 +248,6 @@ const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<Claud
     throw new Error(t('claude_quota.empty_windows'));
   }
   const dollarWindows = snapshot.dollarWindows;
-  // Full dollar balances get their own amount/reset rows, not a second plan meter.
-  const windows = buildClaudeQuotaWindows(payload, t).filter(
-    (window) =>
-      window.id !== 'cloud-session-credits' ||
-      !dollarWindows.some((balance) => balance.key === 'iguana_necktie')
-  );
   const planType =
     profileResult.status === 'fulfilled' &&
     profileResult.value.statusCode >= 200 &&
@@ -261,6 +256,15 @@ const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<Claud
           parseClaudeProfilePayload(profileResult.value.body ?? profileResult.value.bodyText)
         )
       : null;
+  const includesFable = claudePlanIncludesFable(planType);
+  const windows = buildClaudeQuotaWindows(payload, t).filter(
+    (window) =>
+      // Full dollar balances get their own amount/reset rows, not a second plan meter.
+      (window.id !== 'cloud-session-credits' ||
+        !dollarWindows.some((balance) => balance.key === 'iguana_necktie')) &&
+      // The plan has no Fable, so its Fable limit is not usable capacity.
+      (includesFable || window.id !== 'seven-day-fable')
+  );
 
   return {
     windows,

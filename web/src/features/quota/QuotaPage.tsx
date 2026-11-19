@@ -15,7 +15,6 @@
  *   when first visible, never polls;
  * - cacheGeneration session isolation and request-id dedupe (see useQuotaBatchLoader);
  * - after the account list changes, quota caches are pruned per provider;
- * - useHeaderRefresh has one slot: this page registers it, and a global refresh reloads accounts.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,7 +30,6 @@ import { SegmentedControl, Tabs } from '@/components/ui/Tabs';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNow } from '@/hooks/useNow';
 import { useAuthStore, useNotificationStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
@@ -208,8 +206,6 @@ export function QuotaPage() {
       if (isCurrent()) setLoading(false);
     }
   }, [connectionStatus, sessionGeneration, t]);
-
-  useHeaderRefresh(loadFiles);
 
   useEffect(() => {
     void loadFiles();

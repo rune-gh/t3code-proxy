@@ -6,7 +6,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { IconAlertTriangle, IconSearch } from '@/components/ui/icons';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useAuthStore } from '@/stores';
 import type { PluginListEntry, PluginStoreEntry } from '@/types';
 import { resolvePluginAssetURL } from './pluginResources';
@@ -77,7 +76,6 @@ export function PluginsPage() {
     await Promise.all([loadInstalled(), loadStore()]);
   }, [loadInstalled, loadStore]);
 
-  useHeaderRefresh(loadAll, connected);
 
   useEffect(() => {
     void loadAll();

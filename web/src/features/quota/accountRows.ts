@@ -6,6 +6,7 @@
  */
 
 import type { QuotaBudget, QuotaHistory, QuotaHistorySample } from '@/services/api';
+import { claudePlanIncludesFable } from '@/utils/quota/claudePlans';
 import {
   MINUTE_MS,
   isLivePoolProvider,
@@ -161,8 +162,13 @@ export function buildPoolAccountRows(
   const rows: PoolAccountRow[] = accounts.map((account) => {
     const samples = byAccount.get(account.authIndex) ?? [];
     const fiveHour = named ? readWindow(samples, ROW_WINDOW_KEYS.fiveHour, now) : null;
+    const recorded = historyAccounts.get(account.authIndex);
+    const plan = account.plan ?? recorded?.plan ?? null;
+    // A plan without Fable has no Fable capacity, whatever limit Anthropic still reports.
     const scopedWeekly =
-      provider === 'claude' ? readWindow(samples, ROW_WINDOW_KEYS.scopedWeekly, now) : null;
+      provider === 'claude' && claudePlanIncludesFable(plan)
+        ? readWindow(samples, ROW_WINDOW_KEYS.scopedWeekly, now)
+        : null;
     const windows: Record<string, WindowReading | null> = {};
     if (named) {
       windows[ROW_WINDOW_KEYS.fiveHour] = fiveHour;
@@ -186,8 +192,6 @@ export function buildPoolAccountRows(
       ? (weekly !== null && weekly.remaining <= EPSILON) ||
         (fiveHour !== null && fiveHour.remaining <= EPSILON)
       : readings.some((reading) => reading.remaining <= EPSILON);
-    const recorded = historyAccounts.get(account.authIndex);
-    const plan = account.plan ?? recorded?.plan ?? null;
     return {
       ...account,
       plan,
