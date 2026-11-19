@@ -262,6 +262,79 @@ func TestStartAndStopSuccess(t *testing.T) {
 	}
 }
 
+// TestConfigReloadSurvivesAtomicRenameSaves pins the directory-level config
+// watch: tools that save by writing a temp file and renaming it over the config
+// replace the file, which used to drop a file-level watch so every later save
+// was ignored until restart.
+func TestConfigReloadSurvivesAtomicRenameSaves(t *testing.T) {
+	tmpDir := t.TempDir()
+	authDir := filepath.Join(tmpDir, "auth")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatalf("failed to create auth dir: %v", err)
+	}
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	writeConfigAtomically := func(port int) {
+		t.Helper()
+		data, errMarshal := yaml.Marshal(&config.Config{
+			Port:               port,
+			AuthDir:            authDir,
+			CredentialInFlight: config.DefaultCredentialInFlightConfig(),
+		})
+		if errMarshal != nil {
+			t.Fatalf("failed to marshal config: %v", errMarshal)
+		}
+		tmpPath := filepath.Join(tmpDir, fmt.Sprintf("config.yaml.tmp-%d", port))
+		if errWrite := os.WriteFile(tmpPath, data, 0o644); errWrite != nil {
+			t.Fatalf("failed to write temp config: %v", errWrite)
+		}
+		if errRename := os.Rename(tmpPath, configPath); errRename != nil {
+			t.Fatalf("failed to rename temp config over config: %v", errRename)
+		}
+	}
+	writeConfigAtomically(1000)
+
+	ports := make(chan int, 16)
+	w, err := NewWatcher(configPath, authDir, func(cfg *config.Config) {
+		if cfg != nil {
+			ports <- cfg.Port
+		}
+	})
+	if err != nil {
+		t.Fatalf("failed to create watcher: %v", err)
+	}
+	w.SetConfig(&config.Config{Port: 1000, AuthDir: authDir})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if errStart := w.Start(ctx); errStart != nil {
+		t.Fatalf("expected Start to succeed: %v", errStart)
+	}
+	defer func() {
+		if errStop := w.Stop(); errStop != nil {
+			t.Errorf("failed to stop watcher: %v", errStop)
+		}
+	}()
+
+	waitForPort := func(want int) {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for {
+			select {
+			case got := <-ports:
+				if got == want {
+					return
+				}
+			case <-deadline:
+				t.Fatalf("config reload with port %d was not observed", want)
+			}
+		}
+	}
+	// Two consecutive atomic saves: the second one is what a file-level watch missed.
+	writeConfigAtomically(2001)
+	waitForPort(2001)
+	writeConfigAtomically(2002)
+	waitForPort(2002)
+}
+
 func TestStartFailsWhenConfigMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	authDir := filepath.Join(tmpDir, "auth")

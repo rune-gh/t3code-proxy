@@ -85,6 +85,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Config hot reload keeps working after the config file is saved by renaming a temp file over
+  it, as many editors and tools do. The watcher used to watch the file itself, so after one
+  such save every later change was ignored until the hub restarted. It now watches the config
+  file's directory and filters events down to the config path.
 - Two Mistral keys of one customer (a console key and a Vibe key) are recorded as one account,
   so the monthly API and Vibe Code budgets are not counted twice.
 
