@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -953,6 +955,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		var completedResponseID string
 		var completedPendingToolCallIDs []string
 		var forwardErrMsg *interfaces.ErrorMessage
+		archiveCtx, archiveTurn := tracearchive.Begin(c.Request.Context(), true, payload)
 
 		for {
 			lastAttemptedAuthID = pinnedAuthID
@@ -965,6 +968,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			turnStartEpoch := inputEpoch.Load()
 			var cliCancel handlers.APIHandlerCancelFunc
 			cliCtx, cliCancel = h.GetContextWithCancel(h, c, executionParent)
+			cliCtx = tracearchive.Inherit(cliCtx, archiveCtx)
 			cliCtx = cliproxyexecutor.WithDownstreamWebsocket(cliCtx)
 			cliCtx = cliproxyexecutor.WithLocalWebsocketTurnTracker(cliCtx)
 			cliCtx = cliproxyexecutor.WithWebsocketInputEpoch(cliCtx, &inputEpoch, msgEpoch)
@@ -1118,6 +1122,13 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 				},
 			)
 			cliCancel(nil)
+			if errForward != nil {
+				archiveTurn.Finish(http.StatusBadGateway)
+			} else if forwardErrMsg == nil {
+				archiveTurn.Finish(http.StatusOK)
+			} else if !failoverInPlace || cliproxyexecutor.IsUpstreamWebsocketTurnError(forwardErrMsg.Error) {
+				archiveTurn.Finish(forwardErrMsg.StatusCode)
+			}
 			if errForward != nil {
 				wsTerminateErr = errForward
 				switch {

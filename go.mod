@@ -3,6 +3,7 @@ module github.com/rune-oai/t3code-proxy
 go 1.26.10
 
 require (
+	filippo.io/age v1.2.1
 	github.com/MoeForge/moego v0.1.0-alpha.3
 	github.com/andybalholm/brotli v1.0.6
 	github.com/atotto/clipboard v0.1.4

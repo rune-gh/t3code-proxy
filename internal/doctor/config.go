@@ -16,6 +16,10 @@ import (
 // decoded directly with yaml.v3 so the doctor does not depend on the server's
 // config package.
 type hubConfig struct {
+	TraceArchive struct {
+		Enabled    bool     `yaml:"enabled"`
+		Recipients []string `yaml:"recipients"`
+	} `yaml:"trace-archive"`
 	Host   string   `yaml:"host"`
 	Port   int      `yaml:"port"`
 	Keys   []string `yaml:"api-keys"`
@@ -99,6 +103,9 @@ func checkConfig(e *env) Result {
 	c := e.cfg
 	host := c.Server.Host
 	var problems, warnings []string
+	if c.TraceArchive.Enabled && len(c.TraceArchive.Recipients) == 0 {
+		warnings = append(warnings, "trace archive has no age recipients; sealed history is plaintext")
+	}
 	switch host {
 	case "127.0.0.1", "localhost", "::1":
 	case "":

@@ -195,6 +195,8 @@ export const FIELD_VALUE_KEYS: Record<string, readonly string[]> = {
   payloadOverrideRawRules: ['payloadOverrideRawRules'],
   payloadFilterRules: ['payloadFilterRules'],
   // ── quota history ─────────────────────────────────────────────────────────
+  traceArchiveEnabled: ['traceArchiveEnabled'],
+  traceArchiveDir: ['traceArchiveDir'],
   requestLog: ['requestLog'],
   quotaHistoryEnabled: ['quotaHistoryEnabled'],
   quotaHistoryInterval: ['quotaHistoryInterval'],

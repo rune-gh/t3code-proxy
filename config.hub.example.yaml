@@ -5,6 +5,21 @@
 # documented in config.example.yaml.
 config-version: 8
 
+# Durable model-call history. Live files contain private conversation data.
+# See docs/trace-archive.md for encryption, recovery, and export.
+# trace-archive:
+#   enabled: false
+#   dir: ""                  # default: <auth-dir>/traces
+#   recipients: []           # age1... X25519 public keys
+#   queue-size: 32
+#   max-local-size-mb: 0     # zero disables local eviction
+#   exclude-endpoints: []
+#   exclude-models: []
+#   upload:
+#     enabled: false
+#     binary: rclone
+#     remote: gdrive:t3code-proxy-traces
+
 server:
   # Listen on loopback only. Tailscale Serve publishes the port to your tailnet:
   #   tailscale serve --bg --https=8317 http://127.0.0.1:8317

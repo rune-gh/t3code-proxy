@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/joho/godotenv"
 	configaccess "github.com/rune-oai/t3code-proxy/internal/access/config_access"
 	"github.com/rune-oai/t3code-proxy/internal/api"
@@ -89,6 +91,9 @@ func run() (exitStatus int) {
 
 	// "doctor" checks whether this machine is ready to act as a hub. It needs
 	// no running server and never reads credentials.
+	if len(os.Args) > 1 && os.Args[1] == "traces" {
+		return tracearchive.Main(os.Args[2:], os.Stdout, os.Stderr)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		return doctor.Main(context.Background(), os.Args[2:], os.Stdout, os.Stderr)
 	}
@@ -190,7 +195,7 @@ func run() (exitStatus int) {
 	flag.CommandLine.Usage = func() {
 		out := flag.CommandLine.Output()
 		_, _ = fmt.Fprintf(out, "Usage of %s\n", os.Args[0])
-		_, _ = fmt.Fprint(out, "\nCommands:\n  doctor     Check whether this machine is ready to run as a hub (doctor -h for flags)\n  discover   Find gateways on the local network (discover -h for flags)\n\nFlags:\n")
+		_, _ = fmt.Fprint(out, "\nCommands:\n  doctor     Check whether this machine is ready to run as a hub (doctor -h for flags)\n  discover   Find gateways on the local network (discover -h for flags)\n  traces     Export, verify or summarize archived calls\n\nFlags:\n")
 		flag.CommandLine.VisitAll(func(f *flag.Flag) {
 			if f.Name == "password" {
 				return

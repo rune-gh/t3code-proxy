@@ -1412,6 +1412,13 @@
           "antigravity_signature_strict": "Strict bypass signature validation",
           "antigravity_signature_strict_desc": "Only applies when the signature cache is disabled; validates the full Claude protobuf tree",
           "request_log": "Request logs",
+          "trace_archive": "Trace archive",
+          "trace_archive_record": "Archive model calls",
+          "trace_archive_desc": "Save prompts, tool calls and responses. Set age recipients in YAML to encrypt sealed archives.",
+          "trace_archive_dir": "Archive directory",
+          "trace_archive_dir_hint": "Defaults to the traces folder in your auth directory.",
+          "trace_archive_status": "{{calls}} calls today · {{queued}} queued · {{dropped}} dropped",
+          "trace_archive_status_failed": "Archive status unavailable",
           "request_log_desc": "Record full request and response bodies. Use only while debugging; logs can contain prompts.",
           "logs_max_size_desc": "Oldest files are removed above this total. 0 keeps every file."
         },

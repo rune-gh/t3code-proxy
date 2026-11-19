@@ -726,6 +726,20 @@ export const CONFIG_FIELD_SEARCH_INDEX: ConfigFieldSearchEntry[] = [
     keywords: ['payload', 'rule', 'filter'],
   },
   {
+    fieldId: 'traceArchiveEnabled',
+    sectionId: 'logging',
+    labelKey: L('sections.system.trace_archive'),
+    yamlKeys: ['trace-archive', 'enabled'],
+    keywords: ['trace', 'archive'],
+  },
+  {
+    fieldId: 'traceArchiveDir',
+    sectionId: 'logging',
+    labelKey: L('sections.system.trace_archive_dir'),
+    yamlKeys: ['trace-archive', 'dir'],
+    keywords: ['trace', 'archive', 'folder'],
+  },
+  {
     fieldId: 'requestLog',
     sectionId: 'logging',
     labelKey: L('sections.system.request_log'),

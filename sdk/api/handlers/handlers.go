@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -645,6 +647,7 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 		}
 		parentCtx = httptransport.InheritDecorator(parentCtx, requestCtx)
 		parentCtx = logging.InheritDeferredCapture(parentCtx, requestCtx)
+		parentCtx = tracearchive.Inherit(parentCtx, requestCtx)
 	}
 	if c != nil && logging.DeferredAPICaptureFromContext(parentCtx) == nil && !logging.DeferredAPIRequestCaptureDisabled(parentCtx) {
 		if value, exists := c.Get(logging.DeferredAPIResponseContextKey); exists {

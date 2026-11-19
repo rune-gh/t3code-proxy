@@ -723,6 +723,14 @@ func (m *Manager) RegisterNamed(name string, plugin Plugin) {
 	m.pluginsMu.Unlock()
 }
 
+// WithRecordObserver attaches a request-local observer for metadata that must
+// be joined before an HTTP handler or websocket turn completes.
+func WithRecordObserver(ctx context.Context, observe func(Record)) context.Context {
+	return context.WithValue(ctx, recordObserverKey{}, observe)
+}
+
+type recordObserverKey struct{}
+
 // Publish enqueues a usage record for processing. If no plugin is registered
 // the record will be discarded downstream.
 func (m *Manager) Publish(ctx context.Context, record Record) {
@@ -769,6 +777,9 @@ func (m *Manager) Publish(ctx context.Context, record Record) {
 		}
 	}
 	ctx = WithCapturedIdentity(ctx, record.APIKey, record.AccessProvider, record.IsNativeKey)
+	if observe, ok := ctx.Value(recordObserverKey{}).(func(Record)); ok && observe != nil {
+		observe(record)
+	}
 	// ensure worker is running even if Start was not called explicitly
 	m.Start(context.Background())
 	m.mu.Lock()
