@@ -13,6 +13,7 @@ type ModelInfo struct {
 // ReasoningEffort represents reasoning effort level in Grok Shell model entries.
 type ReasoningEffort struct {
 	Value string `json:"value"`
+	Label string `json:"label,omitempty"`
 }
 
 // ModelEntry represents a single model entry formatted for Grok Shell.
@@ -49,10 +50,15 @@ func BuildResponse(models []ModelInfo) Response {
 
 		var efforts []ReasoningEffort
 		for _, level := range m.ReasoningLevels {
-			trimmed := strings.TrimSpace(level)
-			if trimmed != "" {
-				efforts = append(efforts, ReasoningEffort{Value: trimmed})
+			value := strings.TrimSpace(level)
+			if value == "" {
+				continue
 			}
+			effort := ReasoningEffort{Value: value}
+			if value == "xhigh" {
+				effort.Label = "Extra High"
+			}
+			efforts = append(efforts, effort)
 		}
 
 		entry := ModelEntry{
