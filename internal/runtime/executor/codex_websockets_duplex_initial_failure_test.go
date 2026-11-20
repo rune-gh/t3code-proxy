@@ -1,23 +1,56 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/config"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
 	auth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 	core "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
 	translator "github.com/rune-oai/t3code-proxy/sdk/translator"
 )
+
+// export drains the recorder and reads the live calls after the executor finishes.
+func beginTestDuplexArchive(t *testing.T, ctx context.Context, body []byte) (context.Context, *tracearchive.Capture, func() []ojson.Result) {
+	t.Helper()
+	dir := t.TempDir()
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := new(tracearchive.Recorder)
+	if err = r.Apply(&config.Config{TraceArchive: config.TraceArchiveConfig{Dir: dir, Enabled: true, Recipients: []string{id.Recipient().String()}}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(r.Close)
+	req := httptest.NewRequestWithContext(ctx, "GET", "/v1/responses", nil)
+	ctx, c := tracearchive.Begin(r.Bind(req, "openai-responses", "test"), true, body)
+	return ctx, c, func() []ojson.Result {
+		r.Close()
+		var out, stderr bytes.Buffer
+		if tracearchive.Main([]string{"export", "--dir", dir}, &out, &stderr) != 0 {
+			t.Fatal(stderr.String())
+		}
+		var calls []ojson.Result
+		for line := range strings.Lines(out.String()) {
+			calls = append(calls, ojson.Parse(line))
+		}
+		return calls
+	}
+}
 
 func TestCodexDuplexInitialFailure(t *testing.T) {
 	for _, tc := range []struct {
@@ -137,6 +170,7 @@ func TestCodexDuplexInitialFailure(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
+					ctx, initialCapture, export := beginTestDuplexArchive(t, ctx, req.Payload)
 					before := time.Now()
 					result, err := manager.ExecuteStream(ctx, []string{"codex"}, req, opts)
 					if err != nil {
@@ -154,6 +188,13 @@ func TestCodexDuplexInitialFailure(t *testing.T) {
 							t.Fatalf("rejected account payload escaped bootstrap: %s", chunk.Payload)
 						}
 					}
+					initialCapture.Finish(200)
+					t.Run("ArchiveAfterFailover", func(t *testing.T) {
+						calls := export()
+						if len(calls) != 1 || calls[0].Get("status").Int() != 200 || calls[0].Get("failed").Bool() || calls[0].Get("response.id").String() != "healthy-response" || len(calls[0].Get("attempts").Array()) != 2 || calls[0].Get("attempts.0.status").Int() != int64(tc.status) || calls[0].Get("attempts.1.status").Int() != 200 {
+							t.Fatalf("failover archive: %v", calls)
+						}
+					})
 					if !completed {
 						t.Fatal("healthy account never completed")
 					}

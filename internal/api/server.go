@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/gin-gonic/gin"
 	managementHandlers "github.com/rune-oai/t3code-proxy/internal/api/handlers/management"
 	"github.com/rune-oai/t3code-proxy/internal/api/middleware"
@@ -41,6 +43,7 @@ import (
 // Server represents the main API server.
 // It encapsulates the Gin engine, HTTP server, handlers, and configuration.
 type Server struct {
+	archive tracearchive.Recorder
 	// engine is the Gin web framework engine instance.
 	engine *gin.Engine
 
@@ -228,6 +231,8 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 
 	engine.Use(corsMiddleware())
 	engine.Use(s.responseCompressionMiddleware())
+	s.configureArchive(cfg)
+	engine.Use(s.traceMiddleware)
 	openai.SetResponsesWebsocketCompressionEnabled(cfg.Codex.WebsocketCompressionEnabled())
 	s.wsAuthEnabled.Store(cfg.WebsocketAuth)
 	s.exampleAPIKeySafeModeActive.Store(s.exampleAPIKeySafeModeRequired(cfg))
@@ -453,6 +458,7 @@ func (s *Server) Start() error {
 //   - error: An error if the server fails to stop
 func (s *Server) Stop(ctx context.Context) error {
 	log.Debug("Stopping API server...")
+	defer s.archive.Close()
 
 	if s.keepAliveEnabled {
 		select {

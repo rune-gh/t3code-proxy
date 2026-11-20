@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/config"
@@ -861,6 +863,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 // codexWebsocketPrepared contains the request pipeline output shared by the
 // ordinary per-response stream and subsequent creates on a duplex connection.
 type codexWebsocketPrepared struct {
+	archive              *tracearchive.Capture
 	from                 sdktranslator.Format
 	responseFormat       sdktranslator.Format
 	to                   sdktranslator.Format

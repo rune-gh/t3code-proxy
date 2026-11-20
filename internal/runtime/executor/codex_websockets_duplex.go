@@ -13,8 +13,10 @@ import (
 
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
+	"github.com/rune-oai/t3code-proxy/internal/clienterror"
 	"github.com/rune-oai/t3code-proxy/internal/runtime/executor/helps"
 	"github.com/rune-oai/t3code-proxy/internal/thinking"
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
 	cliproxyauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
 	coreusage "github.com/rune-oai/t3code-proxy/sdk/cliproxy/usage"
@@ -66,13 +68,20 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 	// Explicit creates have their own request settings. Automatic successors
 	// inherit the preceding response settings, just as they do upstream.
 	var metadataMu sync.Mutex
+	initial.archive = tracearchive.From(ctx)
 	pending := []*codexWebsocketPrepared{initial}
 	// Serialize explicit creates against steering continuations. A response.created
 	// alone does not identify whether upstream created it automatically.
-	type codexSteerSubmission struct{ parent, eventID string }
+	type codexSteerSubmission struct {
+		parent, eventID string
+		archive         *tracearchive.Capture
+	}
 	// successorID is set once the response that consumes the steer has started; the steer
 	// stays outstanding until that response ends.
-	type codexAcceptedSteer struct{ parent, eventID, successorID string }
+	type codexAcceptedSteer struct {
+		codexSteerSubmission
+		successorID string
+	}
 	var unacknowledgedSteers []codexSteerSubmission
 	acceptedSteers := make(map[string]codexAcceptedSteer)
 	current := initial
@@ -535,15 +544,15 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				metadataMu.Lock()
 				localCompactionDeliveredAny = false
 				metadataMu.Unlock()
-				compactionResp, errCompact := e.CodexExecutor.executeCodexResponsesCompaction(writerFollowupCtx, auth, nextReq, nextOpts)
+				turnCtx, capture := tracearchive.Begin(writerFollowupCtx, true, consumedPayload)
+				// Admission can drop this capture. Clear any inherited initial-turn observer.
+				status := http.StatusBadGateway
+				defer func() { capture.Finish(status) }()
+				compactionResp, errCompact := e.CodexExecutor.executeCodexResponsesCompaction(capture.Context(turnCtx), auth, nextReq, nextOpts)
 				if errCompact != nil {
+					status = clienterror.HTTPStatusFromErrorOr(errCompact, http.StatusBadGateway)
 					if streamCtx.Err() != nil {
 						return false
-					}
-					var statusHolder interface{ StatusCode() int }
-					status := http.StatusBadGateway
-					if errors.As(errCompact, &statusHolder) && statusHolder.StatusCode() > 0 {
-						status = statusHolder.StatusCode()
 					}
 					if status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests {
 						failWithClassification(errCompact, true)
@@ -594,12 +603,14 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				for idx, chunk := range chunks {
 					select {
 					case out <- cliproxyexecutor.StreamChunk{Payload: chunk}:
+						capture.ClientResponse(chunk)
 						if idx == 0 {
 							metadataMu.Lock()
 							localCompactionDeliveredAny = true
 							metadataMu.Unlock()
 						}
 					case <-streamCtx.Done():
+						status = clienterror.HTTPStatusFromErrorOr(streamCtx.Err(), http.StatusBadGateway)
 						return false
 					}
 				}
@@ -607,6 +618,7 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				localCompactionDeliveredAny = false
 				metadataMu.Unlock()
 				consumedPayload = nil
+				status = http.StatusOK
 				return true
 			}
 			prepared, errPrepare := e.prepareCodexWebsocketStream(streamCtx, auth, nextReq, nextOpts)
@@ -625,6 +637,8 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				fail(fmt.Errorf("too many outstanding response.create requests"))
 				return false
 			}
+			turnCtx, capture := tracearchive.Begin(streamCtx, true, consumedPayload)
+			prepared.archive = capture
 			pending = append(pending, prepared)
 			consumedPayload = nil // pending owns it now, including a possibly partial write
 			metadataMu.Unlock()
@@ -635,7 +649,7 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				fail(fmt.Errorf("websocket credential is no longer enabled"))
 				return false
 			}
-			helps.RecordAPIWebsocketRequest(streamCtx, e.cfg, helps.UpstreamRequestLog{
+			helps.RecordAPIWebsocketRequest(capture.Context(turnCtx), e.cfg, helps.UpstreamRequestLog{
 				URL: initial.wsURL, Method: "WEBSOCKET", Body: payload, Provider: e.Identifier(), AuthID: auth.ID,
 			})
 			if errWrite := writeCodexWebsocketMessage(sess, conn, payload); errWrite != nil {
@@ -754,7 +768,8 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 						metadataMu.Unlock()
 					}
 					metadataMu.Lock()
-					unacknowledgedSteers = append(unacknowledgedSteers, codexSteerSubmission{parent: parent, eventID: steerEventID})
+					steerCtx, steerArchive := tracearchive.Begin(streamCtx, true, message.Payload)
+					unacknowledgedSteers = append(unacknowledgedSteers, codexSteerSubmission{parent: parent, eventID: steerEventID, archive: steerArchive})
 					consumedPayload = nil
 					if settings != nil {
 						steeringSettings[parent] = settings
@@ -767,7 +782,7 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 						fail(fmt.Errorf("websocket credential is no longer enabled"))
 						return
 					}
-					helps.RecordAPIWebsocketRequest(streamCtx, e.cfg, helps.UpstreamRequestLog{
+					helps.RecordAPIWebsocketRequest(steerArchive.Context(steerCtx), e.cfg, helps.UpstreamRequestLog{
 						URL: initial.wsURL, Method: "WEBSOCKET", Body: payload, Provider: e.Identifier(), AuthID: auth.ID,
 					})
 					if errWrite := writeCodexWebsocketMessage(sess, conn, payload); errWrite != nil {
@@ -802,6 +817,18 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 		}
 	}()
 	go func() {
+		// Bootstrap rejections can still retry. The handler owns the initial
+		// capture across those attempts and throughout the committed turn.
+		finishResponse := func(owner *codexWebsocketPrepared, status int) {
+			if owner == initial && !firstResponse {
+				owner.archive.MarkDuplexResult(status)
+				return
+			}
+			owner.archive.Status(status)
+			if owner != initial {
+				owner.archive.Finish(status)
+			}
+		}
 		defer close(out)
 		defer func() {
 			cancel()
@@ -809,6 +836,20 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 			// releasing the execution session. No goroutine outlives its socket.
 			e.invalidateUpstreamConnWithoutDisconnectNotify(sess, conn, "duplex_closed", nil)
 			<-writerDone
+			if current != initial {
+				current.archive.Finish(http.StatusBadGateway)
+			}
+			for _, p := range pending {
+				if p != initial {
+					p.archive.Finish(http.StatusBadGateway)
+				}
+			}
+			for _, steer := range unacknowledgedSteers {
+				steer.archive.Finish(http.StatusBadGateway)
+			}
+			for _, steer := range acceptedSteers {
+				steer.archive.Finish(http.StatusBadGateway)
+			}
 			sess.clearActive(conn, readCh)
 			unlock()
 		}()
@@ -819,6 +860,32 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 			case <-ctx.Done():
 				return false
 			}
+		}
+		logFrame := func(frameCtx context.Context, payload []byte) context.Context {
+			helps.AppendCodexAPIWebsocketResponse(frameCtx, e.cfg, payload)
+			helps.EmitWebSocketResponseEvent(ctx, opts, auth, e.Identifier(), req.Model, payload)
+			return frameCtx
+		}
+		var successorCaptures []*tracearchive.Capture
+		responseCtx := ctx
+		recordFrame := func(owner *codexWebsocketPrepared, payload []byte) context.Context {
+			if owner != current {
+				return logFrame(owner.archive.Context(ctx), payload)
+			}
+			primary := tracearchive.From(responseCtx)
+			for _, capture := range successorCaptures {
+				if capture != primary {
+					capture.Chunk(payload)
+				}
+			}
+			return logFrame(responseCtx, payload)
+		}
+		finishSuccessorSteers := func(status int) {
+			for _, capture := range successorCaptures {
+				capture.Status(status)
+				capture.Finish(status)
+			}
+			successorCaptures = nil
 		}
 		reporter := initialReporter
 		outputItems := make(map[int64][]byte)
@@ -901,7 +968,7 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 							connectionErr = turnErr
 						}
 					}
-					reporter.PublishFailure(ctx, connectionErr)
+					reporter.PublishFailure(responseCtx, connectionErr)
 					send(cliproxyexecutor.StreamChunk{Err: connectionErr})
 				}
 				return
@@ -928,15 +995,19 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					if settings == nil {
 						metadataMu.Unlock()
 						connectionErr := &codexDuplexConnectionError{cause: fmt.Errorf("automatic successor has no retained parent settings")}
-						reporter.PublishFailure(ctx, connectionErr)
+						reporter.PublishFailure(responseCtx, connectionErr)
 						send(cliproxyexecutor.StreamChunk{Err: connectionErr})
 						return
 					}
 					current = settings
 				}
 				createdResponseID := strings.Clone(ojson.GetBytesNoCopy(payload, "response.id").String())
+				successorCaptures = nil
 				for id, accepted := range acceptedSteers {
 					if accepted.parent == parent && accepted.successorID == "" {
+						if accepted.archive != nil {
+							successorCaptures = append(successorCaptures, accepted.archive)
+						}
 						accepted.successorID = createdResponseID
 						acceptedSteers[id] = accepted
 					}
@@ -946,11 +1017,13 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				if len(pending) > 0 {
 					current, pending = pending[0], pending[1:]
 				}
+				responseCtx = current.archive.SuccessorContext(ctx, successorCaptures)
 				responseID = createdResponseID
 				latestTurnResponseID = createdResponseID
 				// Retain response settings, not request history or authorization headers.
 				// In-flight steering pins its parent's settings independently of this window.
 				snapshot := *current
+				snapshot.archive = nil
 				snapshot.originalPayload, snapshot.wsHeaders = nil, nil
 				snapshotDoc := ojson.NewDoc([]byte("{}"))
 				if reasoning := ojson.GetBytesNoCopy(current.clientBody, "reasoning"); reasoning.Exists() {
@@ -979,8 +1052,6 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				outputFallback = nil
 			}
 			observeCodexTokenEvent(reporter, payload)
-			helps.AppendCodexAPIWebsocketResponse(ctx, e.cfg, payload)
-			helps.EmitWebSocketResponseEvent(ctx, opts, auth, e.Identifier(), req.Model, payload)
 			// Steering acknowledgements, pending notifications and failures are opaque:
 			// preserve their IDs, input, sequence numbers and event types byte-for-byte.
 			if strings.HasPrefix(eventType, "response.steer.") {
@@ -999,14 +1070,17 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					}
 					return codexSteerSubmission{}
 				}
+				submission := acceptedSteers[id].codexSteerSubmission
 				switch eventType {
 				case "response.steer.accepted":
-					acceptedSteers[id] = codexAcceptedSteer{parent: parent, eventID: consumeSubmission().eventID}
+					submission = consumeSubmission()
+					submission.parent = parent
+					acceptedSteers[id] = codexAcceptedSteer{codexSteerSubmission: submission}
 				case "response.steer.failed":
 					if _, accepted := acceptedSteers[id]; accepted {
 						removeAcceptedSteer(id)
 					} else {
-						consumeSubmission()
+						submission = consumeSubmission()
 					}
 					releaseSteeringSettings(parent)
 				case "response.steer.pending":
@@ -1015,6 +1089,18 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					waitingParent = parent
 				}
 				metadataMu.Unlock()
+				logFrame(submission.archive.Context(ctx), payload)
+				if eventType == "response.steer.failed" {
+					status := int(ojson.GetBytesNoCopy(payload, "status").Int())
+					if status == 0 {
+						status = int(ojson.GetBytesNoCopy(payload, "status_code").Int())
+					}
+					if status < 400 || status > 599 {
+						status = http.StatusBadRequest
+					}
+					submission.archive.Status(status)
+					submission.archive.Finish(status)
+				}
 				wakeWriter()
 				if !send(cliproxyexecutor.StreamChunk{Payload: payload}) {
 					return
@@ -1024,25 +1110,6 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 			metadataMu.Lock()
 			isInitialResponse := firstResponse
 			metadataMu.Unlock()
-			if !isInitialResponse && (eventType == "error" || eventType == "response.failed") {
-				var credentialErr error
-				if wsErr, ok := parseCodexWebsocketErrorWithCooling(payload, e.modelLevelCooling()); ok {
-					credentialErr = wsErr
-				} else if streamErr, _, ok := codexTerminalFailureErrWithCooling(payload, e.modelLevelCooling()); ok {
-					credentialErr = streamErr
-				}
-				var status interface{ StatusCode() int }
-				if errors.As(credentialErr, &status) && (status.StatusCode() == http.StatusUnauthorized || status.StatusCode() == http.StatusForbidden || status.StatusCode() == http.StatusTooManyRequests || isCodexOverloadBootstrapFailure(payload)) {
-					// Account health is independent of which queued request failed.
-					// The conductor records the original classification without replaying
-					// this already-started stream on another credential.
-					reporter.PublishFailure(ctx, credentialErr)
-					if send(cliproxyexecutor.StreamChunk{Payload: payload}) {
-						send(cliproxyexecutor.StreamChunk{Err: credentialErr})
-					}
-					return
-				}
-			}
 			eventPrepared, eventReporter := current, reporter
 			if !isInitialResponse && (eventType == "response.failed" || eventType == "error") {
 				failedID := ojson.GetBytesNoCopy(payload, "response.id").String()
@@ -1066,19 +1133,38 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					terminalDeliveryPending = true
 				}
 				metadataMu.Unlock()
-				wakeWriter()
-				if ambiguous {
-					// Without a response ID, assigning this failure could corrupt
-					// either request. Preserve the event and fail the socket without
-					// guessing a scope, replaying input, or cooling the credential.
-					connectionErr := &codexDuplexConnectionError{cause: fmt.Errorf("cannot associate websocket failure with a response or pending create")}
-					reporter.PublishFailure(ctx, connectionErr)
+				var credentialErr error
+				if wsErr, ok := parseCodexWebsocketErrorWithCooling(payload, e.modelLevelCooling()); ok {
+					credentialErr = wsErr
+				} else if streamErr, _, ok := codexTerminalFailureErrWithCooling(payload, e.modelLevelCooling()); ok {
+					credentialErr = streamErr
+				}
+				var status interface{ StatusCode() int }
+				credentialFailure := errors.As(credentialErr, &status) && (status.StatusCode() == http.StatusUnauthorized || status.StatusCode() == http.StatusForbidden || status.StatusCode() == http.StatusTooManyRequests || isCodexOverloadBootstrapFailure(payload))
+				if credentialFailure || ambiguous {
+					connectionErr := credentialErr
+					if ambiguous {
+						// Preserve account health classification even when no turn owns the frame.
+						if !credentialFailure {
+							connectionErr = &codexDuplexConnectionError{cause: fmt.Errorf("cannot associate websocket failure with a response or pending create")}
+						}
+						var unowned *tracearchive.Capture
+						eventReporter.PublishFailure(logFrame(unowned.Context(ctx), payload), connectionErr)
+					} else {
+						eventReporter.PublishFailure(recordFrame(eventPrepared, payload), connectionErr)
+						finishResponse(eventPrepared, status.StatusCode())
+						if eventPrepared == current {
+							finishSuccessorSteers(status.StatusCode())
+						}
+					}
 					if send(cliproxyexecutor.StreamChunk{Payload: payload}) {
 						send(cliproxyexecutor.StreamChunk{Err: connectionErr})
 					}
 					return
 				}
+				wakeWriter()
 			}
+			frameCtx := recordFrame(eventPrepared, payload)
 			restoreMultiAgent := !eventPrepared.multiAgentV2Conflict && (eventPrepared.optimizeMultiAgentV2 || sess.isMultiAgentV2Optimized(conn))
 			payload = helps.RestoreCodexMultiAgentV2Response(payload, restoreMultiAgent)
 			// Parse and invalidate replay for every rejected request, using the
@@ -1094,7 +1180,10 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 			}
 			if replayErr != nil {
 				helps.RecordAPIWebsocketError(ctx, e.cfg, "replay_clear_error", replayErr)
-				eventReporter.PublishFailure(ctx, replayErr)
+				eventReporter.PublishFailure(frameCtx, replayErr)
+				if eventPrepared != initial {
+					eventPrepared.archive.Finish(http.StatusBadGateway)
+				}
 				send(cliproxyexecutor.StreamChunk{Err: replayErr})
 				return
 			}
@@ -1102,7 +1191,9 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 				var status interface{ StatusCode() int }
 				terminalBusinessRejection = errors.As(terminalErr, &status) && status.StatusCode() == http.StatusBadRequest
 				helps.RecordAPIWebsocketError(ctx, e.cfg, "upstream_error", terminalErr)
-				eventReporter.PublishFailure(ctx, terminalErr)
+				eventReporter.PublishFailure(frameCtx, terminalErr)
+				failureStatus := clienterror.HTTPStatusFromErrorOr(terminalErr, http.StatusBadGateway)
+				finishResponse(eventPrepared, failureStatus)
 				if isInitialResponse {
 					send(cliproxyexecutor.StreamChunk{Err: terminalErr})
 					return
@@ -1144,14 +1235,22 @@ func (e *CodexWebsocketsExecutor) streamCodexDuplex(
 					cacheCodexReasoningReplayFromCompleted(current.replayScope, payload)
 				}
 				if detail, ok := helps.ParseCodexUsageWithOutputItems(payload, outputItems, outputFallback); ok {
-					reporter.Publish(ctx, detail)
+					reporter.Publish(frameCtx, detail)
 				} else {
-					reporter.EnsurePublished(ctx)
+					reporter.EnsurePublished(frameCtx)
 				}
+				finishResponse(current, http.StatusOK)
 				publishCodexImageToolUsageWithOutputItems(ctx, reporter, current.clientBody, payload, outputItems, outputFallback)
 				if e.duplexStateObserver != nil {
 					e.duplexStateObserver("terminal_pending", false)
 				}
+			}
+			if eventPrepared == current && isCodexTerminalEventType(eventType) {
+				status := http.StatusOK
+				if terminalErr != nil {
+					status = clienterror.HTTPStatusFromErrorOr(terminalErr, http.StatusBadGateway)
+				}
+				finishSuccessorSteers(status)
 			}
 			if !send(cliproxyexecutor.StreamChunk{Payload: helps.EnsureResponsesUsageDetails(payload), Incomplete: eventType == "response.incomplete"}) {
 				return

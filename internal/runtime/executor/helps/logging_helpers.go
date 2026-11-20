@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rune-oai/t3code-proxy/internal/tracearchive"
+
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/rune-oai/t3code-proxy/internal/config"
@@ -65,6 +67,11 @@ func requestLogCaptureEnabled(cfg *config.Config) bool {
 
 // RecordAPIRequest stores the upstream request metadata in Gin context for request logging.
 func RecordAPIRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	tracearchive.From(ctx).Request(info.Provider, "http", info.Body)
+	recordAPIRequestLog(ctx, cfg, info)
+}
+
+func recordAPIRequestLog(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
 	if cfg == nil || cfg.CommercialMode {
 		return
 	}
@@ -291,6 +298,7 @@ func newAPIRequestLogBuilder(index int, info UpstreamRequestLog, timestamp time.
 
 // RecordAPIResponseMetadata captures upstream response status/header information for the latest attempt.
 func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
+	tracearchive.From(ctx).Status(status)
 	logging.SetResponseHeaders(ctx, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		recordDeferredResponseMetadata(ctx, cfg, status, headers)
@@ -350,6 +358,7 @@ func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) 
 
 // AppendAPIResponseChunk appends an upstream response chunk to Gin context for request logging.
 func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byte) {
+	tracearchive.From(ctx).Chunk(chunk)
 	if !requestLogCaptureEnabled(cfg) {
 		appendDeferredResponseChunk(ctx, cfg, chunk)
 		return
@@ -395,11 +404,12 @@ func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byt
 
 // RecordAPIWebsocketRequest stores an upstream websocket request event in Gin context.
 func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	tracearchive.From(ctx).Request(info.Provider, "ws", info.Body)
 	if cfg == nil || cfg.CommercialMode {
 		return
 	}
 	if !cfg.RequestLog {
-		RecordAPIRequest(ctx, cfg, info)
+		recordAPIRequestLog(ctx, cfg, info)
 		return
 	}
 	ginCtx := ginContextFrom(ctx)
@@ -431,6 +441,7 @@ func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info Ups
 
 // RecordAPIWebsocketHandshake stores the upstream websocket handshake response metadata.
 func RecordAPIWebsocketHandshake(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
+	tracearchive.From(ctx).Status(status)
 	logging.SetResponseHeaders(ctx, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		recordDeferredResponseMetadata(ctx, cfg, status, headers)
@@ -501,6 +512,7 @@ func WebsocketUpgradeRequestURL(rawURL string) string {
 
 // AppendAPIWebsocketResponse stores an upstream websocket response frame in Gin context.
 func AppendAPIWebsocketResponse(ctx context.Context, cfg *config.Config, payload []byte) {
+	tracearchive.From(ctx).Chunk(payload)
 	if !requestLogCaptureEnabled(cfg) {
 		appendDeferredResponseChunk(ctx, cfg, payload)
 		return

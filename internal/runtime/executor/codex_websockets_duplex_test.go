@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/base64"
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gorilla/websocket"
 	"github.com/rune-oai/t3code-proxy/internal/config"
+	"github.com/rune-oai/t3code-proxy/internal/logging"
 	cliproxyauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 	core "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
 	coreusage "github.com/rune-oai/t3code-proxy/sdk/cliproxy/usage"
@@ -30,6 +32,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			steer := []byte(`{"type":"response.steer","previous_response_id":"r1","input":[{"role":"user","content":[{"type":"input_text","text":"STEER_OK"}]}]}`)
 			accepted := []byte(`{"type":"response.steer.accepted","sequence_number":2,"steer":{"id":"s1","previous_response_id":"r1"}}`)
 			pending := []byte(`{"type":"response.steer.pending","sequence_number":8,"steer":{"id":"s2","previous_response_id":"r2"},"reason":"waiting_for_required_input","required_input":[{"type":"function_call_output","call_id":"c1","name":"lookup"}]}`)
+			knownFailure := []byte(`{"type":"response.steer.failed","status":409,"steer":{"id":"s4","previous_response_id":"r3"},"error":{"code":"invalid_input"}}`)
 			failed := []byte(`{"type":"response.steer.failed","sequence_number":14,"steer":{"id":"s3","previous_response_id":"missing","input":"recover me"},"error":{"code":"response_not_found","message":"missing response"}}`)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer close(serverDone)
@@ -63,6 +66,10 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 					t.Errorf("steer transformed: %s", got)
 				}
 				write(accepted)
+				if got := read(); !bytes.Equal(got, steer) {
+					t.Errorf("second steer transformed: %s", got)
+				}
+				write([]byte(`{"type":"response.steer.accepted","steer":{"id":"s1b","previous_response_id":"r1"}}`))
 				write([]byte(fmt.Sprintf(`{"type":%q,"response":{"id":"r1","output":[],"incomplete_details":{"reason":"steered"}}}`, boundary)))
 				write([]byte(`{"type":"response.created","response":{"id":"r2","output":[]}}`))
 				got := read()
@@ -70,7 +77,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 					t.Errorf("second control: %s", got)
 				}
 				write([]byte(`{"type":"response.steer.accepted","steer":{"id":"s2","previous_response_id":"r2"}}`))
-				write([]byte(`{"type":"response.completed","response":{"id":"r2","output":[{"type":"function_call","call_id":"c1","name":"lookup","arguments":"{}"}]}}`))
+				write([]byte(`{"type":"response.completed","response":{"id":"r2","usage":{"input_tokens":7,"output_tokens":2,"total_tokens":9},"output":[{"type":"function_call","call_id":"c1","name":"lookup","arguments":"{}"}]}}`))
 				write(pending)
 				got = read()
 				if ojson.GetBytes(got, "type").String() != "response.create" || ojson.GetBytes(got, "previous_response_id").String() != "r2" || ojson.GetBytes(got, "input.0.call_id").String() != "c1" {
@@ -81,13 +88,17 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 				}
 				write([]byte(`{"type":"response.created","response":{"id":"r3","output":[]}}`))
 				write([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"STEER_OK"}]}}`))
-				write([]byte(`{"type":"response.completed","response":{"id":"r3","output":[]}}`))
+				write([]byte(`{"type":"response.completed","response":{"id":"r3","usage":{"input_tokens":9,"output_tokens":3,"total_tokens":12},"output":[]}}`))
 				// Idle steering must also reach the same live upstream connection.
 				got = read()
 				if ojson.GetBytes(got, "previous_response_id").String() != "missing" {
 					t.Errorf("idle control missing: %s", got)
 				}
 				write(failed)
+				if got = read(); ojson.GetBytes(got, "previous_response_id").String() != "r3" {
+					t.Errorf("expected steer for r3: %s", got)
+				}
+				write(knownFailure)
 				// Keep the socket alive until the client closes it; no automatic replay.
 				_, _, _ = conn.ReadMessage()
 			}))
@@ -97,6 +108,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			input := make(chan core.WebsocketInput, 8)
 			ctx = core.WithWebsocketInput(core.WithDownstreamWebsocket(ctx), input)
 			ctx = coreusage.WithRequestedModelAlias(ctx, t.Name())
+			ctx = logging.WithClientRequestMetadata(ctx, logging.ClientRequestMetadata{SessionID: "steering-session"})
 			ctx = coreusage.WithHomeSelection(ctx, coreusage.HomeSelection{Model: "home-route"})
 			capture := &codexResponseModelUsageCapture{alias: t.Name(), records: make(chan coreusage.Record, 8)}
 			coreusage.RegisterNamedPlugin(t.Name(), capture)
@@ -105,6 +117,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			exec.store = &codexWebsocketSessionStore{sessions: make(map[string]*codexWebsocketSession)}
 			auth := &cliproxyauth.Auth{ID: "A", Provider: "codex", Attributes: map[string]string{"api_key": "test-key", "base_url": server.URL, "websockets": "true"}}
 			req := core.Request{Model: "gpt-6-astra", Payload: []byte(`{"model":"gpt-6-astra","input":[],"instructions":"Initial settings"}`)}
+			ctx, initialCapture, export := beginTestDuplexArchive(t, ctx, req.Payload)
 			opts := core.Options{SourceFormat: sdktranslator.FromString("codex"), Metadata: map[string]any{core.ExecutionSessionMetadataKey: "duplex-test"}}
 			result, err := exec.ExecuteStream(ctx, auth, req, opts)
 			if err != nil {
@@ -124,6 +137,7 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 					id := ojson.GetBytes(chunk.Payload, "response.id").String()
 					switch {
 					case event == "response.created" && id == "r1":
+						input <- core.WebsocketInput{Payload: steer}
 						input <- core.WebsocketInput{Payload: steer}
 					case event == "response.steer.accepted" && ojson.GetBytes(chunk.Payload, "steer.id").String() == "s1":
 						if !bytes.Equal(chunk.Payload, accepted) {
@@ -146,11 +160,13 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 						}
 						seen["successor"] = true
 						input <- core.WebsocketInput{Payload: []byte(`{"type":"response.steer","previous_response_id":"missing","input":"recover me"}`)}
+					case event == "response.steer.failed" && bytes.Equal(chunk.Payload, knownFailure):
+						seen["failed"] = true
 					case event == "response.steer.failed":
 						if !bytes.Equal(chunk.Payload, failed) {
 							t.Fatal("failed input changed")
 						}
-						seen["failed"] = true
+						input <- core.WebsocketInput{Payload: []byte(`{"type":"response.steer","previous_response_id":"r3","input":"reject this"}`)}
 					}
 				case <-ctx.Done():
 					t.Fatal(ctx.Err())
@@ -164,12 +180,42 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 			}
 			for range result.Chunks {
 			}
+			initialCapture.Finish(200)
+			calls := export()
+			t.Run("ArchiveSteerOutcomes", func(t *testing.T) {
+				steers := map[string]ojson.Result{}
+				for _, call := range calls {
+					if call.Get("client_request.type").String() == "response.steer" {
+						steers[call.Get("client_request.previous_response_id").String()] = call
+					}
+				}
+				for parent, wantID := range map[string]string{"r1": "r2", "r2": "r3", "missing": "", "r3": ""} {
+					call := steers[parent]
+					if call.Get("upstream_request.previous_response_id").String() != parent {
+						t.Errorf("missing upstream steer for %s", parent)
+					}
+					if wantID == "" {
+						frame, err := base64.StdEncoding.DecodeString(call.Get("raw_frames_base64.0").String())
+						wantStatus, wantFrame := int64(400), failed
+						if parent == "r3" {
+							wantStatus, wantFrame = 409, knownFailure
+						}
+						if !call.Get("failed").Bool() || call.Get("status").Int() != wantStatus || err != nil || !bytes.Equal(frame, wantFrame) {
+							t.Errorf("rejected steer = %s", call.Raw)
+						}
+					} else if call.Get("status").Int() != 200 || call.Get("response.id").String() != wantID {
+						t.Errorf("parent %s = %s", parent, call.Raw)
+					}
+				}
+			})
 			if connections.Load() != 1 {
 				t.Fatalf("connections=%d", connections.Load())
 			}
 			ids := make(map[string]bool)
+			records := make(map[int64]coreusage.Record)
 			for turn := range 3 {
 				record := capture.await(t)
+				records[record.Detail.TotalTokens] = record
 				if record.HomeSelection == nil || record.HomeSelection.Reused != (turn > 0) || record.HomeSelection.Model != "home-route" {
 					t.Fatalf("turn %d accounting=%+v", turn, record.HomeSelection)
 				}
@@ -178,6 +224,28 @@ func TestCodexDuplexSteeringLifecycle(t *testing.T) {
 				}
 				ids[record.RequestID] = true
 			}
+			t.Run("ArchiveSuccessorUsage", func(t *testing.T) {
+				// A marker in the same sink bounds the count after all turns have finished.
+				coreusage.PublishRecord(ctx, coreusage.Record{Alias: capture.alias, RequestID: "end-of-test"})
+				if next := capture.await(t); next.RequestID != "end-of-test" {
+					t.Fatalf("extra usage record for %s", next.RequestID)
+				}
+				counts := map[string]int{}
+				for _, call := range calls {
+					id := call.Get("response.id").String()
+					tokens, ok := map[string]int64{"r2": 9, "r3": 12}[id]
+					if !ok {
+						continue
+					}
+					counts[id]++
+					if call.Get("token_usage.TotalTokens").Int() != tokens || call.Get("auth_index").String() != auth.EnsureIndex() || call.Get("session_id").String() != "steering-session" || call.Get("request_id").String() != records[tokens].RequestID {
+						t.Errorf("%s capture missing successor usage: %s", id, call.Raw)
+					}
+				}
+				if counts["r2"] != 2 || counts["r3"] != 2 {
+					t.Errorf("successor captures = %v, want two per response", counts)
+				}
+			})
 			for _, key := range []string{"accepted", "boundary", "pending", "successor", "failed"} {
 				if !seen[key] {
 					t.Fatalf("missing %s", key)

@@ -163,6 +163,8 @@ export type VisualConfigValues = {
   codexLiveMediaRelayICEServers: CodexLiveICEServerDraft[];
   /** quota-history.* (t3code fork recorder). */
   /** observability.logs.request-log (applies without restart). */
+  traceArchiveEnabled: boolean;
+  traceArchiveDir: string;
   requestLog: boolean;
   quotaHistoryEnabled: boolean;
   quotaHistoryInterval: string;
@@ -271,6 +273,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexLiveMediaRelayUDPPortMin: '',
   codexLiveMediaRelayUDPPortMax: '',
   codexLiveMediaRelayICEServers: [],
+  traceArchiveEnabled: false,
+  traceArchiveDir: '',
   requestLog: false,
   quotaHistoryEnabled: false,
   quotaHistoryInterval: '',

@@ -242,6 +242,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	if errValidate := cfg.ValidateCredentialWeights(); errValidate != nil {
 		return nil, errValidate
 	}
+	if errValidate := cfg.TraceArchive.Validate(); errValidate != nil {
+		return nil, errValidate
+	}
 	if errValidate := cfg.ValidatePlanRouting(); errValidate != nil {
 		return nil, errValidate
 	}

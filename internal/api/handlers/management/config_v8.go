@@ -2,6 +2,7 @@ package management
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +17,18 @@ import (
 
 // ConfigV8ContextKey marks operations registered by the v8 API that save configuration.
 const ConfigV8ContextKey = "management.config-v8"
+
+// TraceArchiveSettings returns the default block even on a fresh installation.
+func (h *Handler) TraceArchiveSettings(c *gin.Context) {
+	if c.Request.Method == http.MethodGet {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		c.JSON(http.StatusOK, h.cfg.TraceArchive)
+		return
+	}
+	c.Params = append(c.Params, gin.Param{Key: "path", Value: "/trace-archive"})
+	h.ConfigV8(c)
+}
 
 // ConfigV8 serves the persisted configuration using v8 names. GET is a view;
 // only a successful configuration mutation migrates the stored document.
@@ -179,7 +192,11 @@ func (h *Handler) ConfigV8(c *gin.Context) {
 	}
 	next, err := config.ParseConfigBytes(data)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid_config", "message": err.Error()})
+		status := http.StatusUnprocessableEntity
+		if errors.Is(err, config.ErrTraceArchiveRecipient) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": "invalid_config", "message": err.Error()})
 		return
 	}
 	if err = config.ValidateV8Config(data); err != nil {

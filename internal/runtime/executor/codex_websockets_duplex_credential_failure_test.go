@@ -19,6 +19,69 @@ import (
 	translator "github.com/rune-oai/t3code-proxy/sdk/translator"
 )
 
+func TestCodexDuplexQueuedCredentialRejectionArchive(t *testing.T) {
+	const rejection = `{"type":"error","status":401,"error":{"type":"authentication_error","message":"queued create rejected"}}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = c.Close() }()
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		for _, frames := range [][]string{
+			{`{"type":"response.created","response":{"id":"first","output":[]}}`, `{"type":"response.completed","response":{"id":"first","output":[]}}`},
+			{rejection},
+		} {
+			if _, _, err = c.ReadMessage(); err != nil {
+				t.Error(err)
+				return
+			}
+			for _, frame := range frames {
+				if err = c.WriteMessage(websocket.TextMessage, []byte(frame)); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}
+		_, _, _ = c.ReadMessage()
+	}))
+	defer upstream.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	input := make(chan core.WebsocketInput, 1)
+	ctx = core.WithWebsocketInput(core.WithDownstreamWebsocket(ctx), input)
+	req := core.Request{Model: "gpt-6-astra", Payload: []byte(`{"model":"gpt-6-astra","input":[]}`)}
+	ctx, initial, export := beginTestDuplexArchive(t, ctx, req.Payload)
+	exec := NewCodexWebsocketsExecutor(&config.Config{Codex: config.CodexConfig{ResponseSteering: true}})
+	credential := &auth.Auth{ID: t.Name(), Provider: "codex", Attributes: map[string]string{"api_key": "test", "base_url": upstream.URL, "websockets": "true"}}
+	result, err := exec.ExecuteStream(ctx, credential, req, core.Options{SourceFormat: translator.FromString("codex"), Metadata: map[string]any{core.ExecutionSessionMetadataKey: t.Name()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for chunk := range result.Chunks {
+		if ojson.GetBytes(chunk.Payload, "type").String() == "response.completed" {
+			input <- core.WebsocketInput{Payload: []byte(`{"type":"response.create","event_id":"queued","input":[]}`)}
+		}
+	}
+	// The handler can still be forwarding the first completion when the socket fails.
+	initial.Status(502)
+	initial.Finish(502)
+	calls := export()
+	if len(calls) != 2 {
+		t.Fatalf("got %d calls, want 2", len(calls))
+	}
+	for _, call := range calls {
+		if call.Get("client_request.event_id").String() == "queued" {
+			if call.Get("status").Int() != 401 || !call.Get("failed").Bool() || call.Get("response.error.message").String() != "queued create rejected" {
+				t.Errorf("queued rejection = %s", call.Raw)
+			}
+		} else if call.Get("status").Int() != 200 || call.Get("attempts.0.status").Int() != 200 || call.Get("failed").Bool() || call.Get("response.id").String() != "first" {
+			t.Errorf("initial completion = %s", call.Raw)
+		}
+	}
+}
+
 func TestCodexDuplexLaterCredentialFailure(t *testing.T) {
 	for _, kind := range []string{"error", "response.failed"} {
 		for _, status := range []int{401, 403, 429} {

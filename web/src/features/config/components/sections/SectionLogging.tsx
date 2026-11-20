@@ -1,10 +1,59 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { apiClient } from '@/services/api/client';
 import type { ConfigSectionProps } from '../../types';
 import { getValidationMessage } from '../blocks/shared';
 import { SettingList, TextSetting, ToggleSetting } from '../fields/FieldPrimitives';
 import { SettingsSection } from '../SettingsSection';
 
-/** Logging and usage: debug output, log files, request logs and usage statistics. */
+type ArchiveStatus = {
+  today_calls: number;
+  queue_depth: number;
+  dropped: number;
+  last_error?: string;
+  last_upload_error?: string;
+};
+
+function ArchiveStatusLine() {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<ArchiveStatus | 'unavailable'>();
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const next = await apiClient.get<ArchiveStatus>('/trace-archive/status', {
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) setStatus(next);
+      } catch {
+        if (!controller.signal.aborted) setStatus('unavailable');
+      }
+      if (!controller.signal.aborted) timer = setTimeout(refresh, 30000);
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, []);
+  if (!status) return null;
+  const key = 'config_management.visual.sections.system.';
+  if (status === 'unavailable') return <div>{t(key + 'trace_archive_status_failed')}</div>;
+  return (
+    <div>
+      {t(key + 'trace_archive_status', {
+        calls: status.today_calls,
+        queued: status.queue_depth,
+        dropped: status.dropped,
+      })}
+      {status.last_error && <div>{status.last_error}</div>}
+      {status.last_upload_error && <div>{status.last_upload_error}</div>}
+    </div>
+  );
+}
+
+/** Logging and usage settings. */
 export function SectionLogging({
   values,
   validationErrors,
@@ -63,6 +112,30 @@ export function SectionLogging({
           onChange={(errorLogsMaxFiles) => onChange({ errorLogsMaxFiles })}
           disabled={disabled}
           error={getValidationMessage(t, validationErrors?.errorLogsMaxFiles)}
+        />
+      </SettingList>
+
+      <SettingList title={t(key('trace_archive'))}>
+        <ToggleSetting
+          fieldId="traceArchiveEnabled"
+          label={t(key('trace_archive_record'))}
+          description={
+            <>
+              {t(key('trace_archive_desc'))}
+              <ArchiveStatusLine />
+            </>
+          }
+          checked={values.traceArchiveEnabled}
+          disabled={disabled}
+          onChange={(traceArchiveEnabled) => onChange({ traceArchiveEnabled })}
+        />
+        <TextSetting
+          fieldId="traceArchiveDir"
+          label={t(key('trace_archive_dir'))}
+          description={t(key('trace_archive_dir_hint'))}
+          value={values.traceArchiveDir}
+          disabled={disabled}
+          onChange={(traceArchiveDir) => onChange({ traceArchiveDir })}
         />
       </SettingList>
 

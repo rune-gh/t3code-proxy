@@ -37,6 +37,10 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/quota-history", s.mgmt.GetQuotaHistory)
 	v8.POST("/quota-history/refresh", s.mgmt.RefreshQuotaHistory)
 
+	v8.GET("/trace-archive/settings", s.mgmt.TraceArchiveSettings)
+	v8.PUT("/trace-archive/settings", s.mgmt.TraceArchiveSettings)
+	v8.GET("/trace-archive/status", func(c *gin.Context) { c.JSON(http.StatusOK, s.archive.Status()) })
+	v8.POST("/trace-archive/seal-now", s.sealTraces)
 	v8.GET("/observability/logs", s.mgmt.GetLogs)
 	v8.DELETE("/observability/logs", s.mgmt.DeleteLogs)
 	v8.GET("/observability/logs/errors", s.mgmt.GetRequestErrorLogs)

@@ -138,6 +138,8 @@ export const ADDITION_FIELDS = [
   },
   // Backend: internal/config/quota_history.go and internal/quotahistory/settings.go.
   { key: 'requestLog', path: 'observability.logs.request-log'.split('.'), kind: 'boolean' },
+  { key: 'traceArchiveEnabled', path: 'trace-archive.enabled'.split('.'), kind: 'boolean' },
+  { key: 'traceArchiveDir', path: 'trace-archive.dir'.split('.'), kind: 'string' },
   { key: 'quotaHistoryEnabled', path: 'quota-history.enabled'.split('.'), kind: 'boolean' },
   { key: 'quotaHistoryInterval', path: 'quota-history.interval'.split('.'), kind: 'string' },
   { key: 'quotaHistoryRetention', path: 'quota-history.retention'.split('.'), kind: 'string' },

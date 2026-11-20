@@ -63,6 +63,8 @@ func TestCodexExecutorExecutePublishesMainUsageBeforeImageUsage(t *testing.T) {
 					coreusage.RegisterNamedPlugin(t.Name(), codexResponseModelNoopUsagePlugin{})
 				})
 				ctx := coreusage.WithRequestedModelAlias(context.Background(), alias)
+				var primary []coreusage.Record
+				ctx = coreusage.WithRecordObserver(ctx, func(r coreusage.Record) { primary = append(primary, r) })
 				executor := NewCodexExecutor(&config.Config{})
 				resp, errExecute := executor.Execute(ctx, codexOAuthTestAuth(server.URL), cliproxyexecutor.Request{
 					Model:   "gpt-5.5",
@@ -84,6 +86,11 @@ func TestCodexExecutorExecutePublishesMainUsageBeforeImageUsage(t *testing.T) {
 				}
 				if imageUsage.name == "nonzero" {
 					imageRecord := capture.await(t)
+					t.Run("PrimaryAttemptObserver", func(t *testing.T) {
+						if len(primary) != 1 || primary[0].RequestID != mainRecord.RequestID || primary[0].Detail.TotalTokens != wantMain.TotalTokens {
+							t.Fatalf("observed %d records for the primary attempt", len(primary))
+						}
+					})
 					if imageRecord.Model != codexDefaultImageToolModel || imageRecord.Failed {
 						t.Errorf("image record model = %q, failed = %t", imageRecord.Model, imageRecord.Failed)
 					}
