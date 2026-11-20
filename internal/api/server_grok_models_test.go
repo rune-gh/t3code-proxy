@@ -17,7 +17,7 @@ func TestModelsDispatchByGrokShellUserAgent(t *testing.T) {
 	modelRegistry := registry.GetGlobalRegistry()
 	clientID := "test-grok-shell-model-list"
 	modelRegistry.RegisterClient(clientID, "openai", []*registry.ModelInfo{
-		{ID: "grok-shell-openai-model", DisplayName: "Grok Shell Model", ContextLength: 256000, Thinking: &registry.ThinkingSupport{Levels: []string{"high"}}},
+		{ID: "grok-shell-openai-model", DisplayName: "Grok Shell Model", ContextLength: 256000, Thinking: &registry.ThinkingSupport{Levels: []string{"high", "xhigh"}}},
 	})
 	modelRegistry.RegisterClient(clientID+"-claude", "claude", []*registry.ModelInfo{
 		{ID: "grok-shell-claude-model", DisplayName: "Claude Catalog Model", ContextLength: 200000},
@@ -53,6 +53,7 @@ func TestModelsDispatchByGrokShellUserAgent(t *testing.T) {
 					SupportedInAPI   bool   `json:"supported_in_api"`
 					ReasoningEfforts []struct {
 						Value string `json:"value"`
+						Label string `json:"label"`
 					} `json:"reasoning_efforts"`
 				} `json:"data"`
 			}
@@ -73,8 +74,11 @@ func TestModelsDispatchByGrokShellUserAgent(t *testing.T) {
 					if model.APIBackend != "responses" || !model.SupportedInAPI {
 						t.Fatalf("OpenAI model routing fields = %#v", model)
 					}
-					if len(model.ReasoningEfforts) != 1 || model.ReasoningEfforts[0].Value != "high" {
+					if len(model.ReasoningEfforts) != 2 || model.ReasoningEfforts[0].Value != "high" || model.ReasoningEfforts[1].Value != "xhigh" {
 						t.Fatalf("OpenAI reasoning efforts = %#v", model.ReasoningEfforts)
+					}
+					if got := model.ReasoningEfforts[1].Label; got != "Extra High" {
+						t.Fatalf("xhigh label = %q, want Extra High", got)
 					}
 				case "grok-shell-claude-model":
 					foundClaude = true
