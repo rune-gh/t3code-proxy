@@ -131,6 +131,24 @@ func (c *Capture) Context(ctx context.Context) context.Context {
 	}
 	return c.attach(ctx)
 }
+
+// SuccessorContext observes one usage record for the create and every steer it consumes.
+func (c *Capture) SuccessorContext(ctx context.Context, steers []*Capture) context.Context {
+	if c == nil && len(steers) > 0 {
+		c, steers = steers[0], steers[1:]
+	}
+	ctx = c.Context(ctx)
+	if len(steers) == 0 {
+		return ctx
+	}
+	return usage.WithRecordObserver(ctx, func(record usage.Record) {
+		c.observe(record)
+		for _, steer := range steers {
+			steer.observe(record)
+		}
+	})
+}
+
 func (c *Capture) attach(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, sourceKey{}, c.source)
 	return usage.WithRecordObserver(context.WithValue(ctx, captureKey{}, c), c.observe)
@@ -184,9 +202,8 @@ func (c *Capture) Request(provider, transport string, p []byte) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.reserve(len(p)) {
+	if c.duplexStatus == 0 && c.reserve(len(p)) {
 		d := c.data
-		c.duplexStatus = 0
 		d.Provider = provider
 		d.Attempts = append(d.Attempts, Attempt{Start: time.Now().UTC(), Provider: provider, Transport: transport})
 		d.upstream = bytes.Clone(p)
@@ -199,7 +216,7 @@ func (c *Capture) Status(status int) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if d := c.data; d != nil && len(d.Attempts) > 0 {
+	if d := c.data; c.duplexStatus == 0 && d != nil && len(d.Attempts) > 0 {
 		d.Attempts[len(d.Attempts)-1].Status = status
 	}
 }
@@ -228,7 +245,7 @@ func (c *Capture) chunk(p []byte, upstream bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.reserve(len(p) + 24) {
+	if (!upstream || c.duplexStatus == 0) && c.reserve(len(p)+24) {
 		d := c.data
 		if len(p) > 0 {
 			d.markFirstByte()
@@ -246,7 +263,7 @@ func (c *Capture) observe(r usage.Record) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	d := c.data
-	if d == nil {
+	if d == nil || c.duplexStatus != 0 {
 		return
 	}
 	d.RequestID = r.RequestID
@@ -289,7 +306,12 @@ func (c *Capture) MarkDuplexResult(status int) {
 		return
 	}
 	c.mu.Lock()
-	c.duplexStatus = status
+	if c.duplexStatus == 0 {
+		c.duplexStatus = status
+		if d := c.data; d != nil && len(d.Attempts) > 0 {
+			d.Attempts[len(d.Attempts)-1].Status = status
+		}
+	}
 	c.mu.Unlock()
 }
 
@@ -316,6 +338,9 @@ func (c *Capture) Finish(status int) {
 		return
 	}
 	c.finished = true
+	if c.duplexStatus != 0 {
+		status = c.duplexStatus
+	}
 	d := c.data
 	c.data = nil
 	c.mu.Unlock()
