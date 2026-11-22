@@ -143,6 +143,20 @@ Check its service user and provider config directory, then start a fresh provide
 Choose **Use existing CLI** for Codex. Follow [T3 Code](t3code.md) and
 [the client settings](providers.md#point-clients-at-the-hub).
 
+## T3 Code prompts for approval in Full access mode
+
+Command approvals happen locally between T3 Code and each provider CLI; they do not pass through
+`t3code-proxy`.
+
+- **Antigravity (`agy-acp`):** Make sure you copied the current [`deploy/t3code/agy-acp`](../deploy/t3code/agy-acp)
+  wrapper to each environment running it. Earlier copies mapped `accept-edits` back to `auto_edit`
+  even when T3 Code requested `yolo` (Full access).
+- **Codex (`Use existing CLI`):** On the machine running the environment, check `~/.codex/config.toml`
+  and `~/.codex/rules/*.rules` for an `approval_policy`, `sandbox_mode`, `approvals_reviewer` or
+  `prompt` rule forcing approvals.
+- If approvals still appear across providers or after switching agents in a Full access thread with
+  clean CLI config, the fix belongs in T3 Code itself rather than `t3code-proxy`.
+
 ## Windows and WSL show the wrong environment or stop after closing terminals
 
 Use separate provider installations, user homes and T3 listener ports. Check Windows' Serve
