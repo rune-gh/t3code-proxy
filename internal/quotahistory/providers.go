@@ -2,6 +2,8 @@ package quotahistory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -119,8 +121,9 @@ func (r *Recorder) refreshMistralCustomer(ctx context.Context, auth *coreauth.Au
 		return
 	}
 	if id := firstString(ojson.ParseBytes(body).Get("customer_id")); id != "" {
+		digest := sha256.Sum256([]byte(id))
 		r.plansMu.Lock()
-		r.customers[auth.Index] = id
+		r.customers[auth.Index] = hex.EncodeToString(digest[:])
 		r.plansMu.Unlock()
 	}
 }

@@ -136,7 +136,7 @@ type Recorder struct {
 	plansMu         sync.Mutex
 	plans           map[string]string
 	profileAttempts map[string]time.Time
-	// customers maps a Mistral key's auth index to the customer behind it.
+	// customers maps a Mistral key's auth index to its customer fingerprint.
 	customers        map[string]string
 	customerAttempts map[string]time.Time
 }
@@ -183,7 +183,20 @@ func (r *Recorder) Apply(s Settings) error {
 		r.forgetUntracked(false)
 		return errOpen
 	}
+	customers, errCustomers := store.mistralCustomers()
+	if errCustomers != nil {
+		log.WithError(errCustomers).Warn("quota-history: restore Mistral customers")
+	}
 	r.plansMu.Lock()
+	// Seed a new database even for known keys that are no longer polled.
+	if errSave := store.putMistralCustomers(r.customers); errSave != nil {
+		log.WithError(errSave).Warn("quota-history: seed Mistral customers")
+	}
+	for idx, customer := range customers {
+		if r.customers[idx] == "" {
+			r.customers[idx] = customer
+		}
+	}
 	for idx, plan := range store.latestPlans(planSeedRecords) {
 		if r.plans[idx] == "" {
 			r.plans[idx] = plan
@@ -354,11 +367,23 @@ func (r *Recorder) poll(ctx context.Context, store *Store, gap time.Duration, co
 			continue
 		}
 		rec := r.sample(ctx, auth)
+		mistral := providerOf(auth) == "mistral"
+		if mistral {
+			// Keep verified identities even if cancellation discards the usage sample.
+			r.plansMu.Lock()
+			customer := r.customers[auth.Index]
+			r.plansMu.Unlock()
+			if customer != "" {
+				if errPut := store.putMistralCustomers(map[string]string{auth.Index: customer}); errPut != nil {
+					log.WithError(errPut).Warn("quota-history: store Mistral customer")
+				}
+			}
+		}
 		if ctx.Err() != nil {
 			// Shutting down or reconfiguring: do not record a cancellation as an error.
 			return stored
 		}
-		if providerOf(auth) == "mistral" && r.mistralDuplicates(r.trackable(r.pluginProviders(ctx, false)))[auth.Index] {
+		if mistral && r.mistralDuplicates(r.trackable(r.pluginProviders(ctx, false)))[auth.Index] {
 			continue
 		}
 		if errPut := store.put(rec); errPut != nil {
