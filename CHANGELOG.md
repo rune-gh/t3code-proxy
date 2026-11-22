@@ -95,6 +95,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `deploy/t3code/agy-acp`: preserve `yolo` (Full access) when `agy` reports `accept-edits` back to
+  T3 Code instead of unconditionally rewriting it to `auto_edit` (Accept edits), and clamp
+  out-of-range `thought_level` updates to the active model's offered levels.
+- Antigravity CLI `/v1beta/models` catalog: deduplicate effort-suffixed/aliased models and expand
+  thinking-capable models into `agy`-supported effort levels (within `agy`'s 32-entry cap) so T3
+  Code shows thinking levels under **Effort** instead of separate models.
 - Config hot reload keeps working after the config file is saved by renaming a temp file over
   it, as many editors and tools do. The watcher used to watch the file itself, so after one
   such save every later change was ignored until the hub restarted. It now watches the config

@@ -12,6 +12,15 @@ runtime's names; the standalone CLI uses different ones:
     auto_edit           accept-edits
     yolo                accept-edits   (T3 Code answers permission requests itself in Full access)
 
+Because both `auto_edit` and `yolo` map to `accept-edits`, this wrapper remembers the last
+mode T3 Code requested per session so `accept-edits` coming back from `agy` is reported as
+`yolo` when Full access is active instead of downgrading it to `auto_edit`.
+
+It also tracks each session's offered `thought_level` options (and caches them per model) so
+a `session/set_config_option` request carrying a level outside the active model's range (for
+example `xhigh` or `max` sent to a model capped at `high`) is clamped to the nearest offered
+level instead of failing with `-32602`.
+
 Everything else passes through byte for byte. To stop using this, clear the Antigravity
 "Binary path" in T3 Code's provider settings.
 """
@@ -22,7 +31,8 @@ import sys
 import threading
 
 TO_AGY = {"auto_edit": "accept-edits", "yolo": "accept-edits"}
-FROM_AGY = {"accept-edits": "auto_edit"}
+THOUGHT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
+THOUGHT_LEVEL_RANK = {level: idx for idx, level in enumerate(THOUGHT_LEVEL_ORDER)}
 T3_MODES = [
     {"value": "default", "name": "Default", "id": "default"},
     {"value": "auto_edit", "name": "Accept edits", "id": "auto_edit"},
@@ -30,49 +40,256 @@ T3_MODES = [
 ]
 
 
+def _is_request_id(value):
+    return isinstance(value, (int, str)) and not isinstance(value, bool)
+
+
+def _session_key(container):
+    if isinstance(container, dict):
+        session_id = container.get("sessionId")
+        if isinstance(session_id, str):
+            return session_id
+    return None
+
+
+def _clamp_thought_level(requested, offered):
+    if not offered or requested in offered:
+        return requested
+    req_rank = THOUGHT_LEVEL_RANK.get(requested.lower())
+    if req_rank is None:
+        return offered[-1]
+    ranked = [
+        (THOUGHT_LEVEL_RANK[lvl.lower()], lvl)
+        for lvl in offered
+        if isinstance(lvl, str) and lvl.lower() in THOUGHT_LEVEL_RANK
+    ]
+    if not ranked:
+        return offered[-1]
+    # Pick the closest offered level; break ties toward the lower supported level
+    # so out-of-range requests never exceed what the model supports.
+    _, best = min(ranked, key=lambda item: (abs(item[0] - req_rank), item[0]))
+    return best
+
+
+class ModeBridge:
+    """Translate ACP session modes and clamp thought levels between T3 Code and standalone `agy`."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._requested = {}
+        self._pending = {}
+        self._pending_sessions = {}
+        self._session_model = {}
+        self._session_thought_levels = {}
+        self._model_thought_levels = {}
+
+    @staticmethod
+    def _from_agy(value, wanted):
+        if value == "accept-edits":
+            return "yolo" if wanted == "yolo" else "auto_edit"
+        return value
+
+    def _fix_config_options(self, options, wanted):
+        reported = None
+        if not isinstance(options, list):
+            return reported
+        for option in options:
+            if isinstance(option, dict) and (option.get("id") == "mode" or option.get("category") == "mode"):
+                raw = option.get("currentValue")
+                if isinstance(raw, str):
+                    reported = raw
+                option["options"] = [{"value": m["value"], "name": m["name"]} for m in T3_MODES]
+                option["currentValue"] = self._from_agy(raw, wanted)
+        return reported
+
+    def _record_thought_levels_locked(self, session_id, options, models=None):
+        current_model = None
+        if isinstance(models, dict) and isinstance(models.get("currentModelId"), str):
+            current_model = models["currentModelId"]
+
+        if isinstance(options, list):
+            offered_levels = None
+            for option in options:
+                if not isinstance(option, dict):
+                    continue
+                opt_id = option.get("id")
+                opt_cat = option.get("category")
+                if opt_id == "model" or opt_cat == "model":
+                    if isinstance(option.get("currentValue"), str):
+                        current_model = option["currentValue"]
+                elif opt_id == "thought_level" or opt_cat == "thought_level":
+                    raw_opts = option.get("options")
+                    if isinstance(raw_opts, list):
+                        offered_levels = [
+                            item["value"]
+                            for item in raw_opts
+                            if isinstance(item, dict) and isinstance(item.get("value"), str)
+                        ]
+            if offered_levels is None:
+                offered_levels = []
+            if session_id is not None:
+                self._session_thought_levels[session_id] = offered_levels
+            if current_model is not None:
+                self._model_thought_levels[current_model] = offered_levels
+
+        if session_id is not None and current_model is not None:
+            self._session_model[session_id] = current_model
+
+    def _fix_modes(self, modes, wanted):
+        reported = None
+        if not isinstance(modes, dict):
+            return reported
+        raw = modes.get("currentModeId")
+        if isinstance(raw, str):
+            reported = raw
+        modes["availableModes"] = [{"id": m["id"], "name": m["name"]} for m in T3_MODES]
+        modes["currentModeId"] = self._from_agy(raw, wanted)
+        return reported
+
+    def to_agent(self, message):
+        """Rewrite T3 Code's mode names and clamp out-of-range thought levels sent to the CLI."""
+        if not isinstance(message, dict):
+            return message
+        params = message.get("params")
+        if not isinstance(params, dict):
+            return message
+        method = message.get("method")
+        session_id = _session_key(params)
+        msg_id = message.get("id")
+
+        if method == "session/set_model" and isinstance(params.get("modelId"), str):
+            with self._lock:
+                if session_id is not None:
+                    self._session_model[session_id] = params["modelId"]
+                    if _is_request_id(msg_id):
+                        self._pending_sessions[msg_id] = session_id
+            return message
+
+        if method == "session/set_config_option":
+            config_id = params.get("configId")
+            value = params.get("value")
+            if config_id == "model" and isinstance(value, str):
+                with self._lock:
+                    if session_id is not None:
+                        self._session_model[session_id] = value
+                        if _is_request_id(msg_id):
+                            self._pending_sessions[msg_id] = session_id
+                return message
+            if config_id == "thought_level" and isinstance(value, str):
+                with self._lock:
+                    if session_id is not None and _is_request_id(msg_id):
+                        self._pending_sessions[msg_id] = session_id
+                    model_id = self._session_model.get(session_id)
+                    offered = None
+                    if model_id is not None and model_id in self._model_thought_levels:
+                        offered = self._model_thought_levels[model_id]
+                    elif session_id in self._session_thought_levels:
+                        offered = self._session_thought_levels[session_id]
+                if offered:
+                    params["value"] = _clamp_thought_level(value, offered)
+                return message
+
+        if method == "session/set_mode" and isinstance(params.get("modeId"), str):
+            field = "modeId"
+        elif (
+            method == "session/set_config_option"
+            and params.get("configId") == "mode"
+            and isinstance(params.get("value"), str)
+        ):
+            field = "value"
+        else:
+            return message
+
+        requested = params[field]
+        with self._lock:
+            prev = self._requested.get(session_id)
+            self._requested[session_id] = requested
+            if _is_request_id(msg_id):
+                self._pending[msg_id] = (session_id, prev, requested)
+
+        if requested in TO_AGY:
+            params[field] = TO_AGY[requested]
+        return message
+
+    def to_client(self, message):
+        """Present the CLI's modes under the names T3 Code expects and record offered thought levels."""
+        if not isinstance(message, dict):
+            return message
+
+        msg_id = message.get("id")
+        is_response = "result" in message or "error" in message
+        result = message.get("result")
+        params = message.get("params")
+
+        with self._lock:
+            pending_entry = None
+            pending_session = None
+            if is_response and _is_request_id(msg_id):
+                pending_entry = self._pending.pop(msg_id, None)
+                pending_session = self._pending_sessions.pop(msg_id, None)
+
+            if "error" in message:
+                if pending_entry is not None:
+                    session_id, prev, requested = pending_entry
+                    if self._requested.get(session_id) == requested:
+                        if prev is None:
+                            self._requested.pop(session_id, None)
+                        else:
+                            self._requested[session_id] = prev
+                return message
+
+            if pending_entry is not None:
+                session_id = pending_entry[0]
+                wanted = pending_entry[2]
+            else:
+                session_id = _session_key(result)
+                if session_id is None:
+                    session_id = _session_key(params)
+                if session_id is None:
+                    session_id = pending_session
+                wanted = self._requested.get(session_id)
+
+            reported = []
+            if isinstance(result, dict):
+                r_opt = self._fix_config_options(result.get("configOptions"), wanted)
+                r_mode = self._fix_modes(result.get("modes"), wanted)
+                self._record_thought_levels_locked(session_id, result.get("configOptions"), result.get("models"))
+                reported.extend(r for r in (r_opt, r_mode) if r is not None)
+
+            if isinstance(params, dict):
+                update = params.get("update")
+                if isinstance(update, dict):
+                    r_opt = self._fix_config_options(update.get("configOptions"), wanted)
+                    r_mode = self._fix_modes(update.get("modes"), wanted)
+                    if "configOptions" in update or "models" in update:
+                        self._record_thought_levels_locked(session_id, update.get("configOptions"), update.get("models"))
+                    reported.extend(r for r in (r_opt, r_mode) if r is not None)
+                    if "currentModeId" in update:
+                        raw = update.get("currentModeId")
+                        if isinstance(raw, str):
+                            reported.append(raw)
+                        update["currentModeId"] = self._from_agy(raw, wanted)
+
+            has_pending = any(sid == session_id for sid, _, _ in self._pending.values())
+            if reported and not has_pending:
+                last_reported = reported[-1]
+                if last_reported != "accept-edits":
+                    self._requested[session_id] = last_reported
+
+        return message
+
+
+_DEFAULT_BRIDGE = ModeBridge()
+
+
 def to_agent(message):
     """Rewrite T3 Code's mode names in requests it sends to the CLI."""
-    params = message.get("params")
-    if not isinstance(params, dict):
-        return message
-    method = message.get("method")
-    if method == "session/set_mode" and params.get("modeId") in TO_AGY:
-        params["modeId"] = TO_AGY[params["modeId"]]
-    elif method == "session/set_config_option" and params.get("configId") == "mode" and params.get("value") in TO_AGY:
-        params["value"] = TO_AGY[params["value"]]
-    return message
-
-
-def fix_config_options(options):
-    if not isinstance(options, list):
-        return
-    for option in options:
-        if isinstance(option, dict) and (option.get("id") == "mode" or option.get("category") == "mode"):
-            option["options"] = [{"value": m["value"], "name": m["name"]} for m in T3_MODES]
-            option["currentValue"] = FROM_AGY.get(option.get("currentValue"), option.get("currentValue"))
-
-
-def fix_modes(modes):
-    if not isinstance(modes, dict):
-        return
-    modes["availableModes"] = [{"id": m["id"], "name": m["name"]} for m in T3_MODES]
-    modes["currentModeId"] = FROM_AGY.get(modes.get("currentModeId"), modes.get("currentModeId"))
+    return _DEFAULT_BRIDGE.to_agent(message)
 
 
 def to_client(message):
     """Present the CLI's modes under the names T3 Code expects."""
-    result = message.get("result")
-    if isinstance(result, dict):
-        fix_config_options(result.get("configOptions"))
-        fix_modes(result.get("modes"))
-    params = message.get("params")
-    if isinstance(params, dict):
-        update = params.get("update")
-        if isinstance(update, dict):
-            fix_config_options(update.get("configOptions"))
-            if update.get("currentModeId") in FROM_AGY:
-                update["currentModeId"] = FROM_AGY[update["currentModeId"]]
-    return message
+    return _DEFAULT_BRIDGE.to_client(message)
 
 
 def pump(source, sink, rewrite):
@@ -94,10 +311,11 @@ def pump(source, sink, rewrite):
 
 def main():
     agy = os.path.expanduser("~/.local/bin/agy")
+    bridge = ModeBridge()
     child = subprocess.Popen([agy, "acp", *sys.argv[1:]], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    inbound = threading.Thread(target=pump, args=(sys.stdin.buffer, child.stdin, to_agent), daemon=True)
+    inbound = threading.Thread(target=pump, args=(sys.stdin.buffer, child.stdin, bridge.to_agent), daemon=True)
     inbound.start()
-    pump(child.stdout, sys.stdout.buffer, to_client)
+    pump(child.stdout, sys.stdout.buffer, bridge.to_client)
     sys.exit(child.wait())
 
 

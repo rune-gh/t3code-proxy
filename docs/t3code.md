@@ -67,12 +67,17 @@ GPT-OSS models Google offers) to T3 Code's Antigravity provider. Two pieces make
 
 - **The Antigravity-only endpoint.** The Antigravity CLI's gateway mode takes its model list from
   the endpoint it is pointed at. `https://<hub>/provider/antigravity` lists only the hub's
-  Antigravity accounts, so the CLI never offers your Claude or Codex subscription models.
+  Antigravity accounts, so the CLI never offers your Claude or Codex subscription models. For
+  `antigravity/cli/` requests it expands each thinking-capable model into its supported effort
+  variants and deduplicates aliased base/suffixed IDs so T3 Code shows one entry per model with
+  its effort levels under **Effort**.
 - **The standalone CLI.** T3 Code's bundled Antigravity runtime ignores gateway mode and always
   offers its own fixed Gemini list. The standalone `agy` CLI (1.5.9 or later) honours it.
-  [`deploy/t3code/agy-acp`](../deploy/t3code/agy-acp) starts `agy acp` for T3 Code and renames
-  the session modes between the two runtimes (`auto_edit` and `yolo` become `accept-edits`);
-  everything else passes through unchanged.
+  [`deploy/t3code/agy-acp`](../deploy/t3code/agy-acp) starts `agy acp` for T3 Code, renames
+  the session modes between the two runtimes (`auto_edit` and `yolo` both map to `accept-edits`
+  for `agy`, while preserving `yolo` in responses back to T3 Code so Full access is not downgraded
+  to Accept edits), and clamps out-of-range `thought_level` updates to the active model's offered
+  levels; everything else passes through unchanged.
 
 Setup on the machine running T3 Code:
 

@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	managementHandlers "github.com/rune-oai/t3code-proxy/internal/api/handlers/management"
 	"github.com/rune-oai/t3code-proxy/internal/api/middleware"
+	"github.com/rune-oai/t3code-proxy/internal/client/antigravitycli"
 	claudemodels "github.com/rune-oai/t3code-proxy/internal/client/claude/models"
 	codexlive "github.com/rune-oai/t3code-proxy/internal/client/codex/live"
 	codexmodels "github.com/rune-oai/t3code-proxy/internal/client/codex/models"
@@ -1030,6 +1031,11 @@ func (s *Server) loadMuseCodeHomeModels(c *gin.Context) ([]musecode.ModelInput, 
 
 func (s *Server) geminiModelsHandler(geminiHandler *gemini.GeminiAPIHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		appendVaryToken(c.Writer.Header(), "User-Agent")
+		if antigravitycli.IsAntigravityCLIUserAgent(c.GetHeader("User-Agent")) {
+			s.handleAntigravityCLIModels(c)
+			return
+		}
 		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 			s.handleHomeGeminiModels(c)
 			return
@@ -1041,6 +1047,11 @@ func (s *Server) geminiModelsHandler(geminiHandler *gemini.GeminiAPIHandler) gin
 
 func (s *Server) geminiGetHandler(geminiHandler *gemini.GeminiAPIHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		appendVaryToken(c.Writer.Header(), "User-Agent")
+		if antigravitycli.IsAntigravityCLIUserAgent(c.GetHeader("User-Agent")) {
+			s.handleAntigravityCLIModel(c)
+			return
+		}
 		if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled && auth.ProviderScopeFromContext(c.Request.Context()) == "" {
 			s.handleHomeGeminiModel(c)
 			return
@@ -1048,6 +1059,85 @@ func (s *Server) geminiGetHandler(geminiHandler *gemini.GeminiAPIHandler) gin.Ha
 
 		geminiHandler.GeminiGetHandler(c)
 	}
+}
+
+func appendVaryToken(header http.Header, token string) {
+	if header == nil || token == "" {
+		return
+	}
+	for _, existing := range header.Values("Vary") {
+		for _, part := range strings.Split(existing, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), token) {
+				return
+			}
+		}
+	}
+	header.Add("Vary", token)
+}
+
+func (s *Server) antigravityCLIModelInfos(c *gin.Context) ([]*registry.ModelInfo, bool) {
+	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
+		return registry.GetGlobalRegistry().GetAvailableModelsByProvider(scope), true
+	}
+	if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
+		entries, ok := s.loadHomeModelEntries(c)
+		if !ok {
+			return nil, false
+		}
+		return homeModelEntriesToRegistryInfos(entries), true
+	}
+	return registry.GetGlobalRegistry().GetAvailableModelInfos(), true
+}
+
+func homeModelEntriesToRegistryInfos(entries []homeModelEntry) []*registry.ModelInfo {
+	out := make([]*registry.ModelInfo, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, &registry.ModelInfo{
+			ID:                        entry.id,
+			Name:                      entry.modelName,
+			MetadataModelID:           entry.metadataModelID,
+			Created:                   entry.created,
+			OwnedBy:                   entry.ownedBy,
+			Type:                      entry.modelType,
+			DisplayName:               entry.displayName,
+			Description:               entry.description,
+			ContextLength:             entry.contextLength,
+			MaxContextLength:          entry.maxContextLength,
+			MaxCompletionTokens:       entry.maxCompletionTokens,
+			Thinking:                  entry.thinking,
+			SupportedInputModalities:  entry.supportedInputModalities,
+			SupportedOutputModalities: entry.supportedOutputModalities,
+		})
+	}
+	return out
+}
+
+func (s *Server) handleAntigravityCLIModels(c *gin.Context) {
+	infos, ok := s.antigravityCLIModelInfos(c)
+	if !ok {
+		return
+	}
+	s.writeModelListResponse(c, "gemini", gin.H{
+		"models": antigravitycli.BuildModels(infos),
+	})
+}
+
+func (s *Server) handleAntigravityCLIModel(c *gin.Context) {
+	infos, ok := s.antigravityCLIModelInfos(c)
+	if !ok {
+		return
+	}
+	action := strings.TrimPrefix(c.Param("action"), "/")
+	if model := antigravitycli.FindModel(infos, action); model != nil {
+		c.JSON(http.StatusOK, model)
+		return
+	}
+	c.JSON(http.StatusNotFound, handlers.ErrorResponse{
+		Error: handlers.ErrorDetail{
+			Message: "Not Found",
+			Type:    "not_found",
+		},
+	})
 }
 
 type homeModelRoute struct {
