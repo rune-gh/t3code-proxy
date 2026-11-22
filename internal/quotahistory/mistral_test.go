@@ -308,7 +308,8 @@ func TestRecorderMergesMistralKeysOfOneCustomer(t *testing.T) {
 	}
 	customerOf := map[string]string{"fixture-vibe-key": "customer-a", "fixture-api-key": "customer-a", "fixture-other-key": "customer-b"}
 	whoamiStatus := 200
-	r := NewRecorder(Deps{
+	var afterWhoami func(*coreauth.Auth)
+	deps := Deps{
 		ListAuths: func() []*coreauth.Auth { return auths },
 		DoRequest: func(_ context.Context, auth *coreauth.Auth, _, url string, _ map[string]string, _ []byte) (int, []byte, error) {
 			switch url {
@@ -317,30 +318,47 @@ func TestRecorderMergesMistralKeysOfOneCustomer(t *testing.T) {
 			case MistralSubscriptionURL:
 				return 200, []byte(mistralSubscriptionFixture), nil
 			case MistralWhoamiURL:
+				if afterWhoami != nil {
+					afterWhoami(auth)
+				}
 				return whoamiStatus, []byte(`{"customer_id":"` + customerOf[auth.Attributes["api_key"]] + `"}`), nil
 			}
 			return 404, nil, nil
 		},
-	})
-	r.now = func() time.Time { return now }
-	r.startupDelay = time.Hour
-	if err := r.Apply(enabledSettings(t)); err != nil {
-		t.Fatal(err)
 	}
-	t.Cleanup(r.Close)
+	var clock atomic.Int64
+	clock.Store(now.UnixMilli())
+	open := func(settings Settings) *Recorder {
+		t.Helper()
+		recorder := NewRecorder(deps)
+		recorder.now = func() time.Time { return time.UnixMilli(clock.Load()) }
+		recorder.startupDelay = time.Hour
+		if err := recorder.Apply(settings); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(recorder.Close)
+		return recorder
+	}
+	historyOf := func(recorder *Recorder) History {
+		t.Helper()
+		history, err := recorder.History(0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return history
+	}
+	settings := enabledSettings(t)
+	r := open(settings)
 	// The first round learns the customers as it goes, so a key polled before its
 	// sibling may still be stored once; history hides it.
 	if n := r.poll(context.Background(), r.store, 0, nil); n < 2 || n > 3 {
 		t.Fatalf("first round stored %d samples, want 2 or 3", n)
 	}
-	now = now.Add(time.Minute)
+	clock.Add(time.Minute.Milliseconds())
 	if n := r.poll(context.Background(), r.store, 0, nil); n != 2 {
 		t.Fatalf("stored %d samples, want 2 (one per customer)", n)
 	}
-	history, err := r.History(0, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	history := historyOf(r)
 	labels := map[string]bool{}
 	for _, account := range history.Accounts {
 		labels[account.Label] = true
@@ -363,8 +381,58 @@ func TestRecorderMergesMistralKeysOfOneCustomer(t *testing.T) {
 
 	// A customer that cannot be read keeps the last one known.
 	whoamiStatus = 503
-	now = now.Add(profileTTL)
-	if n := r.poll(context.Background(), r.store, 0, nil); n != 2 {
+	r.Close()
+	restarted := open(settings)
+	if reopened := historyOf(restarted); !reflect.DeepEqual(reopened, history) {
+		t.Fatalf("history before the first poll after restart changed: %d accounts and %d samples", len(reopened.Accounts), len(reopened.Samples))
+	}
+	clock.Add(profileTTL.Milliseconds())
+	if n := restarted.poll(context.Background(), restarted.store, 0, nil); n != 2 {
 		t.Fatalf("stored %d samples after a failed customer read, want 2", n)
+	}
+
+	// A new database must retain a verified identity even for a disabled
+	// duplicate key that no longer gets polled.
+	auths[0].Disabled = true // mistral-vibe
+	settings.Path = filepath.Join(t.TempDir(), "new.db")
+	if err := restarted.Apply(settings); err != nil {
+		t.Fatal(err)
+	}
+	if n := restarted.poll(context.Background(), restarted.store, 0, nil); n != 2 {
+		t.Fatalf("stored %d samples after switching databases, want 2", n)
+	}
+	history = historyOf(restarted)
+	restarted.Close()
+	if reopened := historyOf(open(settings)); !reflect.DeepEqual(reopened, history) {
+		t.Fatalf("history before the first poll after switching databases and restarting changed: %d accounts and %d samples", len(reopened.Accounts), len(reopened.Samples))
+	}
+
+	// Shutdown can arrive just after the second key's lookup succeeds. Save
+	// the verified grouping while discarding the cancelled usage sample.
+	auths[0].Disabled = false
+	whoamiStatus = 200
+	settings.Path = filepath.Join(t.TempDir(), "cancel.db")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cancelIndex := max(auths[0].EnsureIndex(), auths[1].EnsureIndex())
+	afterWhoami = func(auth *coreauth.Auth) {
+		if auth.Index == cancelIndex {
+			cancel()
+		}
+	}
+	cancelled := open(settings)
+	cancelled.poll(ctx, cancelled.store, 0, nil)
+	if ctx.Err() == nil {
+		t.Fatal("the second same-customer lookup did not cancel the poll")
+	}
+	cancelled.Close()
+	history = historyOf(open(settings))
+	if len(history.Accounts) != 2 {
+		t.Fatalf("accounts after cancelling and restarting = %+v, want two customers", history.Accounts)
+	}
+	for _, sample := range history.Samples {
+		if sample.AuthIndex == cancelIndex {
+			t.Fatal("stored the cancelled usage sample")
+		}
 	}
 }

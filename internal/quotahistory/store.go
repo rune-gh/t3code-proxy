@@ -12,7 +12,10 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-var samplesBucket = []byte("samples")
+var (
+	samplesBucket          = []byte("samples")
+	mistralCustomersBucket = []byte("mistral_customers")
+)
 
 const boltOpenTimeout = 2 * time.Second
 
@@ -144,6 +147,43 @@ func (s *Store) latestPlans(maxRecords int) map[string]string {
 		return nil
 	})
 	return plans
+}
+
+func (s *Store) putMistralCustomers(customers map[string]string) error {
+	if len(customers) == 0 {
+		return nil
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket, errCreate := tx.CreateBucketIfNotExists(mistralCustomersBucket)
+		if errCreate != nil {
+			return errCreate
+		}
+		for index, customer := range customers {
+			key := []byte(index)
+			if string(bucket.Get(key)) == customer {
+				continue
+			}
+			if errPut := bucket.Put(key, []byte(customer)); errPut != nil {
+				return errPut
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Store) mistralCustomers() (map[string]string, error) {
+	customers := make(map[string]string)
+	errView := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(mistralCustomersBucket)
+		if bucket == nil {
+			return nil
+		}
+		return bucket.ForEach(func(index, customer []byte) error {
+			customers[string(index)] = string(customer)
+			return nil
+		})
+	})
+	return customers, errView
 }
 
 // prune deletes samples older than before (unix ms) and returns the count.
