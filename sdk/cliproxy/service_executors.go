@@ -501,6 +501,9 @@ func (s *Service) unregisterModelsForAuthFenced(a *coreauth.Auth, fence modelReg
 		log.WithFields(log.Fields{"auth_id": a.ID}).Warnf("model unregistration for auth %s was superseded during computation; discarded the stale removal instead of deleting the latest auth state", a.ID)
 		return false
 	}
+	if strings.EqualFold(a.Provider, "antigravity") {
+		coreauth.ClearAntigravityThinkingGroups(a.ID)
+	}
 	return true
 }
 

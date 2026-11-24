@@ -425,8 +425,9 @@ func TestAntigravityExecutor_Claude55ExplicitThinkingLevelPreserved(t *testing.T
 						}
 					}
 
-					if got := ojson.GetBytes(capturedBody, "request.generationConfig.thinkingConfig.thinkingLevel").String(); got != level {
-						t.Fatalf("thinkingLevel = %q, want %q; body=%s", got, level, capturedBody)
+					wantLevel := strings.ToUpper(level)
+					if got := ojson.GetBytes(capturedBody, "request.generationConfig.thinkingConfig.thinkingLevel").String(); got != wantLevel {
+						t.Fatalf("thinkingLevel = %q, want %q; body=%s", got, wantLevel, capturedBody)
 					}
 					if budget := ojson.GetBytes(capturedBody, "request.generationConfig.thinkingConfig.thinkingBudget"); budget.Exists() {
 						t.Fatalf("thinkingBudget should be absent, got %s; body=%s", budget.Raw, capturedBody)

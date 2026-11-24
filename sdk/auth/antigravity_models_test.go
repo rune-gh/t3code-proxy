@@ -80,6 +80,60 @@ func TestParseAntigravityModelCapabilityHints(t *testing.T) {
 		}
 	})
 
+	t.Run("parses groupedModels thinking variants and web search flags", func(t *testing.T) {
+		body := []byte(`{
+			"models": {
+				"claude-opus-5-5-low": {"maxOutputTokens": 128000},
+				"claude-opus-5-5-medium": {"maxOutputTokens": 128000},
+				"claude-opus-5-5-high": {"maxOutputTokens": 128000},
+				"gemini-4-carbon-low": {"maxOutputTokens": 262144},
+				"gemini-4-carbon-medium": {"maxOutputTokens": 262144},
+				"gemini-4-carbon-high": {"maxOutputTokens": 262144},
+				"gemini-4-carbon-disabled": {}
+			},
+			"groupedModels": {
+				"claude-opus-5-5": {
+					"supportedThinkingLevels": [
+						{"thinkingSuffix": "low"},
+						{"thinkingSuffix": "medium"},
+						{"thinkingSuffix": "high"}
+					]
+				},
+				"gemini-4-carbon": {
+					"supportedThinkingLevels": [
+						{"thinkingSuffix": "low"},
+						{"thinkingSuffix": "medium"},
+						{"thinkingSuffix": "high"},
+						{"thinkingSuffix": "disabled"}
+					]
+				}
+			},
+			"webSearchModelIds": ["gemini-4-carbon-low", "gemini-4-carbon-high"]
+		}`)
+		hints, ok := ParseAntigravityModelCapabilityHints(body)
+		if !ok {
+			t.Fatal("expected ok to be true")
+		}
+		if got := hints.ThinkingGroups["claude-opus-5-5"]["low"]; got != 128000 {
+			t.Fatalf("claude-opus-5-5 low = %d, want 128000", got)
+		}
+		if got := hints.ThinkingGroups["claude-opus-5-5"]["medium"]; got != 128000 {
+			t.Fatalf("claude-opus-5-5 medium = %d, want 128000", got)
+		}
+		if got := hints.ThinkingGroups["gemini-4-carbon"]["low"]; got != 262144 {
+			t.Fatalf("gemini-4-carbon low = %d, want 262144", got)
+		}
+		if got, exists := hints.ThinkingGroups["gemini-4-carbon"]["disabled"]; !exists || got != 0 {
+			t.Fatalf("gemini-4-carbon disabled = (%d, %v), want (0, true)", got, exists)
+		}
+		if !hints.ThinkingWebSearch["gemini-4-carbon-low"] || !hints.ThinkingWebSearch["gemini-4-carbon-high"] {
+			t.Fatalf("expected gemini-4-carbon web search flags, got %v", hints.ThinkingWebSearch)
+		}
+		if hints.ThinkingWebSearch["claude-opus-5-5-low"] {
+			t.Fatalf("did not expect claude-opus-5-5-low in ThinkingWebSearch: %v", hints.ThinkingWebSearch)
+		}
+	})
+
 	t.Run("invalid json returns false", func(t *testing.T) {
 		_, ok := ParseAntigravityModelCapabilityHints([]byte(`{not valid json`))
 		if ok {
@@ -108,11 +162,24 @@ func TestParseAntigravityModelCapabilityHints(t *testing.T) {
 func TestPersistedAntigravityCapabilityHintsRoundTrip(t *testing.T) {
 	hints := AntigravityModelCapabilityHints{
 		ModelIDs: map[string]struct{}{
-			"gemini-3-flash": {},
-			"gemini-4-argon": {},
+			"gemini-3-flash":         {},
+			"gemini-4-argon":         {},
+			"claude-opus-5-5-low":    {},
+			"claude-opus-5-5-high":   {},
+			"gemini-4-carbon-low":    {},
+			"gemini-4-carbon-high":   {},
+			"gemini-4-carbon-medium": {},
 		},
 		WebSearchModelIDs: map[string]struct{}{
-			"gemini-3-flash": {},
+			"gemini-3-flash":       {},
+			"gemini-4-carbon-high": {},
+		},
+		ThinkingGroups: map[string]map[string]int{
+			"claude-opus-5-5": {"low": 128000, "high": 128000},
+			"gemini-4-carbon": {"low": 262144, "medium": 262144, "high": 262144},
+		},
+		ThinkingWebSearch: map[string]bool{
+			"gemini-4-carbon-high": true,
 		},
 	}
 	project := "aicode-consumers"
@@ -132,11 +199,20 @@ func TestPersistedAntigravityCapabilityHintsRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("expected parse to succeed")
 	}
-	if len(parsed.ModelIDs) != 2 {
-		t.Errorf("got %d models, want 2", len(parsed.ModelIDs))
+	if len(parsed.ModelIDs) != 7 {
+		t.Errorf("got %d models, want 7", len(parsed.ModelIDs))
 	}
-	if len(parsed.WebSearchModelIDs) != 1 {
-		t.Errorf("got %d web search models, want 1", len(parsed.WebSearchModelIDs))
+	if len(parsed.WebSearchModelIDs) != 2 {
+		t.Errorf("got %d web search models, want 2", len(parsed.WebSearchModelIDs))
+	}
+	if got := parsed.ThinkingGroups["claude-opus-5-5"]["low"]; got != 128000 {
+		t.Errorf("persisted claude-opus-5-5 low = %d, want 128000", got)
+	}
+	if got := parsed.ThinkingGroups["gemini-4-carbon"]["medium"]; got != 262144 {
+		t.Errorf("persisted gemini-4-carbon medium = %d, want 262144", got)
+	}
+	if !parsed.ThinkingWebSearch["gemini-4-carbon-high"] {
+		t.Errorf("expected persisted ThinkingWebSearch[gemini-4-carbon-high]=true, got %v", parsed.ThinkingWebSearch)
 	}
 
 	// Mismatched project

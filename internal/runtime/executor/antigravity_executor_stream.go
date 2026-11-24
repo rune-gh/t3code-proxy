@@ -51,58 +51,40 @@ func (e *AntigravityExecutor) ExecuteStream(ctx context.Context, auth *cliproxya
 		return nil, statusErr{code: http.StatusServiceUnavailable, msg: "antigravity pool paused after TOS_VIOLATION"}
 	}
 	ctx = context.WithValue(ctx, "alt", "")
-	if !antigravityCoolingDisabled(auth, e.cfg) {
-		if inCooldown, remaining, errCooldown := antigravityIsInShortCooldownRequired(ctx, auth, baseModel, time.Now()); errCooldown != nil {
-			return nil, homeKVUnavailableStatusErr(errCooldown)
-		} else if inCooldown && !antigravityShouldBypassShortCooldown(ctx, e.cfg) {
-			log.Debugf("antigravity executor: auth %s in short cooldown for model %s (%s remaining), returning 429 to switch auth", auth.ID, baseModel, remaining)
-			d := remaining
-			return nil, statusErr{code: http.StatusTooManyRequests, msg: fmt.Sprintf("auth in short cooldown, %s remaining", remaining), retryAfter: &d}
-		}
-	}
 
 	reporter := helps.NewExecutorUsageReporter(ctx, e, baseModel, auth)
-	defer reporter.TrackFailure(ctx, &err)
 
 	from := opts.SourceFormat
 	responseFormat := cliproxyexecutor.ResponseFormatOrSource(opts)
 	to := sdktranslator.FromString("antigravity")
 
-	originalPayloadSource := req.Payload
-	if len(opts.OriginalRequest) > 0 {
-		originalPayloadSource = opts.OriginalRequest
+	prepared, errPrepare := e.prepareAntigravityRequest(ctx, auth, req, opts, baseModel, true, false)
+	if !prepared.cooldownRejected {
+		defer reporter.TrackFailure(ctx, &err)
 	}
-	originalPayload := originalPayloadSource
-	originalPayload, errValidate := validateAntigravityRequestSignatures(ctx, baseModel, from, originalPayload)
-	if errValidate != nil {
-		return nil, errValidate
+	if errPrepare != nil {
+		return nil, errPrepare
 	}
-	req.Payload = originalPayload
-	// Observe a translation refusal before the token refresh or any upstream call.
-	modelInfo, _ := cliproxyauth.ResolvedModelInfo(req)
-	translationReq := sdktranslator.RequestEnvelope{Format: from, Model: baseModel, Stream: true, ModelInfo: modelInfo}
-	originalTranslated, translated, errTranslate := helps.TranslateRequestEnvelopePairWithCodexMultiAgentV2(ctx, opts.Headers, e.cfg, from, to, translationReq, originalPayload, req.Payload)
-	if errTranslate != nil {
-		return nil, errTranslate
-	}
-	token, updatedAuth, errToken := e.ensureAccessToken(ctx, auth)
-	if errToken != nil {
-		return nil, errToken
-	}
-	if updatedAuth != nil {
-		auth = updatedAuth
+	if prepared.auth != auth {
+		auth = prepared.auth
 		reporter.UpdateAccessTokenFingerprint(auth)
+	}
+	originalPayload, translated := prepared.originalPayload, prepared.translated
+	req.Payload = originalPayload
+	selection := prepared.model
+	if selection.ID != baseModel {
+		reporter.SetAttemptModel(selection.ID)
 	}
 
 	doc := ojson.NewDoc(translated)
-	if err = helps.ApplyRequestThinkingDoc(doc, req, opts, from.String(), to.String(), e.Identifier()); err != nil {
-		return nil, err
+	if errThinking := helps.ApplyAntigravityRequestThinkingDoc(doc, req, opts, selection); errThinking != nil {
+		return nil, errThinking
 	}
 
-	finalize := helps.NewPayloadFinalizer(e.cfg, e.Identifier(), baseModel, "antigravity", "request", originalTranslated, req, opts)
+	finalize := helps.NewPayloadFinalizerWithSourceModels(e.cfg, e.Identifier(), selection.ID, "antigravity", "request", prepared.originalTranslated, req, opts, baseModel)
 	ctx = helps.WithPayloadFinalizer(ctx, finalize)
 	e.obfuscateSensitiveWordsDoc(doc)
-	sanitizeAntigravityGeminiRequestSignaturesDoc(baseModel, doc)
+	sanitizeAntigravityGeminiRequestSignaturesDoc(selection.ID, doc)
 	_ = doc.Delete("request.stream")
 
 	useCredits := cliproxyauth.AntigravityCreditsRequested(ctx) && antigravityCreditsRetryEnabled(e.cfg)
@@ -119,20 +101,20 @@ func (e *AntigravityExecutor) ExecuteStream(ctx context.Context, auth *cliproxya
 		}
 	}
 	replayScope := antigravityReasoningReplayScope{}
-	if antigravityUsesReasoningReplayCache(baseModel) {
+	if antigravityUsesReasoningReplayCache(selection.ID) {
 		var errReplay error
-		replayScope, _, errReplay = prepareAntigravityGeminiReasoningReplayPayloadDoc(ctx, baseModel, req, opts, doc)
+		replayScope, _, errReplay = prepareAntigravityGeminiReasoningReplayPayloadDoc(ctx, selection.ID, req, opts, doc)
 		if errReplay != nil {
 			err = errReplay
 			return nil, err
 		}
 	}
-	ensureAntigravityGeminiBoundaryUserContentDoc(baseModel, doc)
+	ensureAntigravityGeminiBoundaryUserContentDoc(selection.ID, doc)
 	var replayRequestPayload []byte
 	if replayScope.valid() {
 		replayRequestPayload, _ = antigravityReplayRequestEnvelopeFromDoc(doc)
 	}
-	httpReq, requestPayload, errReq := e.buildRequestDoc(ctx, auth, token, baseModel, doc, true, opts.Alt, baseURL, helps.DerivedAntigravitySessionID(opts.Metadata, req.Metadata))
+	httpReq, requestPayload, errReq := e.buildRequestForModelDoc(ctx, auth, prepared.token, selection.AntigravityModelSelection, doc, true, opts.Alt, baseURL, helps.DerivedAntigravitySessionID(opts.Metadata, req.Metadata))
 	if errReq != nil {
 		err = errReq
 		return nil, err
@@ -175,11 +157,11 @@ func (e *AntigravityExecutor) ExecuteStream(ctx context.Context, auth *cliproxya
 			case antigravity429DecisionShortCooldownSwitchAuth:
 				closeAntigravityAuthIdleTransports(auth)
 				if decision.retryAfter != nil && *decision.retryAfter > 0 && !antigravityCoolingDisabled(auth, e.cfg) {
-					if errMarkCooldown := markAntigravityShortCooldownRequired(ctx, auth, baseModel, time.Now(), *decision.retryAfter); errMarkCooldown != nil {
+					if errMarkCooldown := markAntigravityShortCooldownRequired(ctx, auth, selection.ID, time.Now(), *decision.retryAfter); errMarkCooldown != nil {
 						err = homeKVUnavailableStatusErr(errMarkCooldown)
 						return nil, err
 					}
-					log.Debugf("antigravity executor: short quota cooldown (%s) for model %s recorded", *decision.retryAfter, baseModel)
+					log.Debugf("antigravity executor: short quota cooldown (%s) for model %s recorded", *decision.retryAfter, selection.ID)
 				}
 			case antigravity429DecisionFullQuotaExhausted:
 				closeAntigravityAuthIdleTransports(auth)

@@ -304,49 +304,73 @@ func TestBuildModels_FullEmbeddedCatalogFits32SlotLimitWithoutDroppingModels(t *
 		t.Fatalf("len(got) = %d, want <= %d", len(got), maxCatalogEntries)
 	}
 
-	// Count levels per model base ID; every single model must appear and every
-	// multi-level thinking model must retain at least 2 effort levels.
+	// Count levels per model base ID and track the group appearance order;
+	// all 8 flagship models must get prioritized thinking-level expansion (with
+	// Neon #1, Hydrogen #2, Carbon #3, Opus 5.5 #4, Sonnet 5.5 #5, 3.8 Flash #6,
+	// Argon #7, 3 Flash #8) and every remaining model must stay present without
+	// being dropped.
 	levelsByModel := make(map[string][]string)
+	var expandedOrder []string
+	seenExpanded := make(map[string]bool)
 	for _, entry := range got {
 		name := strings.TrimPrefix(entry["name"].(string), "models/")
 		if idx := strings.IndexByte(name, '('); idx > 0 && strings.HasSuffix(name, ")") {
 			base := name[:idx]
 			lvl := name[idx+1 : len(name)-1]
 			levelsByModel[base] = append(levelsByModel[base], lvl)
+			if !seenExpanded[base] {
+				seenExpanded[base] = true
+				expandedOrder = append(expandedOrder, base)
+			}
 		} else {
 			levelsByModel[name] = nil
 		}
 	}
 
-	wantThinkingModels := []string{
-		"claude-opus-4-6-thinking",
-		"claude-sonnet-4-6",
-		"claude-opus-5-5-high",
-		"claude-sonnet-5-5-high",
+	wantFlagshipOrder := []string{
 		"gemini-4-neon-xhigh",
 		"gemini-4-hydrogen-xhigh",
-		"gemini-4-argon-high",
 		"gemini-4-carbon-high",
+		"claude-opus-5-5-high",
+		"claude-sonnet-5-5-high",
 		"gemini-3.8-flash-high",
-		"gemini-3.8-flash-tiered",
+		"gemini-4-argon-high",
 		"gemini-3-flash",
+	}
+	if !reflect.DeepEqual(expandedOrder, wantFlagshipOrder) {
+		t.Errorf("expandedOrder = %v, want %v", expandedOrder, wantFlagshipOrder)
+	}
+
+	wantFlagshipLevels := map[string][]string{
+		"gemini-4-neon-xhigh":     {"low", "medium", "high", "xhigh"},
+		"gemini-4-hydrogen-xhigh": {"low", "medium", "high", "xhigh"},
+		"gemini-4-carbon-high":    {"low", "medium", "high"},
+		"claude-opus-5-5-high":    {"low", "medium", "high"},
+		"claude-sonnet-5-5-high":  {"low", "medium", "high"},
+		"gemini-3.8-flash-high":   {"low", "medium", "high"},
+		"gemini-4-argon-high":     {"low", "medium", "high"},
+		"gemini-3-flash":          {"low", "high"},
+	}
+	for id, wantLvls := range wantFlagshipLevels {
+		if gotLvls := levelsByModel[id]; !reflect.DeepEqual(gotLvls, wantLvls) {
+			t.Errorf("flagship model %q levels = %v, want %v", id, gotLvls, wantLvls)
+		}
+	}
+	for _, flatID := range []string{
+		"claude-opus-4-6-thinking",
+		"claude-sonnet-4-6",
+		"gemini-3.8-flash-tiered",
 		"gemini-3.1-flash-lite",
 		"gemini-3.5-flash-lite",
-	}
-	for _, id := range wantThinkingModels {
-		lvls, ok := levelsByModel[id]
-		if !ok {
-			t.Errorf("thinking model %q was dropped from 32-slot catalog", id)
-			continue
-		}
-		if len(lvls) < 2 {
-			t.Errorf("thinking model %q got %v (< 2 effort levels)", id, lvls)
-		}
-	}
-	for _, flatID := range []string{"gemini-3.1-flash-image", "gpt-oss-120b-medium"} {
+		"gemini-3.1-flash-image",
+		"gpt-oss-120b-medium",
+	} {
 		if lvls, ok := levelsByModel[flatID]; !ok || len(lvls) != 0 {
 			t.Errorf("flat model %q missing or unexpectedly expanded: ok=%v lvls=%v", flatID, ok, lvls)
 		}
+	}
+	if len(got) != maxCatalogEntries {
+		t.Errorf("len(got) = %d, want exact %d", len(got), maxCatalogEntries)
 	}
 	if _, dup := levelsByModel["gemini-4-neon"]; dup {
 		t.Error("forked alias gemini-4-neon should be deduplicated")

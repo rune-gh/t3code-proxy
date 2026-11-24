@@ -718,6 +718,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
 		execCtx = contextWithRequestedModelAlias(execCtx, pickOpts, routeModel)
+		execCtx = m.withAntigravityModelState(execCtx, auth)
 		execCtx = coreusage.WithSelectionID(execCtx, selectionIDFromOptions(pickOpts))
 		execCtx = m.newUpstreamAttemptContext(execCtx)
 
@@ -939,6 +940,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
 		execCtx = contextWithRequestedModelAlias(execCtx, pickOpts, routeModel)
+		execCtx = m.withAntigravityModelState(execCtx, auth)
 		execCtx = coreusage.WithSelectionID(execCtx, selectionIDFromOptions(pickOpts))
 		execCtx = m.newUpstreamAttemptContext(execCtx)
 
@@ -1274,6 +1276,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			clearSchedulerSelectionID(opts.Metadata)
 		}
 		execCtx = contextWithRequestedModelAlias(execCtx, pickOpts, routeModel)
+		execCtx = m.withAntigravityModelState(execCtx, auth)
 		execCtx = coreusage.WithSelectionID(execCtx, selectionIDFromOptions(pickOpts))
 		if selection != nil {
 			execCtx = coreusage.WithHomeSelection(execCtx, coreusage.HomeSelection{

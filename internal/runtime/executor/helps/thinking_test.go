@@ -2,6 +2,7 @@ package helps_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/MoeForge/moego/ojson"
@@ -125,8 +126,8 @@ func TestApplyThinkingWithSourcePayload_AntigravityClaudeThinkingDisplayUpdates(
 		t.Fatalf("includeThoughts not enabled: %s", out)
 	}
 	level := ojson.GetBytes(out, "request.generationConfig.thinkingConfig.thinkingLevel").String()
-	if level != "high" {
-		t.Fatalf("thinkingLevel = %q, want high: %s", level, out)
+	if level != "HIGH" {
+		t.Fatalf("thinkingLevel = %q, want HIGH: %s", level, out)
 	}
 }
 
@@ -157,8 +158,8 @@ func TestApplyThinkingWithSourcePayload_AntigravityResponsesReasoningSummaryAuto
 		t.Fatalf("includeThoughts not enabled: %s", out)
 	}
 	level := ojson.GetBytes(out, "request.generationConfig.thinkingConfig.thinkingLevel").String()
-	if level != "low" {
-		t.Fatalf("thinkingLevel = %q, want low: %s", level, out)
+	if level != "LOW" {
+		t.Fatalf("thinkingLevel = %q, want LOW: %s", level, out)
 	}
 }
 
@@ -187,8 +188,9 @@ func TestApplyRequestThinking_AntigravityClaude55PreservesThinkingLevel(t *testi
 				if err != nil {
 					t.Fatalf("ApplyThinkingWithSourcePayload() error = %v", err)
 				}
-				if got := ojson.GetBytes(out, "request.generationConfig.thinkingConfig.thinkingLevel").String(); got != level {
-					t.Fatalf("thinkingLevel = %q, want %q: %s", got, level, out)
+				wantLevel := strings.ToUpper(level)
+				if got := ojson.GetBytes(out, "request.generationConfig.thinkingConfig.thinkingLevel").String(); got != wantLevel {
+					t.Fatalf("thinkingLevel = %q, want %q: %s", got, wantLevel, out)
 				}
 				if budget := ojson.GetBytes(out, "request.generationConfig.thinkingConfig.thinkingBudget"); budget.Exists() {
 					t.Fatalf("thinkingBudget should be absent, got %s: %s", budget.Raw, out)

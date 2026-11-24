@@ -225,7 +225,7 @@ func TestAntigravityCLIExpandedModelExecutionAppliesThinkingSuffix(t *testing.T)
 			pathModel:    "claude-opus-5-5-high(low)",
 			body:         `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":0,"includeThoughts":true}}}`,
 			wantModel:    "claude-opus-5-5-high",
-			wantLevel:    "low",
+			wantLevel:    "LOW",
 			wantNoBudget: true,
 		},
 		{
@@ -233,7 +233,7 @@ func TestAntigravityCLIExpandedModelExecutionAppliesThinkingSuffix(t *testing.T)
 			pathModel:    "gemini-4-hydrogen-xhigh(xhigh)",
 			body:         `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"low","includeThoughts":true}}}`,
 			wantModel:    "gemini-4-hydrogen-xhigh",
-			wantLevel:    "xhigh",
+			wantLevel:    "XHIGH",
 			wantNoBudget: true,
 		},
 		{
