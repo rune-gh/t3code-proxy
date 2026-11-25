@@ -101,10 +101,10 @@ func ApplyPayloadConfigWithTrackedPathsForExecutorDoc(cfg *config.Config, target
 }
 
 func applyPayloadConfigWithTrackedPathsForExecutorDoc(cfg *config.Config, targetExecutor, model, protocol, fromProtocol, root string, doc *ojson.Doc, original []byte, requestedModel, requestPath string, headers http.Header, trackedPaths ...string) (map[string]bool, bool) {
-	return applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg, targetExecutor, model, protocol, fromProtocol, root, doc, original, requestedModel, requestPath, headers, nil, trackedPaths...)
+	return applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg, targetExecutor, model, protocol, fromProtocol, root, doc, original, requestedModel, requestPath, headers, nil, nil, trackedPaths...)
 }
 
-func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config, targetExecutor, model, protocol, fromProtocol, root string, doc *ojson.Doc, original []byte, requestedModel, requestPath string, headers http.Header, auth *cliproxyauth.Auth, trackedPaths ...string) (map[string]bool, bool) {
+func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config, targetExecutor, model, protocol, fromProtocol, root string, doc *ojson.Doc, original []byte, requestedModel, requestPath string, headers http.Header, auth *cliproxyauth.Auth, sourceModels []string, trackedPaths ...string) (map[string]bool, bool) {
 	payloadConfigEvaluations.Add(1)
 	touched := make(map[string]bool)
 	if doc == nil || doc.Len() == 0 {
@@ -147,7 +147,7 @@ func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config,
 	if hasPayloadRules {
 		model = strings.TrimSpace(model)
 		requestedModel = strings.TrimSpace(requestedModel)
-		if model != "" || requestedModel != "" {
+		if model != "" || requestedModel != "" || len(sourceModels) > 0 {
 			toolsPath := buildPayloadPath(root, "tools")
 			toolChoicePath := buildPayloadPath(root, "tool_choice")
 			autoInjectedToolIdx := -1
@@ -201,7 +201,7 @@ func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config,
 					}
 				}
 			}
-			candidates := payloadModelCandidates(model, requestedModel)
+			candidates := payloadModelCandidates(model, requestedModel, sourceModels...)
 			appliedDefaults := make(map[string]struct{})
 			var createdByDefault map[string]struct{}
 			var initialArrayLengths map[string]int
@@ -816,14 +816,14 @@ func payloadHeaderValues(headers http.Header, key string) []string {
 	return values
 }
 
-func payloadModelCandidates(model, requestedModel string) []string {
+func payloadModelCandidates(model, requestedModel string, sourceModels ...string) []string {
 	model = strings.TrimSpace(model)
 	requestedModel = strings.TrimSpace(requestedModel)
-	if model == "" && requestedModel == "" {
+	if model == "" && requestedModel == "" && len(sourceModels) == 0 {
 		return nil
 	}
-	candidates := make([]string, 0, 3)
-	seen := make(map[string]struct{}, 3)
+	candidates := make([]string, 0, 3+len(sourceModels))
+	seen := make(map[string]struct{}, 3+len(sourceModels))
 	addCandidate := func(value string) {
 		value = strings.TrimSpace(value)
 		if value == "" {
@@ -838,6 +838,19 @@ func payloadModelCandidates(model, requestedModel string) []string {
 	}
 	if model != "" {
 		addCandidate(model)
+	}
+	for _, sourceModel := range sourceModels {
+		sourceModel = strings.TrimSpace(sourceModel)
+		if sourceModel == "" {
+			continue
+		}
+		parsed := thinking.ParseSuffix(sourceModel)
+		if base := strings.TrimSpace(parsed.ModelName); base != "" {
+			addCandidate(base)
+		}
+		if parsed.HasSuffix {
+			addCandidate(sourceModel)
+		}
 	}
 	if requestedModel != "" {
 		parsed := thinking.ParseSuffix(requestedModel)

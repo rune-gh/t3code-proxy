@@ -387,14 +387,30 @@ func allocateSlotBudgets(groups []*modelGroup, passthroughCount int, maxEntries 
 		return
 	}
 
-	// Sort expandable groups in priority order for fair water-filling.
-	sort.Slice(expandable, func(i, j int) bool {
-		return compareGroupPriority(expandable[i], expandable[j])
+	// Partition expandable groups into flagship models (non-lite/non-tiered
+	// models with explicit thinking levels) and secondary models (legacy
+	// budget-only models and lite/tiered variants). Under tight 32-slot budgets,
+	// give all flagship models their full thinking levels before spending extra
+	// slots on secondary models.
+	flagships := make([]*modelGroup, 0, len(expandable))
+	secondary := make([]*modelGroup, 0, len(expandable))
+	for _, g := range expandable {
+		if isFlagshipGroup(g) {
+			flagships = append(flagships, g)
+		} else {
+			secondary = append(secondary, g)
+		}
+	}
+	sort.Slice(flagships, func(i, j int) bool {
+		return compareGroupPriority(flagships[i], flagships[j])
+	})
+	sort.Slice(secondary, func(i, j int) bool {
+		return compareGroupPriority(secondary[i], secondary[j])
 	})
 
-	// Pass 1: give every thinking model at least 2 slots so every thinking model
-	// gets an Effort selector in `agy` before any model takes a 3rd/4th/5th slot.
-	for _, g := range expandable {
+	// Pass 1: give every flagship model at least 2 slots so each gets an Effort
+	// selector in `agy` before any flagship takes a 3rd/4th/5th slot.
+	for _, g := range flagships {
 		if remaining <= 0 {
 			return
 		}
@@ -402,11 +418,26 @@ func allocateSlotBudgets(groups []*modelGroup, passthroughCount int, maxEntries 
 		remaining--
 	}
 
-	// Subsequent passes: distribute remaining slots one level at a time across
-	// groups in priority order until the 32-entry budget is full.
+	// Pass 2: fill each flagship model in priority order up to its full level set.
+	for _, g := range flagships {
+		for remaining > 0 && g.allocatedSlots < len(g.availableLevels) {
+			g.allocatedSlots++
+			remaining--
+		}
+	}
+
+	// Pass 3: if any slots remain, give secondary models an Effort selector
+	// (2 slots each) and water-fill the rest.
+	for _, g := range secondary {
+		if remaining <= 0 {
+			return
+		}
+		g.allocatedSlots = 2
+		remaining--
+	}
 	for remaining > 0 {
 		progressed := false
-		for _, g := range expandable {
+		for _, g := range secondary {
 			if remaining <= 0 {
 				break
 			}
@@ -422,9 +453,21 @@ func allocateSlotBudgets(groups []*modelGroup, passthroughCount int, maxEntries 
 	}
 }
 
+func isFlagshipGroup(g *modelGroup) bool {
+	if g == nil || !g.explicitLevels {
+		return false
+	}
+	return !strings.Contains(g.key, "lite") && !strings.Contains(g.key, "tiered")
+}
+
 func compareGroupPriority(a, b *modelGroup) bool {
 	if tierA, tierB := groupPriorityTier(a), groupPriorityTier(b); tierA != tierB {
 		return tierA < tierB
+	}
+	if a.key == "gemini-4-neon" || b.key == "gemini-4-neon" {
+		if a.key != b.key {
+			return a.key == "gemini-4-neon"
+		}
 	}
 	if len(a.availableLevels) != len(b.availableLevels) {
 		return len(a.availableLevels) > len(b.availableLevels)
@@ -445,12 +488,18 @@ func groupPriorityTier(g *modelGroup) int {
 	switch {
 	case !isSecondaryVariant && g.explicitLevels && hasXHigh:
 		return 0
-	case !isSecondaryVariant && g.explicitLevels:
+	case key == "gemini-4-carbon":
 		return 1
-	case !isSecondaryVariant:
+	case !isSecondaryVariant && g.explicitLevels && strings.HasPrefix(key, "claude-"):
 		return 2
-	default:
+	case !isSecondaryVariant && g.explicitLevels && key != "gemini-3-flash":
 		return 3
+	case key == "gemini-3-flash":
+		return 4
+	case !isSecondaryVariant:
+		return 5
+	default:
+		return 6
 	}
 }
 

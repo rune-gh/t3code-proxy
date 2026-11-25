@@ -84,12 +84,24 @@ var (
 type antigravityModelCapabilityHints struct {
 	WebSearchModelIDs map[string]struct{}
 	// Nil means unknown; an empty non-nil set is an authoritative empty catalog.
-	ModelIDs map[string]struct{}
-	revision uint64
+	ModelIDs          map[string]struct{}
+	thinkingGroups    map[string]map[string]int
+	thinkingWebSearch map[string]bool
+	revision          uint64
 }
 
 func (h antigravityModelCapabilityHints) clone() antigravityModelCapabilityHints {
-	return antigravityModelCapabilityHints{WebSearchModelIDs: maps.Clone(h.WebSearchModelIDs), ModelIDs: maps.Clone(h.ModelIDs), revision: h.revision}
+	groups := maps.Clone(h.thinkingGroups)
+	for group, levels := range groups {
+		groups[group] = maps.Clone(levels)
+	}
+	return antigravityModelCapabilityHints{
+		WebSearchModelIDs: maps.Clone(h.WebSearchModelIDs),
+		ModelIDs:          maps.Clone(h.ModelIDs),
+		thinkingGroups:    groups,
+		thinkingWebSearch: maps.Clone(h.thinkingWebSearch),
+		revision:          h.revision,
+	}
 }
 
 // antigravityCapabilityKey isolates catalogs by account, project, route and client
@@ -132,9 +144,13 @@ func (s *Service) cachedAntigravityHintsForKey(auth *coreauth.Auth, endpoint, ke
 		return entry.hints.clone()
 	}
 	antigravityCapabilityMu.Lock()
-	defer antigravityCapabilityMu.Unlock()
 	entry = seedAntigravityCapabilityCacheLocked(key, persisted)
-	return entry.hints.clone()
+	hints := entry.hints.clone()
+	antigravityCapabilityMu.Unlock()
+	if hints.ModelIDs != nil {
+		coreauth.StoreAntigravityThinkingGroups(auth, hints.thinkingGroups, hints.thinkingWebSearch)
+	}
+	return hints
 }
 
 func seedAntigravityCapabilityCacheLocked(cacheKey string, persisted antigravityModelCapabilityHints) antigravityCapabilityCacheEntry {
@@ -219,6 +235,8 @@ func buildPersistedAntigravityCapabilityHintsValue(project, endpoint string, hin
 	return sdkauth.BuildPersistedAntigravityCapabilityHints(project, endpoint, sdkauth.AntigravityModelCapabilityHints{
 		ModelIDs:          hints.ModelIDs,
 		WebSearchModelIDs: hints.WebSearchModelIDs,
+		ThinkingGroups:    hints.thinkingGroups,
+		ThinkingWebSearch: hints.thinkingWebSearch,
 	})
 }
 
@@ -230,6 +248,8 @@ func parsePersistedAntigravityCapabilityHints(metadata map[string]any, expectedP
 	return antigravityModelCapabilityHints{
 		ModelIDs:          hints.ModelIDs,
 		WebSearchModelIDs: hints.WebSearchModelIDs,
+		thinkingGroups:    hints.ThinkingGroups,
+		thinkingWebSearch: hints.ThinkingWebSearch,
 	}, true
 }
 
@@ -273,6 +293,9 @@ func (s *Service) fetchAntigravityModelCapabilityHints(ctx context.Context, auth
 		return entry.hints.clone(), now.Before(entry.expiresAt) || now.Before(antigravityAuthFailureCache[failureKey].nextRetry)
 	}
 	if hints, cached := lookup(); cached {
+		if hints.ModelIDs != nil && len(hints.thinkingGroups) > 0 {
+			coreauth.StoreAntigravityThinkingGroups(auth, hints.thinkingGroups, hints.thinkingWebSearch)
+		}
 		return cacheKey, hints
 	}
 	// The initiating caller owns the shared HTTP operation. Followers may cancel
@@ -351,7 +374,11 @@ func (s *Service) fetchAntigravityModelCapabilityHints(ctx context.Context, auth
 			hints, _ := lookup()
 			return cacheKey, hints
 		}
-		return cacheKey, result.Val.(antigravityModelCapabilityHints).clone()
+		hints := result.Val.(antigravityModelCapabilityHints).clone()
+		if hints.ModelIDs != nil && len(hints.thinkingGroups) > 0 {
+			coreauth.StoreAntigravityThinkingGroups(auth, hints.thinkingGroups, hints.thinkingWebSearch)
+		}
+		return cacheKey, hints
 	}
 }
 
@@ -370,6 +397,8 @@ func (s *Service) probeAntigravityModelCapabilityHints(ctx context.Context, auth
 	return antigravityModelCapabilityHints{
 		ModelIDs:          hints.ModelIDs,
 		WebSearchModelIDs: hints.WebSearchModelIDs,
+		thinkingGroups:    hints.ThinkingGroups,
+		thinkingWebSearch: hints.ThinkingWebSearch,
 	}, status
 }
 
@@ -438,6 +467,8 @@ func parseAntigravityModelCapabilityHints(body []byte) (antigravityModelCapabili
 	return antigravityModelCapabilityHints{
 		ModelIDs:          hints.ModelIDs,
 		WebSearchModelIDs: hints.WebSearchModelIDs,
+		thinkingGroups:    hints.ThinkingGroups,
+		thinkingWebSearch: hints.ThinkingWebSearch,
 	}, true
 }
 
@@ -516,10 +547,7 @@ func (s *Service) antigravityModelsForHintsWithConfig(auth *coreauth.Auth, hints
 	}
 	models := filterAntigravityModels(registry.GetAntigravityModels(), hints)
 	models = applyAntigravityFetchedModelCapabilities(models, hints)
-	excluded := cfg.OAuthExcludedModels[coreauth.OAuthModelAliasChannel(auth.Provider, auth.AuthKind())]
-	if value := strings.TrimSpace(auth.Attributes["excluded_models"]); value != "" {
-		excluded = strings.Split(value, ",")
-	}
+	excluded := coreauth.AntigravityExcludedModels(auth, cfg)
 	models = applyExcludedModels(models, excluded)
 	models = s.appendAdoptedModels("antigravity", auth.Prefix, models, excluded)
 	models = applyOAuthModelAliasForAuth(cfg, "antigravity", auth.AuthKind(), auth.Attributes, models)
@@ -582,6 +610,7 @@ func (s *Service) applyAntigravityModelHints(ctx context.Context, auth *coreauth
 			entry.appliedRevision = hints.revision
 			entry.appliedEpoch = appliedEpoch
 			antigravityCapabilityCache[expectedKey] = entry
+			coreauth.StoreAntigravityThinkingGroups(auth, hints.thinkingGroups, hints.thinkingWebSearch)
 		}
 		antigravityCapabilityMu.Unlock()
 		s.cfgMu.RUnlock()

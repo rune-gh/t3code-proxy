@@ -20,8 +20,115 @@ import (
 	"github.com/rune-oai/t3code-proxy/internal/runtime/executor/helps"
 	"github.com/rune-oai/t3code-proxy/internal/util"
 	cliproxyauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
+	sdktranslator "github.com/rune-oai/t3code-proxy/sdk/translator"
 	log "github.com/sirupsen/logrus"
 )
+
+type antigravityPreparedRequest struct {
+	model              helps.AntigravityRequestModel
+	auth               *cliproxyauth.Auth
+	token              string
+	originalPayload    []byte
+	originalTranslated []byte
+	translated         []byte
+	cooldownRejected   bool
+}
+
+func antigravityAuthID(auth *cliproxyauth.Auth) string {
+	if auth == nil {
+		return ""
+	}
+	return auth.ID
+}
+
+func (e *AntigravityExecutor) prepareAntigravityRequest(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, baseModel string, stream, countTokens bool) (antigravityPreparedRequest, error) {
+	source := opts.OriginalRequest
+	if len(source) == 0 {
+		source = req.Payload
+	}
+	from, to := opts.SourceFormat, sdktranslator.FromString("antigravity")
+	prepared := antigravityPreparedRequest{auth: auth}
+	useCredits := !countTokens && antigravityShouldBypassShortCooldown(ctx, e.cfg)
+	rejectCooldown := func(model string, err error) error {
+		prepared.cooldownRejected = true
+		if model != baseModel {
+			return cliproxyauth.RejectAntigravityTarget(err)
+		}
+		return err
+	}
+	translate := func(credential *cliproxyauth.Auth) error {
+		model := helps.SelectAntigravityRequestModel(ctx, e.cfg, credential, req.Model, baseModel, from.String(), source, countTokens)
+		if model.ID != baseModel {
+			if errCooldown := cliproxyauth.CheckAntigravityTargetModel(ctx, credential, model.ID, time.Now(), useCredits); errCooldown != nil {
+				return rejectCooldown(model.ID, errCooldown)
+			}
+		}
+		if errCooldown := e.checkAntigravityRequestCooldown(ctx, credential, model.ID, countTokens); errCooldown != nil {
+			return rejectCooldown(model.ID, errCooldown)
+		}
+		original, errValidate := validateAntigravityRequestSignatures(ctx, model.ID, from, source)
+		if errValidate != nil {
+			return errValidate
+		}
+		prepared.model, prepared.originalPayload = model, original
+		envelope := sdktranslator.RequestEnvelope{Format: from, Model: model.ID, Body: original, Stream: stream, ModelInfo: model.TranslationModelInfo(req, baseModel, from)}
+		if countTokens {
+			translated := helps.TranslateRequestEnvelopeWithCodexMultiAgentV2(ctx, opts.Headers, e.cfg, from, to, envelope)
+			if translated.Err != nil {
+				return translated.Err
+			}
+			prepared.translated = translated.Body
+			prepared.originalTranslated = append([]byte(nil), translated.Body...)
+			return nil
+		}
+		var errTranslate error
+		prepared.originalTranslated, prepared.translated, errTranslate = helps.TranslateRequestEnvelopePairWithCodexMultiAgentV2(ctx, opts.Headers, e.cfg, from, to, envelope, original, original)
+		return errTranslate
+	}
+	// A translation refusal must precede token refresh and any upstream request.
+	if errTranslate := translate(auth); errTranslate != nil {
+		return prepared, errTranslate
+	}
+	token, updatedAuth, errToken := e.ensureAccessToken(ctx, auth)
+	if errToken != nil {
+		return antigravityPreparedRequest{}, errToken
+	}
+	if updatedAuth != nil {
+		// Only a changed catalog identity or exclusion policy invalidates this attempt's snapshot.
+		if !cliproxyauth.SameAntigravityModelCatalogScope(auth, updatedAuth) {
+			if errTranslate := translate(updatedAuth); errTranslate != nil {
+				return prepared, errTranslate
+			}
+		} else if prepared.model.ID != baseModel {
+			if errCooldown := cliproxyauth.CheckAntigravityTargetModel(ctx, updatedAuth, prepared.model.ID, time.Now(), useCredits); errCooldown != nil {
+				err := rejectCooldown(prepared.model.ID, errCooldown)
+				return prepared, err
+			}
+		}
+		prepared.auth = updatedAuth
+	}
+	prepared.token = token
+	if prepared.model.ID != baseModel {
+		cliproxyexecutor.SetUpstreamAttemptModel(ctx, prepared.model.ID)
+	}
+	return prepared, nil
+}
+
+func (e *AntigravityExecutor) checkAntigravityRequestCooldown(ctx context.Context, auth *cliproxyauth.Auth, model string, countTokens bool) error {
+	if antigravityCoolingDisabled(auth, e.cfg) {
+		return nil
+	}
+	inCooldown, remaining, errCooldown := antigravityIsInShortCooldownRequired(ctx, auth, model, time.Now())
+	if errCooldown != nil {
+		return homeKVUnavailableStatusErr(errCooldown)
+	}
+	if inCooldown && (countTokens || !antigravityShouldBypassShortCooldown(ctx, e.cfg)) {
+		log.Debugf("antigravity executor: auth %s in short cooldown for model %s (%s remaining), returning 429 to switch auth", antigravityAuthID(auth), model, remaining)
+		return statusErr{code: http.StatusTooManyRequests, msg: fmt.Sprintf("auth in short cooldown, %s remaining", remaining), retryAfter: &remaining}
+	}
+	return nil
+}
 
 func (e *AntigravityExecutor) buildRequest(ctx context.Context, auth *cliproxyauth.Auth, token, modelName string, payload []byte, stream bool, alt, baseURL string, derivedSessionIDs ...string) (*http.Request, error) {
 	doc := ojson.NewDoc(payload)
@@ -30,6 +137,11 @@ func (e *AntigravityExecutor) buildRequest(ctx context.Context, auth *cliproxyau
 }
 
 func (e *AntigravityExecutor) buildRequestDoc(ctx context.Context, auth *cliproxyauth.Auth, token, modelName string, doc *ojson.Doc, stream bool, alt, baseURL string, derivedSessionIDs ...string) (*http.Request, []byte, error) {
+	selection := cliproxyauth.SelectAntigravityModel(ctx, auth, modelName, "", e.cfg)
+	return e.buildRequestForModelDoc(ctx, auth, token, selection, doc, stream, alt, baseURL, derivedSessionIDs...)
+}
+
+func (e *AntigravityExecutor) buildRequestForModelDoc(ctx context.Context, auth *cliproxyauth.Auth, token string, selection cliproxyauth.AntigravityModelSelection, doc *ojson.Doc, stream bool, alt, baseURL string, derivedSessionIDs ...string) (*http.Request, []byte, error) {
 	if token == "" {
 		return nil, nil, statusErr{code: http.StatusUnauthorized, msg: "missing access token"}
 	}
@@ -64,20 +176,27 @@ func (e *AntigravityExecutor) buildRequestDoc(ctx context.Context, auth *cliprox
 	if errProject != nil {
 		return nil, nil, errProject
 	}
+	modelName := selection.ID
 	geminiToAntigravityDoc(doc, modelName, projectID, derivedSessionIDs...)
 	promptStructuredOutput := helps.PrepareAntigravityClaudeStructuredOutputDoc(modelName, doc)
 
-	// Cap maxOutputTokens to model's max_completion_tokens from registry
-	if maxOut := doc.Get("request.generationConfig.maxOutputTokens"); maxOut.Exists() && maxOut.Type == ojson.Number {
-		if modelInfo := registry.LookupModelInfo(modelName, "antigravity"); modelInfo != nil && modelInfo.MaxCompletionTokens > 0 {
-			if int(maxOut.Int()) > modelInfo.MaxCompletionTokens {
-				_ = doc.Set("request.generationConfig.maxOutputTokens", modelInfo.MaxCompletionTokens)
-			}
+	lowerModel := strings.ToLower(modelName)
+	isClaudeModel := strings.Contains(lowerModel, "claude")
+	useAntigravitySchema := isClaudeModel || strings.Contains(lowerModel, "gemini-3-pro") || strings.Contains(lowerModel, "gemini-3.1-pro")
+
+	// A matched variant uses the output limit from the same catalog as its ID.
+	if selection.MaxOutputTokens > 0 {
+		_ = doc.Set("request.generationConfig.maxOutputTokens", selection.MaxOutputTokens)
+	} else if maxOut := doc.Get("request.generationConfig.maxOutputTokens"); maxOut.Exists() && maxOut.Type == ojson.Number {
+		modelInfo := registry.LookupModelInfo(modelName, "antigravity")
+		if modelInfo == nil && lowerModel != modelName {
+			modelInfo = registry.LookupModelInfo(lowerModel, "antigravity")
+		}
+		if modelInfo != nil && modelInfo.MaxCompletionTokens > 0 && int(maxOut.Int()) > modelInfo.MaxCompletionTokens {
+			_ = doc.Set("request.generationConfig.maxOutputTokens", modelInfo.MaxCompletionTokens)
 		}
 	}
 
-	isClaudeModel := strings.Contains(modelName, "claude")
-	useAntigravitySchema := isClaudeModel || strings.Contains(modelName, "gemini-3-pro") || strings.Contains(modelName, "gemini-3.1-pro")
 	if antigravityRequestNeedsSchemaSanitizationDoc(doc) {
 		sanitizeAntigravityRequestSchemasForModelDoc(doc, useAntigravitySchema, isClaudeModel)
 	}
@@ -85,7 +204,22 @@ func (e *AntigravityExecutor) buildRequestDoc(ctx context.Context, auth *cliprox
 		if !promptStructuredOutput {
 			_ = doc.Set("request.toolConfig.functionCallingConfig.mode", "VALIDATED")
 		}
-	} else {
+		// Keep Claude thinkingBudget strictly below maxOutputTokens after any capping.
+		if maxOut := doc.Get("request.generationConfig.maxOutputTokens"); maxOut.Exists() && maxOut.Type == ojson.Number && maxOut.Int() > 0 {
+			if budgetVal := doc.Get("request.generationConfig.thinkingConfig.thinkingBudget"); budgetVal.Exists() && budgetVal.Type == ojson.Number && budgetVal.Int() >= maxOut.Int() {
+				clamped := int(maxOut.Int()) - 1
+				minBudget := 0
+				if modelInfo := registry.LookupModelInfo(modelName, "antigravity"); modelInfo != nil && modelInfo.Thinking != nil {
+					minBudget = modelInfo.Thinking.Min
+				}
+				if minBudget > 0 && clamped < minBudget {
+					_ = doc.Delete("request.generationConfig.thinkingConfig")
+				} else if clamped >= 0 {
+					_ = doc.Set("request.generationConfig.thinkingConfig.thinkingBudget", clamped)
+				}
+			}
+		}
+	} else if selection.MaxOutputTokens == 0 {
 		_ = doc.Delete("request.generationConfig.maxOutputTokens")
 	}
 
