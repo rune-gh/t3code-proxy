@@ -29,7 +29,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   later. Excluded-models settings still apply and there is no cap; the provider's own error
   answers names it does not know. Claude Mythos 5.1 and 5.2 are also built-in Claude models.
 - `GET /opencode/<access key>/api.json` serves the hub's models as a models.dev catalog for
-  OpenCode's `OPENCODE_MODELS_URL`, so OpenCode lists every hub model live. The key in the path
+  OpenCode's `OPENCODE_MODELS_URL`, so OpenCode lists models available to that client. The key in the path
   is masked in logs.
 
 - Provider-scoped client endpoints under `/provider/<name>` with filtered OpenAI, Anthropic and
@@ -71,6 +71,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   WSL 2), and an agent-readable box-setup checklist.
 
 ### Changed
+
+- The standalone hub reserves its Claude subscription credentials for Claude Code. OpenCode and other hub clients
+  list and use models supplied by their eligible credentials, including Anthropic API keys.
 
 - Web panel Overview: account cards are gone. Each row of an accounts table opens that account's
   full read in place (windows and resets, plan details, Claude extra usage, Codex banked resets

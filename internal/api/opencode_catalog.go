@@ -44,7 +44,7 @@ func openCodePathKeyToHeader(c *gin.Context) {
 
 func (s *Server) openCodeCatalogHandler(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, buildOpenCodeCatalog(requestBaseURL(c.Request)+"/v1", registry.GetGlobalRegistry().RegisteredModels()))
+	c.JSON(http.StatusOK, buildOpenCodeCatalog(requestBaseURL(c.Request)+"/v1", registry.GetGlobalRegistry().OpenCodeModels()))
 }
 
 // requestBaseURL is the scheme and host the client used, honoring the

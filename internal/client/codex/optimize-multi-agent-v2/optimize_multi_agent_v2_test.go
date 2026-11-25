@@ -1080,12 +1080,17 @@ func TestCodexSpawnAgentModelsCacheInvalidation(t *testing.T) {
 			},
 		},
 	})
+	modelRegistry.RegisterClient("spawn-subscription-only", "claude", []*registry.ModelInfo{{ID: "claude-mythos-spawn-test", ClaudeCodeOnly: true}})
 	t.Cleanup(func() {
+		modelRegistry.UnregisterClient("spawn-subscription-only")
 		modelRegistry.UnregisterClient(clientID1)
 		modelRegistry.UnregisterClient(clientID2)
 	})
 
 	formatted1 := formatCodexSpawnAgentModelsForRequest(context.Background(), nil, false)
+	if strings.Contains(formatted1, "claude-mythos-spawn-test") {
+		t.Fatal("Codex offered a Claude subscription-only subagent")
+	}
 	if !strings.Contains(formatted1, "test-spawn-model-alpha") {
 		t.Fatalf("expected initial markdown to contain test-spawn-model-alpha, got: %s", formatted1)
 	}

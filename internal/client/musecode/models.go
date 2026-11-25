@@ -230,16 +230,20 @@ func ModelInputsFromGlobalRegistry(reg *registry.ModelRegistry) []ModelInput {
 	if reg == nil {
 		return nil
 	}
-	infos := reg.GetAvailableModelInfos()
+	catalog := reg.ClientCatalog("")
+	infos := make([]*registry.ModelInfo, 0, len(catalog))
+	for _, model := range catalog {
+		infos = append(infos, model.Info)
+	}
 	inputs := ModelInputsFromRegistry(infos)
 	for i := range inputs {
-		providers := reg.GetModelProviders(inputs[i].ID)
+		providers := catalog[i].Providers
 		if len(providers) == 0 {
 			continue
 		}
 		routes := make([]ModelRoute, 0, len(providers))
 		for _, provider := range providers {
-			pInfo := reg.GetModelInfo(inputs[i].ID, provider)
+			pInfo := catalog[i].InfoByProvider[provider]
 			if pInfo == nil {
 				continue
 			}

@@ -655,6 +655,7 @@ func isAnthropicModelsRequest(c *gin.Context) bool {
 // route to the Claude handler, otherwise they route to the OpenAI handler.
 func (s *Server) unifiedModelsHandler(openaiHandler *openai.OpenAIAPIHandler, claudeHandler *claude.ClaudeCodeAPIHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		appendVaryToken(c.Writer.Header(), "User-Agent")
 		if grokbuild.IsGrokShellUserAgent(c.GetHeader("User-Agent")) {
 			s.handleGrokModels(c)
 			return
@@ -719,7 +720,7 @@ func grokModelsFromRegistryInfos(infos []*registry.ModelInfo) []grokbuild.ModelI
 func (s *Server) handleGrokModels(c *gin.Context) {
 	var models []grokbuild.ModelInfo
 	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
-		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().GetAvailableModelsByProvider(scope))
+		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos(scope))
 	} else if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
 		entries, ok := s.loadHomeModelEntries(c)
 		if !ok {
@@ -727,7 +728,7 @@ func (s *Server) handleGrokModels(c *gin.Context) {
 		}
 		models = grokModelsFromHomeEntries(entries)
 	} else {
-		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().GetAvailableModelInfos())
+		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos(""))
 	}
 	s.writeModelListResponse(c, "openai", grokbuild.BuildResponse(models))
 }
@@ -1077,7 +1078,7 @@ func appendVaryToken(header http.Header, token string) {
 
 func (s *Server) antigravityCLIModelInfos(c *gin.Context) ([]*registry.ModelInfo, bool) {
 	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
-		return registry.GetGlobalRegistry().GetAvailableModelsByProvider(scope), true
+		return registry.GetGlobalRegistry().ClientModelInfos(scope), true
 	}
 	if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
 		entries, ok := s.loadHomeModelEntries(c)
@@ -1086,7 +1087,7 @@ func (s *Server) antigravityCLIModelInfos(c *gin.Context) ([]*registry.ModelInfo
 		}
 		return homeModelEntriesToRegistryInfos(entries), true
 	}
-	return registry.GetGlobalRegistry().GetAvailableModelInfos(), true
+	return registry.GetGlobalRegistry().ClientModelInfos(""), true
 }
 
 func homeModelEntriesToRegistryInfos(entries []homeModelEntry) []*registry.ModelInfo {

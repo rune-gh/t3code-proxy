@@ -178,3 +178,33 @@ func TestGetRequestDetailsResolverInstalledByService(t *testing.T) {
 		t.Fatal("the installed resolver did not adopt the model")
 	}
 }
+
+func TestClaudeSubscriptionPublishesOnlyToClaudeCode(t *testing.T) {
+	sub := oauthAuth("claude-subscription-catalog-test", "claude")
+	setup := &coreauth.Auth{ID: "claude-setup-catalog-test", Provider: "claude", Attributes: map[string]string{"api_key": "sk-ant-oat-fixture"}}
+	service := newAdoptionTestService(t, &config.Config{}, sub, setup)
+	const adopted = "claude-test-subscription-preview"
+	if !service.adoptUnknownModel(adopted, "claude") {
+		t.Fatal("failed to adopt a new Claude Code model")
+	}
+	reg := registry.GetGlobalRegistry()
+	for _, id := range []string{"claude-mythos-5-1", "claude-mythos-5-2", adopted} {
+		if !reg.ClientSupportsModel(sub.ID, id) || !reg.ClientSupportsModel(setup.ID, id) {
+			t.Errorf("subscription lost %s", id)
+		}
+		for _, model := range reg.OpenCodeModels() {
+			if model.Info.ID == id {
+				t.Errorf("OpenCode lists subscription-only model %s", id)
+			}
+		}
+	}
+
+	key := &coreauth.Auth{ID: "claude-api-key-catalog-test", Provider: "claude", Attributes: map[string]string{"api_key": "test-api-key"}}
+	newAdoptionTestService(t, &config.Config{}, key)
+	for _, route := range reg.OpenCodeModels() {
+		if route.Info.ID == "claude-mythos-5-2" {
+			return
+		}
+	}
+	t.Fatal("independent Claude API-key route missing from OpenCode")
+}

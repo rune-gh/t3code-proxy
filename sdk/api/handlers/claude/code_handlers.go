@@ -26,6 +26,7 @@ import (
 	. "github.com/rune-oai/t3code-proxy/internal/constant"
 	"github.com/rune-oai/t3code-proxy/internal/interfaces"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
+	"github.com/rune-oai/t3code-proxy/internal/runtime/executor/helps"
 	"github.com/rune-oai/t3code-proxy/internal/util"
 	"github.com/rune-oai/t3code-proxy/sdk/api/handlers"
 	coreauth "github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
@@ -84,6 +85,8 @@ func (h *ClaudeCodeAPIHandler) ClaudeMessages(c *gin.Context) {
 		return
 	}
 
+	h.classifySubscriptionRequest(c, rawJSON, false)
+
 	// Decode claude-fable-5-dd-<reversed> model IDs back to the real model name for routing.
 	rawJSON = rewriteClaudeDDModelInBody(rawJSON)
 
@@ -116,6 +119,8 @@ func (h *ClaudeCodeAPIHandler) ClaudeCountTokens(c *gin.Context) {
 		return
 	}
 
+	h.classifySubscriptionRequest(c, rawJSON, true)
+
 	// Decode claude-fable-5-dd-<reversed> model IDs back to the real model name for routing.
 	rawJSON = rewriteClaudeDDModelInBody(rawJSON)
 
@@ -135,6 +140,11 @@ func (h *ClaudeCodeAPIHandler) ClaudeCountTokens(c *gin.Context) {
 	handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 	_, _ = c.Writer.Write(resp)
 	cliCancel()
+}
+
+func (h *ClaudeCodeAPIHandler) classifySubscriptionRequest(c *gin.Context, payload []byte, countTokens bool) {
+	allowed := helps.ClaudeSubscriptionRequest(c.Request.Header, payload, countTokens, h.AuthManager.RuntimeConfigSnapshot())
+	c.Request = c.Request.WithContext(coreauth.WithClaudeSubscriptionAccess(c.Request.Context(), allowed))
 }
 
 // rewriteClaudeDDModelInBody decodes model IDs of the form claude-fable-5-dd-<reversed>

@@ -130,9 +130,9 @@ in its logs.
 3. Pick a `t3code-proxy/<model>` model in the thread. The instance lists only the hub's models;
    your own OpenCode setup outside T3 Code is unchanged.
 
-Claude subscription accounts are meant for Claude Code (see the note at the top of this page).
-OpenCode can reach them through this catalog, so exclude Claude models for it, or keep it to
-API-key accounts, if that matters to you.
+The standalone hub reserves its Claude subscription credentials for Claude Code. OpenCode lists a model
+when an eligible credential supplies it, including an Anthropic API key or another upstream.
+Asking for a subscription-only model by ID also requires an eligible credential.
 
 ## Mistral (OpenCode and Vibe)
 

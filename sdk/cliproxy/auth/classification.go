@@ -25,6 +25,23 @@ const (
 	AttributeWeight               = "weight"
 )
 
+// IsClaudeSubscription identifies a Claude OAuth credential independently of its model aliases.
+func (a *Auth) IsClaudeSubscription() bool {
+	if a == nil || !strings.EqualFold(strings.TrimSpace(a.Provider), "claude") {
+		return false
+	}
+	key := authAttribute(a, AttributeAPIKey)
+	if key == "" {
+		key = authMetadataString(a, "access_token")
+	}
+	return a.AuthKind() == AuthKindOAuth || IsClaudeOAuthToken(key)
+}
+
+// IsClaudeOAuthToken recognizes Claude setup tokens even in an API-key configuration.
+func IsClaudeOAuthToken(token string) bool {
+	return strings.Contains(token, "sk-ant-oat")
+}
+
 // AuthKind returns the credential kind using explicit metadata first and legacy
 // field-shape fallbacks second.
 func (a *Auth) AuthKind() string {

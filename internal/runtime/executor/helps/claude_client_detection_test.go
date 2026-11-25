@@ -625,6 +625,9 @@ func TestDetectClaudeCodeRequestRecognizesAgentSDKHaiku55Helpers(t *testing.T) {
 			headers.Set("X-Stainless-Package-Version", "0.128.0")
 			headers.Del("X-Client-Request-Id")
 
+			if !ClaudeSubscriptionRequest(headers, tc.payload, false, nil) {
+				t.Fatal("native Agent SDK helper lost subscription access")
+			}
 			detection := DetectClaudeCodeRequest(headers, tc.payload, false, tc.cfg)
 			if !detection.Confirmed || !detection.StrongSignals || !detection.NativeClient || !detection.HelperProfile {
 				t.Fatalf("detection = %#v, want confirmed %s Haiku 5.5 helper", detection, tc.entrypoint)

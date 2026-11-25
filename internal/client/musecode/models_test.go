@@ -560,7 +560,11 @@ func TestHandleModelsLocalRegistryMultiProviderAndMethodValidation(t *testing.T)
 			SupportedOutputModalities: []string{"text"},
 		},
 	})
+	registry.GetGlobalRegistry().RegisterClient("subscription-local-models-test", "claude", []*registry.ModelInfo{
+		{ID: "shared-local-model", ClaudeCodeOnly: true, ContextLength: 16000},
+	})
 	t.Cleanup(func() {
+		registry.GetGlobalRegistry().UnregisterClient("subscription-local-models-test")
 		registry.GetGlobalRegistry().UnregisterClient("codex-local-models-test")
 		registry.GetGlobalRegistry().UnregisterClient("compat-local-models-test")
 	})

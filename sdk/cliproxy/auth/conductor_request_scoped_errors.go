@@ -151,7 +151,7 @@ func markRoundEndedBySchedulerReject(err error) error {
 	return &roundEndedBySchedulerRejectError{cause: err}
 }
 
-func (m *Manager) runtimeConfigSnapshot() *internalconfig.Config {
+func (m *Manager) RuntimeConfigSnapshot() *internalconfig.Config {
 	if m == nil {
 		return nil
 	}
@@ -163,7 +163,7 @@ func (m *Manager) requestScopedErrorConfig(ctx context.Context) *internalconfig.
 	if cfg := RequestScopedErrorConfigFromContext(ctx); cfg != nil {
 		return cfg
 	}
-	return m.runtimeConfigSnapshot()
+	return m.RuntimeConfigSnapshot()
 }
 
 func cloneRequestScopedErrorRules(rules []internalconfig.RequestScopedErrorRule) []internalconfig.RequestScopedErrorRule {

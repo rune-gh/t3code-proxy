@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
@@ -171,32 +172,35 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, model
 	resolvedModelName := modelName
 	initialSuffix := thinking.ParseSuffix(modelName)
 	scope := coreauth.ProviderScopeFromContext(ctx)
-	if scope != "" {
-		if initialSuffix.ModelName == "auto" {
-			models := registry.GetGlobalRegistry().GetAvailableModelsForProvider(scope, "openai")
-			if len(models) > 0 {
-				resolvedModelName, _ = models[0]["id"].(string)
-				if initialSuffix.HasSuffix {
-					resolvedModelName += "(" + initialSuffix.RawSuffix + ")"
+	homeRouted := h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() && scope == ""
+	reg := registry.GetGlobalRegistry()
+	if initialSuffix.ModelName == "auto" && !homeRouted {
+		base := "auto"
+		if coreauth.ClaudeSubscriptionsExcluded(ctx) {
+			var newest int64
+			for _, route := range reg.ClientCatalog(scope) {
+				if route.ReadyClients == 0 {
+					continue
+				}
+				info := route.Info
+				if scope != "" {
+					base = info.ID
+					break
+				}
+				if base == "auto" || info.Created > newest {
+					base, newest = info.ID, info.Created
 				}
 			}
-		}
-	} else if initialSuffix.ModelName == "auto" {
-		if h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() {
-			resolvedModelName = modelName
-		} else {
-			resolvedBase := util.ResolveAutoModel(initialSuffix.ModelName)
-			if initialSuffix.HasSuffix {
-				resolvedModelName = fmt.Sprintf("%s(%s)", resolvedBase, initialSuffix.RawSuffix)
-			} else {
-				resolvedModelName = resolvedBase
+		} else if scope != "" {
+			if models := reg.GetAvailableModelsForProvider(scope, "openai"); len(models) > 0 {
+				base, _ = models[0]["id"].(string)
 			}
-		}
-	} else {
-		if h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() {
-			resolvedModelName = modelName
 		} else {
-			resolvedModelName = util.ResolveAutoModel(modelName)
+			base = util.ResolveAutoModel(base)
+		}
+		resolvedModelName = base
+		if initialSuffix.HasSuffix {
+			resolvedModelName += "(" + initialSuffix.RawSuffix + ")"
 		}
 	}
 
@@ -225,9 +229,11 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, model
 	// No credential serves the model yet, for example one a client offers before
 	// the hub's catalog lists it. Adopt it on the provider it belongs to and look
 	// again; the upstream still rejects a name it does not know.
-	homeRouted := h != nil && h.AuthManager != nil && h.AuthManager.HomeEnabled() && scope == ""
 	if len(providers) == 0 && !homeRouted && registry.ResolveUnknownModel(baseModel, scope) {
 		providers = lookupProviders()
+	}
+	if !homeRouted && coreauth.ClaudeSubscriptionsExcluded(ctx) && slices.Contains(providers, "claude") && reg.RequiresClaudeCode(baseModel, scope) {
+		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusForbidden, Error: fmt.Errorf("model %s is available only through Claude Code with the configured credentials", baseModel)}
 	}
 	if scope != "" && len(providers) == 0 {
 		return nil, "", modelNotFoundError(modelName)
