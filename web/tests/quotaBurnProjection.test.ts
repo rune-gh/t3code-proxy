@@ -114,6 +114,42 @@ describe('tick-aware burn', () => {
     ).toBe(false);
   });
 
+  test('a full quiet day is a measured low rate, not collecting data', () => {
+    // A day of 10-minute readings that never moved, then one with a single tick.
+    const flat = track(Array.from({ length: 145 }, (_, i) => [i / 6, 39]));
+    const idle = estimateBurnRate([flat], NOW + 24 * H, 1);
+    expect(idle.windowHours).toBe(24);
+    expect(idle.ready).toBe(true);
+    expect(idle.rate).toBe(0);
+    expect(idle.confidence).toBe('limited');
+    const oneTick = track(Array.from({ length: 145 }, (_, i) => [i / 6, i < 70 ? 39 : 40]));
+    const slow = estimateBurnRate([oneTick], NOW + 24 * H, 1);
+    expect(slow.ready).toBe(true);
+    expect(slow.rate).toBeGreaterThan(0);
+    expect(slow.rate).toBeLessThan(0.1);
+  });
+
+  test('a quiet day still gets a projection and depletion stats', () => {
+    const history = normalizeQuotaHistory({
+      enabled: true,
+      interval_seconds: 600,
+      now: NOW,
+      accounts: [{ auth_index: 'a', provider: 'claude', weight: 1 }],
+      samples: Array.from({ length: 145 }, (_, i) => ({
+        t: NOW - 24 * H + (i * H) / 6,
+        auth_index: 'a',
+        windows: {
+          seven_day: { used_percent: 39, resets_at: NOW + 30 * H, period_hours: 168 },
+        },
+      })),
+    });
+    const view = buildPoolView(history, viewOptions);
+    expect(view.burnEstimate.ready).toBe(true);
+    expect(view.burnRate).toBe(0);
+    expect(view.projected.length).toBeGreaterThan(0);
+    expect(view.poolEmptyAt).toBeNull();
+  });
+
   test('an eight-hour idle stretch remains in sustained demand after a burst', () => {
     const t = track(Array.from({ length: 61 }, (_, i) => [i / 6, i <= 48 ? 20 : 20 + (i - 48)]));
     const estimate = estimateBurnRate([t], NOW + 10 * H, 3);
