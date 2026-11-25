@@ -273,6 +273,9 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 
 	// Home heartbeat gate: when home is enabled, block all endpoints with 503 until the
 	// subscribe-config heartbeat connection is healthy.
+	engine.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(auth.WithClaudeSubscriptionAccess(c.Request.Context(), false))
+	})
 	engine.Use(s.homeHeartbeatMiddleware())
 	engine.Use(s.exampleAPIKeySafeModeMiddleware())
 

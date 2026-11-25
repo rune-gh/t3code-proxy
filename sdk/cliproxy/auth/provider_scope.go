@@ -8,6 +8,20 @@ import (
 )
 
 type providerScopeContextKey struct{}
+type excludeClaudeSubscriptionsKey struct{}
+
+// WithClaudeSubscriptionAccess carries the incoming client classification through credential selection.
+func WithClaudeSubscriptionAccess(ctx context.Context, allowed bool) context.Context {
+	return context.WithValue(ctx, excludeClaudeSubscriptionsKey{}, !allowed)
+}
+
+func ClaudeSubscriptionsExcluded(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	excluded, _ := ctx.Value(excludeClaudeSubscriptionsKey{}).(bool)
+	return excluded
+}
 
 // WithProviderScope restricts a client request to a registry provider key.
 func WithProviderScope(ctx context.Context, provider string) context.Context {

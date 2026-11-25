@@ -689,6 +689,31 @@ func claudeJSONObjectHasKeys(raw []byte, want []string) bool {
 	return errClosing == nil && closing == json.Delim('}') && keyIndex == len(want)
 }
 
+// NativeClaudeCodeClient recognizes a configured native entrypoint independently of
+// the wire-version baseline used for upstream header and payload compatibility.
+func NativeClaudeCodeClient(userAgent string, cfg *config.Config) bool {
+	client, valid := parseClaudeCodeUserAgent(userAgent)
+	return valid && (isNativeClaudeEntrypoint(client.entrypoint, cfg) || (client.entrypoint == "t3-code" && client.agentSDKVersion != ""))
+}
+
+// ClaudeSubscriptionRequest checks the original Anthropic request before translation.
+func ClaudeSubscriptionRequest(headers http.Header, payload []byte, countTokens bool, cfg *config.Config) bool {
+	if !NativeClaudeCodeClient(headers.Get("User-Agent"), cfg) {
+		return false
+	}
+	detection := DetectClaudeCodeRequest(headers, payload, countTokens, cfg)
+	if detection.Confirmed || (detection.XAppCLI && detection.BetasPresent && (countTokens || detection.MetadataUserID)) {
+		return true
+	}
+	// T3 Code starts the Claude CLI through the Agent SDK. Its captured
+	// Haiku helpers may omit the main Claude Code beta.
+	if detection.Entrypoint == "t3-code" && !detection.NativeClient {
+		detection.NativeClient = true
+		return matchesMeasuredClaudeCodeHelperProfile(headers, payload, countTokens, detection, cfg)
+	}
+	return false
+}
+
 // IsClaudeCodeUserAgent reports whether userAgent identifies a Claude Code CLI client.
 func IsClaudeCodeUserAgent(userAgent string) bool {
 	return claudeCodeUserAgentPattern.MatchString(strings.TrimSpace(userAgent))

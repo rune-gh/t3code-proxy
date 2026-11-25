@@ -38,6 +38,9 @@ type NativeCapabilities struct {
 
 // ModelInfo represents information about an available model
 type ModelInfo struct {
+	// ClaudeCodeOnly marks a route supplied by a Claude subscription credential.
+	ClaudeCodeOnly bool `json:"-" yaml:"-"`
+
 	// ID is the unique identifier for the model
 	ID string `json:"id"`
 	// MetadataModelID identifies the canonical model used to resolve client metadata.
@@ -1580,8 +1583,13 @@ func clientQuotaRecoveryAt(registration *ModelRegistration, clientID string, quo
 }
 
 func modelRegistrationAvailability(registration *ModelRegistration, now time.Time) (bool, time.Time) {
+	listed, expiry, _ := registrationAvailabilityAndCount(registration, now)
+	return listed, expiry
+}
+
+func registrationAvailabilityAndCount(registration *ModelRegistration, now time.Time) (bool, time.Time, int) {
 	if registration == nil {
-		return false, time.Time{}
+		return false, time.Time{}, 0
 	}
 
 	availableClients := registration.Count
@@ -1631,7 +1639,7 @@ func modelRegistrationAvailability(registration *ModelRegistration, now time.Tim
 	}
 
 	available := effectiveClients > 0 || (availableClients > 0 && (expiredClients > 0 || cooldownSuspended > 0) && otherSuspended == 0)
-	return available, expiresAt
+	return available, expiresAt, effectiveClients
 }
 
 // GetAvailableModelInfos returns cloned metadata for all currently available models.
@@ -1725,124 +1733,31 @@ func (r *ModelRegistry) GetAvailableModelsByProvider(provider string) []*ModelIn
 		return nil
 	}
 
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+	return r.clientModelInfosForCatalog(provider, true)
+}
 
-	type providerModel struct {
-		count int
-		info  *ModelInfo
+// ClientModelInfos returns the available routes usable by third-party clients.
+func (r *ModelRegistry) ClientModelInfos(provider string) []*ModelInfo {
+	return r.clientModelInfosForCatalog(provider, false)
+}
+
+func (r *ModelRegistry) clientModelInfosForCatalog(provider string, includeSubscriptions bool) []*ModelInfo {
+	routes := r.clientCatalog(provider, includeSubscriptions, false)
+	infos := make([]*ModelInfo, 0, len(routes))
+	for _, route := range routes {
+		infos = append(infos, route.Info)
 	}
+	return infos
+}
 
-	providerModels := make(map[string]*providerModel)
-
-	for clientID, clientProvider := range r.clientProviders {
-		if clientProvider != provider {
-			continue
-		}
-		modelIDs := r.clientModels[clientID]
-		if len(modelIDs) == 0 {
-			continue
-		}
-		clientInfos := r.clientModelInfos[clientID]
-		for _, modelID := range modelIDs {
-			modelID = strings.TrimSpace(modelID)
-			if modelID == "" {
-				continue
-			}
-			entry := providerModels[modelID]
-			if entry == nil {
-				entry = &providerModel{}
-				providerModels[modelID] = entry
-			}
-			entry.count++
-			if entry.info == nil {
-				if clientInfos != nil {
-					if info := clientInfos[modelID]; info != nil {
-						entry.info = info
-					}
-				}
-				if entry.info == nil {
-					if reg, ok := r.models[modelID]; ok && reg != nil && reg.Info != nil {
-						entry.info = reg.Info
-					}
-				}
-			}
-		}
+// ClientModels formats a third-party client's catalog for its API protocol.
+func (r *ModelRegistry) ClientModels(provider, handlerType string) []map[string]any {
+	infos := r.ClientModelInfos(provider)
+	models := make([]map[string]any, 0, len(infos))
+	for _, info := range infos {
+		models = append(models, r.convertModelToMap(info, handlerType))
 	}
-
-	if len(providerModels) == 0 {
-		return nil
-	}
-
-	now := r.now()
-	result := make([]*ModelInfo, 0, len(providerModels))
-
-	for modelID, entry := range providerModels {
-		if entry == nil || entry.count <= 0 {
-			continue
-		}
-		registration, ok := r.models[modelID]
-
-		expiredClients := 0
-		cooldownSuspended := 0
-		otherSuspended := 0
-		quotaAndSuspended := 0
-		if ok && registration != nil {
-			if registration.QuotaExceededClients != nil {
-				for clientID, quotaTime := range registration.QuotaExceededClients {
-					if clientID == "" {
-						continue
-					}
-					if p, okProvider := r.clientProviders[clientID]; !okProvider || p != provider {
-						continue
-					}
-					if recoveryAt, okRecovery := clientQuotaRecoveryAt(registration, clientID, quotaTime); okRecovery && now.Before(recoveryAt) {
-						expiredClients++
-					}
-				}
-			}
-			if registration.SuspendedClients != nil {
-				for clientID := range registration.SuspendedClients {
-					if clientID == "" {
-						continue
-					}
-					if p, okProvider := r.clientProviders[clientID]; !okProvider || p != provider {
-						continue
-					}
-					reason, _, active := clientSuspensionActive(registration, clientID, now)
-					if !active {
-						continue
-					}
-					if recoveryAt, okRecovery := clientQuotaRecoveryAt(registration, clientID, registration.QuotaExceededClients[clientID]); okRecovery && now.Before(recoveryAt) {
-						quotaAndSuspended++
-					}
-					if isQuotaSuspension(reason) {
-						cooldownSuspended++
-						continue
-					}
-					otherSuspended++
-				}
-			}
-		}
-
-		availableClients := entry.count
-		effectiveClients := availableClients - expiredClients - cooldownSuspended - otherSuspended + quotaAndSuspended
-		if effectiveClients < 0 {
-			effectiveClients = 0
-		}
-
-		if effectiveClients > 0 || (availableClients > 0 && (expiredClients > 0 || cooldownSuspended > 0) && otherSuspended == 0) {
-			if entry.info != nil {
-				result = append(result, cloneModelInfo(entry.info))
-				continue
-			}
-			if ok && registration != nil && registration.Info != nil {
-				result = append(result, cloneModelInfo(registration.Info))
-			}
-		}
-	}
-
-	return result
+	return models
 }
 
 // GetAvailableModelsForProvider returns a provider's catalog in the requested API format.
@@ -1878,33 +1793,8 @@ func (r *ModelRegistry) GetModelCount(modelID string) int {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
-	if registration, exists := r.models[modelID]; exists {
-		now := r.now()
-
-		// Count clients that have exceeded quota but haven't recovered yet
-		expiredClients := 0
-		for clientID, quotaTime := range registration.QuotaExceededClients {
-			if recoveryAt, ok := clientQuotaRecoveryAt(registration, clientID, quotaTime); ok && now.Before(recoveryAt) {
-				expiredClients++
-			}
-		}
-		suspendedClients := 0
-		for clientID := range registration.SuspendedClients {
-			if _, _, active := clientSuspensionActive(registration, clientID, now); !active {
-				continue
-			}
-			if recoveryAt, ok := clientQuotaRecoveryAt(registration, clientID, registration.QuotaExceededClients[clientID]); ok && now.Before(recoveryAt) {
-				continue
-			}
-			suspendedClients++
-		}
-		result := registration.Count - expiredClients - suspendedClients
-		if result < 0 {
-			return 0
-		}
-		return result
-	}
-	return 0
+	_, _, count := registrationAvailabilityAndCount(r.models[modelID], r.now())
+	return count
 }
 
 // GetModelProviders returns provider identifiers that currently supply the given model

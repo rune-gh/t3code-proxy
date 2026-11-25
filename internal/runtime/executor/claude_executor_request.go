@@ -1891,7 +1891,7 @@ func rawJSONArray(items []string) []byte {
 }
 
 func isClaudeOAuthToken(apiKey string) bool {
-	return strings.Contains(apiKey, "sk-ant-oat")
+	return cliproxyauth.IsClaudeOAuthToken(apiKey)
 }
 
 type claudeMCPAliasOptions struct {

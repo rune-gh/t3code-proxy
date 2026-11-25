@@ -28,7 +28,7 @@ import (
 func (m *Manager) newUpstreamAttemptContext(ctx context.Context) context.Context {
 	ctx = logging.WithFreshResponseHeadersHolder(ctx)
 	if RequestScopedErrorConfigFromContext(ctx) == nil {
-		ctx = WithRequestScopedErrorConfig(ctx, m.runtimeConfigSnapshot())
+		ctx = WithRequestScopedErrorConfig(ctx, m.RuntimeConfigSnapshot())
 	}
 	return cliproxyexecutor.WithUpstreamAttemptTracker(ctx)
 }

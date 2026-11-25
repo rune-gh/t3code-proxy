@@ -1,9 +1,12 @@
 package registry
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 )
 
@@ -127,32 +130,99 @@ func (r *ModelRegistry) NamespaceProviders(namespace string) []string {
 
 // RegisteredModel is one model with the providers that have a credential for it.
 type RegisteredModel struct {
-	Info      *ModelInfo
-	Providers []string
+	Info           *ModelInfo
+	Providers      []string
+	InfoByProvider map[string]*ModelInfo
+	ReadyClients   int
 }
 
-// RegisteredModels returns every model at least one credential registered,
-// including ones on a quota cooldown, sorted by ID. Catalogs that clients cache
-// (OpenCode's) use it so a model does not vanish while its accounts cool down.
-func (r *ModelRegistry) RegisteredModels() []RegisteredModel {
+// RequiresClaudeCode reports whether every registered route in scope is subscription-only.
+func (r *ModelRegistry) RequiresClaudeCode(id, scope string) bool {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	out := make([]RegisteredModel, 0, len(r.models))
-	for _, registration := range r.models {
-		if registration == nil || registration.Info == nil || registration.Count <= 0 {
+	restricted := false
+	for clientID, infos := range r.clientModelInfos {
+		if scope != "" && r.clientProviders[clientID] != scope {
 			continue
 		}
-		var providers []string
-		for provider, clients := range registration.Providers {
-			if clients > 0 {
-				providers = append(providers, provider)
+		if info := infos[id]; info != nil {
+			if !info.ClaudeCodeOnly {
+				return false
 			}
+			restricted = true
 		}
-		if len(providers) == 0 {
+	}
+	return restricted
+}
+
+// ClientCatalog contains eligible metadata and ready counts for non-Claude Code clients.
+func (r *ModelRegistry) ClientCatalog(scope string) []RegisteredModel {
+	return r.clientCatalog(scope, false, false)
+}
+
+// OpenCodeModels includes cooling credentials but excludes Claude Code subscriptions.
+func (r *ModelRegistry) OpenCodeModels() []RegisteredModel {
+	return r.clientCatalog("", false, true)
+}
+
+// Project each registration onto eligible credentials before resolving availability,
+// metadata and providers. An alias may be backed by several different credentials.
+func (r *ModelRegistry) clientCatalog(scope string, includeSubscriptions, includeUnavailable bool) []RegisteredModel {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	projected := make(map[string]*ModelRegistration)
+	for _, clientID := range slices.Sorted(maps.Keys(r.clientModelInfos)) {
+		infos := r.clientModelInfos[clientID]
+		provider := r.clientProviders[clientID]
+		if provider == "" || (scope != "" && scope != provider) {
 			continue
+		}
+		for id, info := range infos {
+			if info == nil || (info.ClaudeCodeOnly && !includeSubscriptions) {
+				continue
+			}
+			reg := r.models[id]
+			if reg == nil {
+				continue
+			}
+			entry := projected[id]
+			if entry == nil {
+				entry = &ModelRegistration{Info: info, Providers: make(map[string]int), InfoByProvider: make(map[string]*ModelInfo)}
+				projected[id] = entry
+			}
+			entry.Count++
+			entry.Providers[provider]++
+			if entry.InfoByProvider[provider] == nil {
+				entry.InfoByProvider[provider] = cloneModelInfo(info)
+			}
+			if quota := reg.QuotaExceededClients[clientID]; quota != nil {
+				if entry.QuotaExceededClients == nil {
+					entry.QuotaExceededClients = make(map[string]*time.Time)
+				}
+				entry.QuotaExceededClients[clientID] = quota
+			}
+			if reason, ok := reg.SuspendedClients[clientID]; ok {
+				if entry.SuspendedClients == nil {
+					entry.SuspendedClients = make(map[string]string)
+				}
+				entry.SuspendedClients[clientID] = reason
+			}
+			entry.SuspendedClientDeadlines = reg.SuspendedClientDeadlines
+		}
+	}
+	now := r.now()
+	out := make([]RegisteredModel, 0, len(projected))
+	for _, entry := range projected {
+		listed, _, ready := registrationAvailabilityAndCount(entry, now)
+		if !includeUnavailable && !listed {
+			continue
+		}
+		providers := make([]string, 0, len(entry.Providers))
+		for provider := range entry.Providers {
+			providers = append(providers, provider)
 		}
 		sort.Strings(providers)
-		out = append(out, RegisteredModel{Info: cloneModelInfo(registration.Info), Providers: providers})
+		out = append(out, RegisteredModel{Info: cloneModelInfo(entry.Info), Providers: providers, InfoByProvider: entry.InfoByProvider, ReadyClients: ready})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Info.ID < out[j].Info.ID })
 	return out
