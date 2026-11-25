@@ -225,9 +225,18 @@ const isRenewing = (window: QuotaHistoryWindow | undefined): boolean =>
   );
 
 /**
+ * How long before an account's latest successful reading a window must still
+ * have been reported to stay current: long enough that partial reads, failed
+ * polls and downsampled history do not drop a column.
+ */
+const CURRENT_WINDOW_GRACE_MS = 6 * HOUR_MS;
+
+/**
  * Renewing window keys any enabled account of a provider reports, longest
  * first; windows of the same length keep the order the provider reports them
- * in, so the default is the weekly window of its first group.
+ * in, so the default is the weekly window of its first group. A window no
+ * account has reported for a while is retired upstream (like Antigravity's
+ * short-lived Gemini 4 Argon group) and is left out.
  */
 export function providerWindows(history: QuotaHistory, provider: PoolProvider): ProviderWindow[] {
   const accounts = new Set(
@@ -235,12 +244,24 @@ export function providerWindows(history: QuotaHistory, provider: PoolProvider): 
       .filter((account) => account.provider === provider && !account.disabled)
       .map((account) => account.authIndex)
   );
+  const grace = Math.max(CURRENT_WINDOW_GRACE_MS, 3 * history.intervalSeconds * 1000);
+  const latestReading = new Map<string, number>();
+  history.samples.forEach((sample) => {
+    if (sample.error || !accounts.has(sample.authIndex)) return;
+    latestReading.set(
+      sample.authIndex,
+      Math.max(sample.t, latestReading.get(sample.authIndex) ?? -Infinity)
+    );
+  });
+  const current = new Set<string>();
   const periods = new Map<string, number | null>();
   const labels = new Map<string, { t: number; label: string }>();
   history.samples.forEach((sample) => {
     if (sample.error || !accounts.has(sample.authIndex)) return;
+    const recent = sample.t >= (latestReading.get(sample.authIndex) ?? Infinity) - grace;
     Object.entries(sample.windows).forEach(([key, window]) => {
       if (!isRenewing(window)) return;
+      if (recent) current.add(key);
       if (window.label && sample.t >= (labels.get(key)?.t ?? -Infinity)) {
         labels.set(key, { t: sample.t, label: window.label });
       }
@@ -255,6 +276,7 @@ export function providerWindows(history: QuotaHistory, provider: PoolProvider): 
   });
   const order = [...periods.keys()];
   return [...periods.entries()]
+    .filter(([key]) => current.has(key))
     .map(([key, recorded]) => ({
       key,
       periodHours: windowPeriodHours(key, recorded),

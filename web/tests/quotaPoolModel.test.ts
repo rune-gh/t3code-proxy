@@ -1012,3 +1012,47 @@ describe('the Next badge and the 5-hour headroom guard', () => {
     expect(pickNextAccount([row('a', 1_000, 5), row('b', 2_000, 4)])).toBe('a');
   });
 });
+
+describe('retired windows', () => {
+  const gemini = { group_gemini_models_gemini_weekly: { used: 20, resetsAt: NOW + 48 * H } };
+  const argon = { group_gemini_4_argon_gemini_argon_wtu_weekly: { used: 0, resetsAt: NOW + H } };
+  const accounts = [
+    { id: 'g1', provider: 'antigravity' },
+    { id: 'g2', provider: 'antigravity' },
+  ];
+
+  test('a window no account still reports gets no column or choice', () => {
+    const h = history(accounts, [
+      // Upstream briefly reported an Argon group for one account, then dropped it.
+      sample(NOW - 40 * H, 'g1', { ...gemini, ...argon }),
+      sample(NOW - 30 * H, 'g1', { ...gemini, ...argon }),
+      ...[3, 2, 1].map((hours) => sample(NOW - hours * H, 'g1', gemini)),
+      ...[3, 2, 1].map((hours) => sample(NOW - hours * H, 'g2', gemini)),
+    ]);
+    expect(providerWindows(h, 'antigravity').map((window) => window.key)).toEqual([
+      'group_gemini_models_gemini_weekly',
+    ]);
+    expect(poolWindowChoices('antigravity', h)).toEqual(['group_gemini_models_gemini_weekly']);
+    expect(
+      resolvePoolWindow('antigravity', h, 'group_gemini_4_argon_gemini_argon_wtu_weekly')
+    ).toBe('group_gemini_models_gemini_weekly');
+  });
+
+  test('partial reads and failed polls within six hours keep a window', () => {
+    const failed = { ...sample(NOW - 2 * H, 'g1', {}), error: 'timeout' };
+    const keys = (latestHoursAgo: number) =>
+      providerWindows(
+        history(accounts.slice(0, 1), [
+          sample(NOW - 7 * H, 'g1', { ...gemini, ...argon }),
+          failed,
+          sample(NOW - latestHoursAgo * H, 'g1', gemini),
+        ]),
+        'antigravity'
+      ).map((window) => window.key);
+    expect(keys(1)).toEqual([
+      'group_gemini_models_gemini_weekly',
+      'group_gemini_4_argon_gemini_argon_wtu_weekly',
+    ]);
+    expect(keys(0.5)).toEqual(['group_gemini_models_gemini_weekly']);
+  });
+});
