@@ -1038,15 +1038,21 @@ describe('retired windows', () => {
     ).toBe('group_gemini_models_gemini_weekly');
   });
 
-  test('a window stays while one of the three latest readings reports it', () => {
-    const h = history(accounts.slice(0, 1), [
-      sample(NOW - 3 * H, 'g1', { ...gemini, ...argon }),
-      sample(NOW - 2 * H, 'g1', gemini),
-      sample(NOW - H, 'g1', gemini),
-    ]);
-    expect(providerWindows(h, 'antigravity').map((window) => window.key)).toEqual([
+  test('partial reads and failed polls within six hours keep a window', () => {
+    const failed = { ...sample(NOW - 2 * H, 'g1', {}), error: 'timeout' };
+    const keys = (latestHoursAgo: number) =>
+      providerWindows(
+        history(accounts.slice(0, 1), [
+          sample(NOW - 7 * H, 'g1', { ...gemini, ...argon }),
+          failed,
+          sample(NOW - latestHoursAgo * H, 'g1', gemini),
+        ]),
+        'antigravity'
+      ).map((window) => window.key);
+    expect(keys(1)).toEqual([
       'group_gemini_models_gemini_weekly',
       'group_gemini_4_argon_gemini_argon_wtu_weekly',
     ]);
+    expect(keys(0.5)).toEqual(['group_gemini_models_gemini_weekly']);
   });
 });
