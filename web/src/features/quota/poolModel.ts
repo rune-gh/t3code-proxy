@@ -655,6 +655,9 @@ function observeBurn(track: AccountTrack, now: number, hours: number): BurnObser
   };
 }
 
+/** Recorded hours of the widened 24h window that make a tickless record a measurement. */
+const QUIET_DAY_COVERAGE_HOURS = 20;
+
 /**
  * Widen sparse windows up to 24h. Tick-to-tick timing removes the arbitrary
  * phase of whole-percent counters. Keep a provisional number for rate charts,
@@ -675,7 +678,10 @@ export function estimateBurnRate(
   const coverageHours = Math.max(0, ...observations.map((o) => o.coverageHours));
   // When the whole record is shorter, label its actual duration.
   const actualHours = Math.min(usedHours, coverageHours);
-  const ready = ticks() >= 3 && coverageHours >= Math.max(0.5, usedHours / 3);
+  // Most of a day watched with under three ticks is a quiet pool, not missing data:
+  // its low rate is the estimate, so idle pools still get a projection.
+  const quietDay = usedHours >= 24 && coverageHours >= QUIET_DAY_COVERAGE_HOURS;
+  const ready = quietDay || (ticks() >= 3 && coverageHours >= Math.max(0.5, usedHours / 3));
   let rate = 0;
   let sustainedRate = 0;
   observations.forEach((observation, index) => {
