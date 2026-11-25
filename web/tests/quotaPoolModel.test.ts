@@ -1038,10 +1038,10 @@ describe('retired windows', () => {
     ).toBe('group_gemini_models_gemini_weekly');
   });
 
-  test('one partial reading does not drop a window', () => {
+  test('a window stays while one of the three latest readings reports it', () => {
     const h = history(accounts.slice(0, 1), [
       sample(NOW - 3 * H, 'g1', { ...gemini, ...argon }),
-      sample(NOW - 2 * H, 'g1', { ...gemini, ...argon }),
+      sample(NOW - 2 * H, 'g1', gemini),
       sample(NOW - H, 'g1', gemini),
     ]);
     expect(providerWindows(h, 'antigravity').map((window) => window.key)).toEqual([
