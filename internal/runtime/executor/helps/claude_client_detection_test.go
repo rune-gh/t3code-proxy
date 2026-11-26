@@ -709,3 +709,19 @@ func TestDetectClaudeCodeRequestAcceptsBackgroundSessionXApp(t *testing.T) {
 		}
 	})
 }
+
+func TestIsClaudeCodeModelDiscoveryUserAgent(t *testing.T) {
+	for userAgent, want := range map[string]bool{
+		"claude-code/2.1.332":                 true,
+		"claude-code/2.1.332 (external, cli)": false,
+		"claude-cli/2.1.332 (external, cli)":  false,
+		"claude-code/latest":                  false,
+		" claude-code/2.1.332":                false,
+		"opencode/1.18.0 claude-code/2.1.332": false,
+		"":                                    false,
+	} {
+		if got := IsClaudeCodeModelDiscoveryUserAgent(userAgent); got != want {
+			t.Errorf("IsClaudeCodeModelDiscoveryUserAgent(%q) = %t, want %t", userAgent, got, want)
+		}
+	}
+}

@@ -33,6 +33,27 @@ Pick one of these on the environment's machine:
 - Set `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` as environment variables on a Claude
   instance in **Settings → Providers**, and mark the token as sensitive.
 
+T3 Code's Claude model picker has a built-in list. It adds a model it lacks, such as Claude Mythos
+5.1 and 5.2, only when Claude Code reports it, and Claude Code behind the hub learns models from
+the hub only with gateway model discovery. Turn it on next to the hub settings:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://<hub>.<tailnet>.ts.net:8317",
+    "ANTHROPIC_AUTH_TOKEN": "<hub access key>",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1"
+  }
+}
+```
+
+Claude Code then reads `GET /v1/models` from the hub in the background and keeps the list in
+`~/.claude/cache/gateway-models.json`, so the new models appear from the next Claude Code start.
+It keeps only IDs that contain `claude`. The hub's Anthropic model list gives other providers'
+models cloaked `claude-fable-5-dd-…` IDs so that Claude Code can pick them too; set
+`claude-code.disable-cloaking-model-list: true` on the hub if the Claude picker should list only
+Claude models.
+
 ## Codex
 
 Point the machine's Codex at the hub in `~/.codex/config.toml` as in the setup guide. In T3 Code,

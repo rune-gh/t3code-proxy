@@ -98,6 +98,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Claude Code's gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) sees the
+  Claude subscription models again, so Claude Mythos 5.1 and 5.2 reach T3 Code's Claude model
+  picker. Discovery sends `User-Agent: claude-code/<version>`, which the Claude Code check that
+  reserves subscriptions for Claude Code did not recognize, so the hub left every subscription
+  model out of its list. The discovery agent only lists models; sending a message still needs a
+  full Claude Code request. `docs/t3code.md` shows how to turn discovery on.
 - `deploy/t3code/agy-acp`: preserve `yolo` (Full access) when `agy` reports `accept-edits` back to
   T3 Code instead of unconditionally rewriting it to `auto_edit` (Accept edits), and clamp
   out-of-range `thought_level` updates to the active model's offered levels.

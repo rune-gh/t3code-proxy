@@ -76,6 +76,15 @@ func parseClaudeCodeUserAgent(userAgent string) (claudeCodeUserAgent, bool) {
 	return parsed, true
 }
 
+// IsClaudeCodeModelDiscoveryUserAgent recognizes the request Claude Code sends to
+// list a gateway's models (CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY). It is
+// claude-code/<version> without the claude-cli entrypoint comment, and it only
+// ever reads the model list, so it never qualifies a request to use a model.
+func IsClaudeCodeModelDiscoveryUserAgent(userAgent string) bool {
+	version, ok := strings.CutPrefix(userAgent, "claude-code/")
+	return ok && claudePackageVersionPattern.MatchString(version)
+}
+
 func validClaudeCodeUserAgentFieldName(name string) bool {
 	if name == "" {
 		return false
