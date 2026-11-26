@@ -12,7 +12,7 @@ func (h *BaseAPIHandler) ModelsForRequest(c *gin.Context, handlerType string) []
 	r := registry.GetGlobalRegistry()
 	if c != nil && c.Request != nil {
 		scope := coreauth.ProviderScopeFromContext(c.Request.Context())
-		if handlerType != "claude" || !helps.NativeClaudeCodeClient(c.Request.UserAgent(), h.AuthManager.RuntimeConfigSnapshot()) {
+		if handlerType != "claude" || !claudeCodeCatalogRequest(c, h) {
 			return r.ClientModels(scope, handlerType)
 		}
 		if scope != "" {
@@ -20,4 +20,13 @@ func (h *BaseAPIHandler) ModelsForRequest(c *gin.Context, handlerType string) []
 		}
 	}
 	return r.GetAvailableModels(handlerType)
+}
+
+// claudeCodeCatalogRequest reports whether the model list goes to Claude Code, which
+// may list Claude subscription models: a native Claude Code client, or Claude Code's
+// gateway model discovery, which T3 Code's Claude model picker is built from.
+func claudeCodeCatalogRequest(c *gin.Context, h *BaseAPIHandler) bool {
+	userAgent := c.Request.UserAgent()
+	return helps.IsClaudeCodeModelDiscoveryUserAgent(userAgent) ||
+		helps.NativeClaudeCodeClient(userAgent, h.AuthManager.RuntimeConfigSnapshot())
 }

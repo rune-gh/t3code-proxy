@@ -138,11 +138,21 @@ func TestClaudeSubscriptionCatalogAndRouting(t *testing.T) {
 	}
 	checkCatalog("/provider/claude/v1/models", claudeCode, true)
 	checkCatalog("/v1/models", map[string]string{"User-Agent": "claude-cli/2.1.357 (external, t3-code, agent-sdk/0.3.276)"}, true)
+	// Claude Code's gateway model discovery (CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)
+	// feeds T3 Code's Claude model picker; it sends claude-code/<version>.
+	discovery := map[string]string{"User-Agent": "claude-code/2.1.332", "Anthropic-Version": "2023-06-01"}
+	for _, path := range []string{"/v1/models?limit=1000", "/provider/claude/v1/models?limit=1000"} {
+		checkCatalog(path, discovery, true)
+	}
+	checkCatalog("/v1/models", map[string]string{"User-Agent": "claude-code/2.1.332 (spoofed)", "Anthropic-Version": "2023-06-01"}, false)
+	checkCatalog("/v1/models", map[string]string{"User-Agent": "claude-code/2.1.332"}, false)
 	body := `{"model":"claude-mythos-5-2","messages":[{"role":"user","content":"test"}],"max_tokens":1}`
-	for _, path := range []string{"/v1/messages", "/provider/claude/v1/messages/count_tokens", "/v1/chat/completions"} {
-		resp := scopedRequest(server, http.MethodPost, path, body, openCode)
-		if resp.Code != http.StatusForbidden || !strings.Contains(resp.Body.String(), "only through Claude Code") || len(executor.authIDs) != 0 {
-			t.Fatalf("%s: status %d, dispatched to %v", path, resp.Code, executor.authIDs)
+	for _, headers := range []map[string]string{openCode, discovery} {
+		for _, path := range []string{"/v1/messages", "/provider/claude/v1/messages/count_tokens", "/v1/chat/completions"} {
+			resp := scopedRequest(server, http.MethodPost, path, body, headers)
+			if resp.Code != http.StatusForbidden || !strings.Contains(resp.Body.String(), "only through Claude Code") || len(executor.authIDs) != 0 {
+				t.Fatalf("%s as %s: status %d, dispatched to %v", path, headers["User-Agent"], resp.Code, executor.authIDs)
+			}
 		}
 	}
 	resp := scopedRequest(server, http.MethodPost, "/v1/messages/count_tokens", body, claudeCode)
