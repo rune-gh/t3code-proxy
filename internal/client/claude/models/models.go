@@ -4,17 +4,30 @@ package models
 import (
 	"sort"
 	"strings"
+
+	"github.com/rune-oai/t3code-proxy/internal/registry"
 )
 
 const claudeDDModelPrefix = "claude-fable-5-dd-"
 
 // BuildResponse builds an Anthropic model response from available models.
 func BuildResponse(availableModels []map[string]any, disableCloaking bool) map[string]any {
+	names := make(map[string]int, len(availableModels))
+	for _, model := range availableModels {
+		if name, ok := model["display_name"].(string); ok && name != "" {
+			names[name]++
+		}
+	}
 	models := make([]map[string]any, len(availableModels))
 	for i, model := range availableModels {
 		models[i] = cloneModel(model)
-		if id, ok := models[i]["id"].(string); ok && !disableCloaking {
-			models[i]["id"] = EnsureClaudeModelIDPrefix(id)
+		if id, ok := model["id"].(string); ok {
+			if name, ok := model["display_name"].(string); ok {
+				models[i]["display_name"] = registry.CatalogDisplayName(name, id, names[name])
+			}
+			if !disableCloaking {
+				models[i]["id"] = EnsureClaudeModelIDPrefix(id)
+			}
 		}
 	}
 

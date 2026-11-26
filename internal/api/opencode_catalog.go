@@ -47,6 +47,19 @@ func (s *Server) openCodeCatalogHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, buildOpenCodeCatalog(requestBaseURL(c.Request)+"/v1", registry.GetGlobalRegistry().OpenCodeModels()))
 }
 
+// isOpenCodeRequest recognizes OpenCode, which may use credentials reserved for it
+// (reserved-for: opencode). OpenCode 2.x sends a User-Agent such as
+// "opencode/latest/2.3.0/cli" and x-opencode-* headers on its model requests.
+func isOpenCodeRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.UserAgent())), "opencode/") {
+		return true
+	}
+	return strings.TrimSpace(r.Header.Get("X-Opencode-Client")) != ""
+}
+
 // requestBaseURL is the scheme and host the client used, honoring the
 // X-Forwarded-* headers a TLS front (Tailscale serve) adds.
 func requestBaseURL(r *http.Request) string {
@@ -121,12 +134,19 @@ func buildOpenCodeCatalog(apiBase string, models []registry.RegisteredModel) map
 		API:    apiBase,
 		Models: make(map[string]openCodeModel, len(models)),
 	}
+	names := make(map[string]int, len(models))
 	for _, model := range models {
 		info := model.Info
-		if info == nil || strings.TrimSpace(info.ID) == "" || !isOpenCodeTextModel(info) {
+		if info == nil || strings.TrimSpace(info.ID) == "" || !info.SupportsTextChat() {
 			continue
 		}
-		provider.Models[info.ID] = openCodeModelFor(info, model.Providers, apiBase)
+		entry := openCodeModelFor(info, model.Providers, apiBase)
+		provider.Models[info.ID] = entry
+		names[entry.Name]++
+	}
+	for id, entry := range provider.Models {
+		entry.Name = registry.CatalogDisplayName(entry.Name, id, names[entry.Name])
+		provider.Models[id] = entry
 	}
 	return map[string]openCodeProvider{openCodeProviderID: provider}
 }
@@ -174,33 +194,6 @@ func openCodeNPMFor(modelID string, providers []string) string {
 	default:
 		return openCodeNPMOpenAICompatible
 	}
-}
-
-// isOpenCodeTextModel keeps chat models and drops image, video and speech ones,
-// which OpenCode cannot drive.
-func isOpenCodeTextModel(info *registry.ModelInfo) bool {
-	if info.Type == registry.OpenAIImageModelType {
-		return false
-	}
-	if len(info.SupportedOutputModalities) > 0 {
-		text := false
-		for _, modality := range info.SupportedOutputModalities {
-			text = text || strings.EqualFold(modality, "text")
-		}
-		if !text {
-			return false
-		}
-	}
-	base := strings.ToLower(info.ID)
-	if slash := strings.LastIndexByte(base, '/'); slash >= 0 {
-		base = base[slash+1:]
-	}
-	for _, marker := range []string{"gpt-image", "imagine", "imagen", "veo-", "-tts", "tts-"} {
-		if strings.Contains(base, marker) {
-			return false
-		}
-	}
-	return base != "grok-tts"
 }
 
 func openCodeInputModalities(raw []string) []string {

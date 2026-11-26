@@ -469,3 +469,18 @@ api-keys:
 		t.Fatalf("ClaudeKey[0].Cloak.SensitivePatternsReplace = %#v", cfg.ClaudeKey)
 	}
 }
+
+func TestSanitizeOpenAICompatibilityNormalizesReservedFor(t *testing.T) {
+	cfg := &Config{OpenAICompatibility: []OpenAICompatibility{
+		{Name: "vibe", BaseURL: "https://api.mistral.ai/v1", ReservedFor: " OpenCode "},
+		{Name: "typo", BaseURL: "https://api.mistral.ai/v1", ReservedFor: "open-code"},
+	}}
+	cfg.SanitizeOpenAICompatibility()
+	if got := cfg.OpenAICompatibility[0].ReservedFor; got != registry.ReservedForOpenCode {
+		t.Fatalf("reserved-for = %q, want %q", got, registry.ReservedForOpenCode)
+	}
+	// An unknown client is kept so the provider stays closed rather than open to all.
+	if got := cfg.OpenAICompatibility[1].ReservedFor; got != "open-code" {
+		t.Fatalf("unknown reserved-for = %q, want it kept", got)
+	}
+}

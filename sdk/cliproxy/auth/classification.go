@@ -23,6 +23,7 @@ const (
 	AttributeCodexDisableCloaking = "codex_disable_cloaking"
 	AttributeConfigIndex          = "config_index"
 	AttributePath                 = "path"
+	AttributeReservedFor          = "reserved_for"
 	AttributeRuntimeOnly          = "runtime_only"
 	AttributeSource               = "source"
 	AttributeSourceBackend        = "source_backend"
@@ -41,12 +42,16 @@ func (a *Auth) IsClaudeSubscription() bool {
 	return a.AuthKind() == AuthKindOAuth || IsClaudeOAuthToken(key)
 }
 
-// ReservedClient returns the only client a subscription credential may serve, or "" when
-// any client may use it. A Claude subscription is for Claude Code and a Google
-// Antigravity login is for the Antigravity CLI; API keys and other providers are open.
+// ReservedClient returns the only client a credential may serve, or "" when any client
+// may use it. A Claude subscription is for Claude Code and a Google Antigravity login is
+// for the Antigravity CLI. Other credentials are open unless their configuration
+// reserves them (reserved-for, such as a Mistral Vibe key reserved for OpenCode).
 func (a *Auth) ReservedClient() string {
 	if a == nil {
 		return ""
+	}
+	if reserved := authAttribute(a, AttributeReservedFor); reserved != "" {
+		return reserved
 	}
 	if a.IsClaudeSubscription() {
 		return registry.ReservedForClaudeCode

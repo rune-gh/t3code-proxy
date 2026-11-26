@@ -1219,7 +1219,13 @@ func (s *Server) handleHomeModels(c *gin.Context) {
 func formatHomeClaudeModels(entries []homeModelEntry) []map[string]any {
 	out := make([]map[string]any, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, formatHomeClaudeModel(entry))
+		info := registry.ModelInfo{
+			ID: entry.id, MetadataModelID: entry.metadataModelID, Type: entry.modelType, DisplayName: entry.displayName,
+			SupportedInputModalities: entry.supportedInputModalities, SupportedOutputModalities: entry.supportedOutputModalities,
+		}
+		if info.SupportsTextChat() {
+			out = append(out, formatHomeClaudeModel(entry))
+		}
 	}
 	return out
 }
