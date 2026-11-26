@@ -6,8 +6,10 @@ working hub from the [setup guide](setup.md). [Providers](providers.md) lists ev
 and API-key upstream, its login flow and its client API surface.
 
 Subscription proxying may violate provider terms and can lead to suspension or a ban. Never
-serve other people's traffic with your subscriptions. Use Claude subscriptions only through
-Claude Code, including the Claude Code instance T3 Code runs.
+serve other people's traffic with your subscriptions. The hub enforces the first-party client for
+two of them: Claude subscriptions serve only Claude Code (including the Claude Code instance T3
+Code runs), and Google Antigravity logins serve only the standalone Antigravity CLI. Other clients
+neither list nor reach those models unless an API key or another account supplies them.
 
 T3 Code needs no plugin and no change on the hub. Requests go through the clients' own config
 files, and limits come from the hub's management API.
@@ -50,7 +52,8 @@ the hub only with gateway model discovery. Turn it on next to the hub settings:
 Claude Code then reads `GET /v1/models` from the hub in the background and keeps the list in
 `~/.claude/cache/gateway-models.json`, so the new models appear from the next Claude Code start.
 It keeps only IDs that contain `claude`. The hub's Anthropic model list gives other providers'
-models cloaked `claude-fable-5-dd-…` IDs so that Claude Code can pick them too; set
+models cloaked `claude-fable-5-dd-…` IDs so that Claude Code can pick them too (Antigravity models
+are not among them, since those logins serve only the Antigravity CLI); set
 `claude-code.disable-cloaking-model-list: true` on the hub if the Claude picker should list only
 Claude models.
 
@@ -151,9 +154,14 @@ in its logs.
 3. Pick a `t3code-proxy/<model>` model in the thread. The instance lists only the hub's models;
    your own OpenCode setup outside T3 Code is unchanged.
 
-The standalone hub reserves its Claude subscription credentials for Claude Code. OpenCode lists a model
-when an eligible credential supplies it, including an Anthropic API key or another upstream.
-Asking for a subscription-only model by ID also requires an eligible credential.
+The standalone hub reserves its Claude subscription credentials for Claude Code and its Google
+Antigravity logins for the Antigravity CLI. OpenCode lists a model when an eligible credential
+supplies it, such as an Anthropic or Gemini API key or another upstream. Asking for a reserved
+model by ID returns `403` unless an eligible credential also supplies it.
+
+A fixed model list in `~/.config/opencode/opencode.json` is not updated by the hub. Remove
+Antigravity and Claude subscription models from it by hand, or point OpenCode at the catalog
+above instead.
 
 ## Mistral (OpenCode and Vibe)
 

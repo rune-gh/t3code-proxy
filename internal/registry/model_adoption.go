@@ -136,38 +136,63 @@ type RegisteredModel struct {
 	ReadyClients   int
 }
 
-// RequiresClaudeCode reports whether every registered route in scope is subscription-only.
-func (r *ModelRegistry) RequiresClaudeCode(id, scope string) bool {
+// Clients a subscription credential is reserved for. See ModelInfo.ReservedFor.
+const (
+	ReservedForClaudeCode     = "claude-code"
+	ReservedForAntigravityCLI = "antigravity-cli"
+
+	// anyClient lists every route regardless of reservations.
+	anyClient = "*"
+)
+
+// ReservedClientName is the user-facing name of a reserved client.
+func ReservedClientName(client string) string {
+	switch client {
+	case ReservedForClaudeCode:
+		return "Claude Code"
+	case ReservedForAntigravityCLI:
+		return "the Antigravity CLI"
+	}
+	return client
+}
+
+func reservationAllows(reservedFor, client string) bool {
+	return reservedFor == "" || client == anyClient || reservedFor == client
+}
+
+// ReservedElsewhere returns the client a model is reserved for when every registered
+// route in scope is reserved for a client other than client, and "" when client may use it.
+func (r *ModelRegistry) ReservedElsewhere(id, scope, client string) string {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	restricted := false
-	for clientID, infos := range r.clientModelInfos {
+	reserved := ""
+	for _, clientID := range slices.Sorted(maps.Keys(r.clientModelInfos)) {
 		if scope != "" && r.clientProviders[clientID] != scope {
 			continue
 		}
-		if info := infos[id]; info != nil {
-			if !info.ClaudeCodeOnly {
-				return false
+		if info := r.clientModelInfos[clientID][id]; info != nil {
+			if reservationAllows(info.ReservedFor, client) {
+				return ""
 			}
-			restricted = true
+			reserved = info.ReservedFor
 		}
 	}
-	return restricted
+	return reserved
 }
 
-// ClientCatalog contains eligible metadata and ready counts for non-Claude Code clients.
-func (r *ModelRegistry) ClientCatalog(scope string) []RegisteredModel {
-	return r.clientCatalog(scope, false, false)
+// ClientCatalog contains eligible metadata and ready counts for the given client.
+func (r *ModelRegistry) ClientCatalog(scope, client string) []RegisteredModel {
+	return r.clientCatalog(scope, client, false)
 }
 
-// OpenCodeModels includes cooling credentials but excludes Claude Code subscriptions.
+// OpenCodeModels includes cooling credentials but excludes reserved subscriptions.
 func (r *ModelRegistry) OpenCodeModels() []RegisteredModel {
-	return r.clientCatalog("", false, true)
+	return r.clientCatalog("", "", true)
 }
 
 // Project each registration onto eligible credentials before resolving availability,
 // metadata and providers. An alias may be backed by several different credentials.
-func (r *ModelRegistry) clientCatalog(scope string, includeSubscriptions, includeUnavailable bool) []RegisteredModel {
+func (r *ModelRegistry) clientCatalog(scope, client string, includeUnavailable bool) []RegisteredModel {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	projected := make(map[string]*ModelRegistration)
@@ -178,7 +203,7 @@ func (r *ModelRegistry) clientCatalog(scope string, includeSubscriptions, includ
 			continue
 		}
 		for id, info := range infos {
-			if info == nil || (info.ClaudeCodeOnly && !includeSubscriptions) {
+			if info == nil || !reservationAllows(info.ReservedFor, client) {
 				continue
 			}
 			reg := r.models[id]

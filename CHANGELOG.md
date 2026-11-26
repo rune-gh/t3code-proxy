@@ -74,6 +74,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The standalone hub reserves its Claude subscription credentials for Claude Code. OpenCode and other hub clients
   list and use models supplied by their eligible credentials, including Anthropic API keys.
+- Google Antigravity logins are reserved for the standalone Antigravity CLI (`antigravity/cli/…`) the same
+  way. OpenCode, Claude Code and other clients no longer list Antigravity's Gemini, Claude or GPT-OSS
+  models, and a request for one gets `403` unless an API key or another account also supplies it.
 
 - Web panel Overview: account cards are gone. Each row of an accounts table opens that account's
   full read in place (windows and resets, plan details, Claude extra usage, Codex banked resets

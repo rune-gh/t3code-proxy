@@ -720,7 +720,7 @@ func grokModelsFromRegistryInfos(infos []*registry.ModelInfo) []grokbuild.ModelI
 func (s *Server) handleGrokModels(c *gin.Context) {
 	var models []grokbuild.ModelInfo
 	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
-		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos(scope))
+		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos(scope, ""))
 	} else if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
 		entries, ok := s.loadHomeModelEntries(c)
 		if !ok {
@@ -728,7 +728,7 @@ func (s *Server) handleGrokModels(c *gin.Context) {
 		}
 		models = grokModelsFromHomeEntries(entries)
 	} else {
-		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos(""))
+		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().ClientModelInfos("", ""))
 	}
 	s.writeModelListResponse(c, "openai", grokbuild.BuildResponse(models))
 }
@@ -1078,7 +1078,7 @@ func appendVaryToken(header http.Header, token string) {
 
 func (s *Server) antigravityCLIModelInfos(c *gin.Context) ([]*registry.ModelInfo, bool) {
 	if scope := auth.ProviderScopeFromContext(c.Request.Context()); scope != "" {
-		return registry.GetGlobalRegistry().ClientModelInfos(scope), true
+		return registry.GetGlobalRegistry().ClientModelInfos(scope, registry.ReservedForAntigravityCLI), true
 	}
 	if cfg := s.getConfig(); cfg != nil && cfg.Home.Enabled {
 		entries, ok := s.loadHomeModelEntries(c)
@@ -1087,7 +1087,7 @@ func (s *Server) antigravityCLIModelInfos(c *gin.Context) ([]*registry.ModelInfo
 		}
 		return homeModelEntriesToRegistryInfos(entries), true
 	}
-	return registry.GetGlobalRegistry().ClientModelInfos(""), true
+	return registry.GetGlobalRegistry().ClientModelInfos("", registry.ReservedForAntigravityCLI), true
 }
 
 func homeModelEntriesToRegistryInfos(entries []homeModelEntry) []*registry.ModelInfo {

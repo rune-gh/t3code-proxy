@@ -391,7 +391,7 @@ func codexSpawnAgentModelsAndMarkdownForRequest(ctx context.Context, headers htt
 		return nil, ""
 	}
 
-	infos := registry.GetGlobalRegistry().ClientModelInfos("")
+	infos := registry.GetGlobalRegistry().ClientModelInfos("", "")
 	availableModels := make([]map[string]any, 0, len(infos))
 	byID := make(map[string]*registry.ModelInfo, len(infos))
 	for _, info := range infos {

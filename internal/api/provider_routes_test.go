@@ -103,6 +103,11 @@ func scopedRequest(server *Server, method, path, body string, headers map[string
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
+	// The Antigravity logins are reserved for the Antigravity CLI, the client that
+	// uses this endpoint.
+	if strings.HasPrefix(strings.ToLower(path), "/provider/antigravity") {
+		req.Header.Set("User-Agent", testAntigravityCLIUA)
+	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}

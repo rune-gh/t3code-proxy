@@ -10,16 +10,15 @@ import (
 // ModelsForRequest returns the catalog in the requested format, honoring a provider scope.
 func (h *BaseAPIHandler) ModelsForRequest(c *gin.Context, handlerType string) []map[string]any {
 	r := registry.GetGlobalRegistry()
-	if c != nil && c.Request != nil {
-		scope := coreauth.ProviderScopeFromContext(c.Request.Context())
-		if handlerType != "claude" || !claudeCodeCatalogRequest(c, h) {
-			return r.ClientModels(scope, handlerType)
-		}
-		if scope != "" {
-			return r.GetAvailableModelsForProvider(scope, handlerType)
-		}
+	if c == nil || c.Request == nil {
+		return r.GetAvailableModels(handlerType)
 	}
-	return r.GetAvailableModels(handlerType)
+	ctx := c.Request.Context()
+	client, _ := coreauth.SubscriptionClientFromContext(ctx)
+	if handlerType == "claude" && claudeCodeCatalogRequest(c, h) {
+		client = registry.ReservedForClaudeCode
+	}
+	return r.ClientModels(coreauth.ProviderScopeFromContext(ctx), client, handlerType)
 }
 
 // claudeCodeCatalogRequest reports whether the model list goes to Claude Code, which

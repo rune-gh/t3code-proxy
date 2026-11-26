@@ -1080,7 +1080,7 @@ func TestCodexSpawnAgentModelsCacheInvalidation(t *testing.T) {
 			},
 		},
 	})
-	modelRegistry.RegisterClient("spawn-subscription-only", "claude", []*registry.ModelInfo{{ID: "claude-mythos-spawn-test", ClaudeCodeOnly: true}})
+	modelRegistry.RegisterClient("spawn-subscription-only", "claude", []*registry.ModelInfo{{ID: "claude-mythos-spawn-test", ReservedFor: registry.ReservedForClaudeCode}})
 	t.Cleanup(func() {
 		modelRegistry.UnregisterClient("spawn-subscription-only")
 		modelRegistry.UnregisterClient(clientID1)

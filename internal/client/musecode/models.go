@@ -230,7 +230,7 @@ func ModelInputsFromGlobalRegistry(reg *registry.ModelRegistry) []ModelInput {
 	if reg == nil {
 		return nil
 	}
-	catalog := reg.ClientCatalog("")
+	catalog := reg.ClientCatalog("", "")
 	infos := make([]*registry.ModelInfo, 0, len(catalog))
 	for _, model := range catalog {
 		infos = append(infos, model.Info)

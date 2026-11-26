@@ -84,10 +84,11 @@ type requiredAuthKindContextKey struct{}
 type credentialPolicyContextKey struct{}
 
 type authSelectionEligibility struct {
-	requiredKind              string
-	credentialPolicy          string
-	disallowFreeAuth          bool
-	excludeClaudeSubscription bool
+	requiredKind          string
+	credentialPolicy      string
+	disallowFreeAuth      bool
+	restrictSubscriptions bool
+	subscriptionClient    string
 }
 
 func withRequiredAuthKind(ctx context.Context, requiredKind string) context.Context {
@@ -109,7 +110,7 @@ func credentialPolicyFromContext(ctx context.Context) string {
 func authSelectionEligibilityForRequest(ctx context.Context, opts cliproxyexecutor.Options) authSelectionEligibility {
 	eligibility := authSelectionEligibility{disallowFreeAuth: disallowFreeAuthFromMetadata(opts.Metadata)}
 	if ctx != nil {
-		eligibility.excludeClaudeSubscription = ClaudeSubscriptionsExcluded(ctx)
+		eligibility.subscriptionClient, eligibility.restrictSubscriptions = SubscriptionClientFromContext(ctx)
 		eligibility.requiredKind, _ = ctx.Value(requiredAuthKindContextKey{}).(string)
 		eligibility.credentialPolicy, _ = ctx.Value(credentialPolicyContextKey{}).(string)
 	}
@@ -120,8 +121,10 @@ func (e authSelectionEligibility) allows(auth *Auth) bool {
 	if auth == nil {
 		return false
 	}
-	if e.excludeClaudeSubscription && auth.IsClaudeSubscription() {
-		return false
+	if e.restrictSubscriptions {
+		if reserved := auth.ReservedClient(); reserved != "" && reserved != e.subscriptionClient {
+			return false
+		}
 	}
 	if e.requiredKind != "" && auth.AuthKind() != e.requiredKind {
 		return false

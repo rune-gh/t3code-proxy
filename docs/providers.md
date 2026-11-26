@@ -20,7 +20,8 @@ and are case-insensitive, including configured `api-keys.openai-compatibility` n
 `mistral`. For example, set an OpenAI-compatible client's base URL to
 `https://<hub>/provider/mistral/v1`, or a Gemini client's base URL to
 `https://<hub>/provider/antigravity` when it appends `/v1beta` itself. Authenticate with a hub
-access key.
+access key. Antigravity logins only serve the standalone Antigravity CLI, so other clients get
+nothing from `/provider/antigravity`.
 
 The prefix supports these routes.
 
@@ -107,7 +108,7 @@ t3code-proxy -config "$CONFIG" -meta-login
 | --- | --- | --- |
 | Claude | Anthropic Claude subscription OAuth | Claude Code, including Claude Code run by T3 Code |
 | Codex | ChatGPT account's Codex access | Codex CLI, including T3 Code's **Use existing CLI** instance, and compatible Responses clients |
-| Antigravity | Google OAuth and Antigravity model access | Claude Code or Codex using an exposed model, or a compatible text API client |
+| Antigravity | Google OAuth and Antigravity model access | The standalone Antigravity CLI (`agy`), including T3 Code's Antigravity provider through `agy-acp` |
 | Kimi.com / Kimi.ai | Moonshot's device authorization on the selected domain | Claude Code, Codex or a compatible text API client using a Kimi model |
 | xAI | Grok device authorization | Claude Code, Codex or a compatible text API client using a Grok model |
 | Devin | Cognition authorization code or session token | Claude Code, Codex or a compatible text API client using a Devin catalog model |

@@ -561,7 +561,7 @@ func TestHandleModelsLocalRegistryMultiProviderAndMethodValidation(t *testing.T)
 		},
 	})
 	registry.GetGlobalRegistry().RegisterClient("subscription-local-models-test", "claude", []*registry.ModelInfo{
-		{ID: "shared-local-model", ClaudeCodeOnly: true, ContextLength: 16000},
+		{ID: "shared-local-model", ReservedFor: registry.ReservedForClaudeCode, ContextLength: 16000},
 	})
 	t.Cleanup(func() {
 		registry.GetGlobalRegistry().UnregisterClient("subscription-local-models-test")

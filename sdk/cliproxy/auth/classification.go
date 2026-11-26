@@ -1,6 +1,10 @@
 package auth
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/rune-oai/t3code-proxy/internal/registry"
+)
 
 const (
 	AuthKindAPIKey = "apikey"
@@ -35,6 +39,22 @@ func (a *Auth) IsClaudeSubscription() bool {
 		key = authMetadataString(a, "access_token")
 	}
 	return a.AuthKind() == AuthKindOAuth || IsClaudeOAuthToken(key)
+}
+
+// ReservedClient returns the only client a subscription credential may serve, or "" when
+// any client may use it. A Claude subscription is for Claude Code and a Google
+// Antigravity login is for the Antigravity CLI; API keys and other providers are open.
+func (a *Auth) ReservedClient() string {
+	if a == nil {
+		return ""
+	}
+	if a.IsClaudeSubscription() {
+		return registry.ReservedForClaudeCode
+	}
+	if strings.EqualFold(strings.TrimSpace(a.Provider), "antigravity") {
+		return registry.ReservedForAntigravityCLI
+	}
+	return ""
 }
 
 // IsClaudeOAuthToken recognizes Claude setup tokens even in an API-key configuration.

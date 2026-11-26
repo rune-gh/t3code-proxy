@@ -119,7 +119,7 @@ func TestClaudeSubscriptionCatalogAndRouting(t *testing.T) {
 			t.Fatal(err)
 		}
 		reg := registry.GetGlobalRegistry()
-		reg.RegisterClient(id, "claude", []*registry.ModelInfo{{ID: model, ClaudeCodeOnly: a.IsClaudeSubscription()}})
+		reg.RegisterClient(id, "claude", []*registry.ModelInfo{{ID: model, ReservedFor: a.ReservedClient()}})
 		t.Cleanup(func() { reg.UnregisterClient(id) })
 		manager.RefreshSchedulerEntry(id)
 	}
@@ -187,7 +187,7 @@ func TestClientAutoSkipsSubscriptionAndCoolingKey(t *testing.T) {
 		if _, err := manager.Register(context.Background(), a); err != nil {
 			t.Fatal(err)
 		}
-		reg.RegisterClient(a.ID, "claude", []*registry.ModelInfo{{ID: tc.model, Created: tc.created, ClaudeCodeOnly: a.IsClaudeSubscription()}})
+		reg.RegisterClient(a.ID, "claude", []*registry.ModelInfo{{ID: tc.model, Created: tc.created, ReservedFor: a.ReservedClient()}})
 		t.Cleanup(func() { reg.UnregisterClient(a.ID) })
 		manager.RefreshSchedulerEntry(a.ID)
 	}
@@ -195,5 +195,62 @@ func TestClientAutoSkipsSubscriptionAndCoolingKey(t *testing.T) {
 	resp := scopedRequest(server, http.MethodPost, "/provider/claude/v1/messages", `{"model":"auto","max_tokens":1,"messages":[{"role":"user","content":"test"}]}`, nil)
 	if resp.Code != 200 || len(executor.authIDs) != 1 || executor.authIDs[0] != "auto-scope-ready" {
 		t.Fatalf("auto: status %d, dispatched to %v", resp.Code, executor.authIDs)
+	}
+}
+
+func TestAntigravitySubscriptionReservedForAntigravityCLI(t *testing.T) {
+	server := newTestServer(t)
+	manager := server.handlers.AuthManager
+	executor := &providerScopeExecutor{provider: "antigravity"}
+	manager.RegisterExecutor(executor)
+	const model = "gemini-reserved-test"
+	a := &auth.Auth{ID: "antigravity-login", Provider: "antigravity", Status: auth.StatusActive}
+	if _, err := manager.Register(context.Background(), a); err != nil {
+		t.Fatal(err)
+	}
+	reg := registry.GetGlobalRegistry()
+	reg.RegisterClient(a.ID, "antigravity", []*registry.ModelInfo{{ID: model, OwnedBy: "antigravity", ReservedFor: a.ReservedClient()}})
+	t.Cleanup(func() { reg.UnregisterClient(a.ID) })
+	manager.RefreshSchedulerEntry(a.ID)
+
+	openCode := map[string]string{"User-Agent": "opencode/1.18.18"}
+	claudeCode := map[string]string{"User-Agent": "claude-cli/2.1.332 (external, cli)", "X-App": "cli", "Anthropic-Beta": "claude-code-20250219", "Anthropic-Version": "2023-06-01"}
+	agy := map[string]string{"User-Agent": testAntigravityCLIUA}
+	for _, tc := range []struct {
+		path    string
+		headers map[string]string
+		listed  bool
+	}{
+		{"/opencode/test-key/api.json", openCode, false},
+		{"/v1/models", openCode, false},
+		{"/v1beta/models", openCode, false},
+		{"/v1/models", claudeCode, false},
+		{"/v1/models", map[string]string{"User-Agent": "claude-code/2.1.332"}, false},
+		{"/provider/antigravity/v1beta/models", agy, true},
+		{"/v1beta/models", agy, true},
+	} {
+		resp := scopedRequest(server, http.MethodGet, tc.path, "", tc.headers)
+		if resp.Code != http.StatusOK || strings.Contains(resp.Body.String(), model) != tc.listed {
+			t.Fatalf("%s (%s): status %d, want listed=%t: %s", tc.path, tc.headers["User-Agent"], resp.Code, tc.listed, resp.Body.String())
+		}
+	}
+
+	chat := `{"model":"` + model + `","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`
+	for _, tc := range []struct {
+		path, body string
+		headers    map[string]string
+	}{
+		{"/v1/chat/completions", chat, openCode},
+		{"/v1/messages", chat, claudeCode},
+		{"/v1beta/models/" + model + ":generateContent", `{"contents":[{"parts":[{"text":"hi"}]}]}`, openCode},
+	} {
+		resp := scopedRequest(server, http.MethodPost, tc.path, tc.body, tc.headers)
+		if resp.Code != http.StatusForbidden || !strings.Contains(resp.Body.String(), "only through the Antigravity CLI") || len(executor.authIDs) != 0 {
+			t.Fatalf("%s (%s): status %d, dispatched to %v: %s", tc.path, tc.headers["User-Agent"], resp.Code, executor.authIDs, resp.Body.String())
+		}
+	}
+	resp := scopedRequest(server, http.MethodPost, "/provider/antigravity/v1beta/models/"+model+":generateContent", `{"contents":[{"parts":[{"text":"hi"}]}]}`, agy)
+	if resp.Code != http.StatusOK || len(executor.authIDs) != 1 || executor.authIDs[0] != a.ID {
+		t.Fatalf("Antigravity CLI: status %d, dispatched to %v: %s", resp.Code, executor.authIDs, resp.Body.String())
 	}
 }

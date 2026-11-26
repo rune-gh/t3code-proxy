@@ -8,19 +8,24 @@ import (
 )
 
 type providerScopeContextKey struct{}
-type excludeClaudeSubscriptionsKey struct{}
+type subscriptionClientKey struct{}
 
-// WithClaudeSubscriptionAccess carries the incoming client classification through credential selection.
-func WithClaudeSubscriptionAccess(ctx context.Context, allowed bool) context.Context {
-	return context.WithValue(ctx, excludeClaudeSubscriptionsKey{}, !allowed)
+// WithSubscriptionClient records which client sent a request, so credential selection
+// only uses subscriptions reserved for it (see Auth.ReservedClient). client is a
+// registry.ReservedFor* value, or "" for a third-party client that may use no reserved
+// subscription. A context without it, such as an internal request, is not restricted.
+func WithSubscriptionClient(ctx context.Context, client string) context.Context {
+	return context.WithValue(ctx, subscriptionClientKey{}, client)
 }
 
-func ClaudeSubscriptionsExcluded(ctx context.Context) bool {
+// SubscriptionClientFromContext returns the client recorded by WithSubscriptionClient
+// and whether one was recorded.
+func SubscriptionClientFromContext(ctx context.Context) (client string, restricted bool) {
 	if ctx == nil {
-		return false
+		return "", false
 	}
-	excluded, _ := ctx.Value(excludeClaudeSubscriptionsKey{}).(bool)
-	return excluded
+	client, restricted = ctx.Value(subscriptionClientKey{}).(string)
+	return client, restricted
 }
 
 // WithProviderScope restricts a client request to a registry provider key.

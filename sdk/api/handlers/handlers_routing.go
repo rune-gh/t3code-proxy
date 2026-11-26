@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
@@ -176,9 +175,9 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, model
 	reg := registry.GetGlobalRegistry()
 	if initialSuffix.ModelName == "auto" && !homeRouted {
 		base := "auto"
-		if coreauth.ClaudeSubscriptionsExcluded(ctx) {
+		if client, restricted := coreauth.SubscriptionClientFromContext(ctx); restricted {
 			var newest int64
-			for _, route := range reg.ClientCatalog(scope) {
+			for _, route := range reg.ClientCatalog(scope, client) {
 				if route.ReadyClients == 0 {
 					continue
 				}
@@ -232,8 +231,10 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(ctx context.Context, model
 	if len(providers) == 0 && !homeRouted && registry.ResolveUnknownModel(baseModel, scope) {
 		providers = lookupProviders()
 	}
-	if !homeRouted && coreauth.ClaudeSubscriptionsExcluded(ctx) && slices.Contains(providers, "claude") && reg.RequiresClaudeCode(baseModel, scope) {
-		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusForbidden, Error: fmt.Errorf("model %s is available only through Claude Code with the configured credentials", baseModel)}
+	if client, restricted := coreauth.SubscriptionClientFromContext(ctx); !homeRouted && restricted && len(providers) > 0 {
+		if reserved := reg.ReservedElsewhere(baseModel, scope, client); reserved != "" {
+			return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusForbidden, Error: fmt.Errorf("model %s is available only through %s with the configured credentials", baseModel, registry.ReservedClientName(reserved))}
+		}
 	}
 	if scope != "" && len(providers) == 0 {
 		return nil, "", modelNotFoundError(modelName)
