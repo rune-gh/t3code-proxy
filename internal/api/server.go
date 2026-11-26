@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	managementHandlers "github.com/rune-oai/t3code-proxy/internal/api/handlers/management"
 	"github.com/rune-oai/t3code-proxy/internal/api/middleware"
+	"github.com/rune-oai/t3code-proxy/internal/client/antigravitycli"
 	codexlive "github.com/rune-oai/t3code-proxy/internal/client/codex/live"
 	"github.com/rune-oai/t3code-proxy/internal/client/musecode"
 	"github.com/rune-oai/t3code-proxy/internal/config"
@@ -30,6 +31,7 @@ import (
 	"github.com/rune-oai/t3code-proxy/internal/managementasset"
 	"github.com/rune-oai/t3code-proxy/internal/pluginhost"
 	"github.com/rune-oai/t3code-proxy/internal/redisqueue"
+	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/internal/wstunnel"
 	sdkaccess "github.com/rune-oai/t3code-proxy/sdk/access"
 	"github.com/rune-oai/t3code-proxy/sdk/api/handlers"
@@ -273,9 +275,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 
 	// Home heartbeat gate: when home is enabled, block all endpoints with 503 until the
 	// subscribe-config heartbeat connection is healthy.
-	engine.Use(func(c *gin.Context) {
-		c.Request = c.Request.WithContext(auth.WithClaudeSubscriptionAccess(c.Request.Context(), false))
-	})
+	engine.Use(subscriptionClientMiddleware)
 	engine.Use(s.homeHeartbeatMiddleware())
 	engine.Use(s.exampleAPIKeySafeModeMiddleware())
 
@@ -530,4 +530,16 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	log.Debug("API server stopped")
 	return nil
+}
+
+// subscriptionClientMiddleware classifies every client request for subscription
+// reservations: the standalone Antigravity CLI may use the Google Antigravity logins
+// and everyone else none of the reserved subscriptions. The Claude handler upgrades
+// a verified Claude Code request to the Claude subscriptions.
+func subscriptionClientMiddleware(c *gin.Context) {
+	client := ""
+	if antigravitycli.IsAntigravityCLIUserAgent(c.GetHeader("User-Agent")) {
+		client = registry.ReservedForAntigravityCLI
+	}
+	c.Request = c.Request.WithContext(auth.WithSubscriptionClient(c.Request.Context(), client))
 }

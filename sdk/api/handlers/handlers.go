@@ -642,8 +642,8 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 	}
 
 	if requestCtx != nil {
-		if coreauth.ClaudeSubscriptionsExcluded(requestCtx) {
-			parentCtx = coreauth.WithClaudeSubscriptionAccess(parentCtx, false)
+		if client, restricted := coreauth.SubscriptionClientFromContext(requestCtx); restricted {
+			parentCtx = coreauth.WithSubscriptionClient(parentCtx, client)
 		}
 		if provider := coreauth.ProviderScopeFromContext(requestCtx); provider != "" {
 			parentCtx = coreauth.WithProviderScope(parentCtx, provider)

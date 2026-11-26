@@ -143,8 +143,9 @@ func (h *ClaudeCodeAPIHandler) ClaudeCountTokens(c *gin.Context) {
 }
 
 func (h *ClaudeCodeAPIHandler) classifySubscriptionRequest(c *gin.Context, payload []byte, countTokens bool) {
-	allowed := helps.ClaudeSubscriptionRequest(c.Request.Header, payload, countTokens, h.AuthManager.RuntimeConfigSnapshot())
-	c.Request = c.Request.WithContext(coreauth.WithClaudeSubscriptionAccess(c.Request.Context(), allowed))
+	if helps.ClaudeSubscriptionRequest(c.Request.Header, payload, countTokens, h.AuthManager.RuntimeConfigSnapshot()) {
+		c.Request = c.Request.WithContext(coreauth.WithSubscriptionClient(c.Request.Context(), registry.ReservedForClaudeCode))
+	}
 }
 
 // rewriteClaudeDDModelInBody decodes model IDs of the form claude-fable-5-dd-<reversed>

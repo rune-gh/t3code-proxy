@@ -38,8 +38,9 @@ type NativeCapabilities struct {
 
 // ModelInfo represents information about an available model
 type ModelInfo struct {
-	// ClaudeCodeOnly marks a route supplied by a Claude subscription credential.
-	ClaudeCodeOnly bool `json:"-" yaml:"-"`
+	// ReservedFor names the only client that may use this route, such as
+	// ReservedForClaudeCode for a Claude subscription credential. Empty means any client.
+	ReservedFor string `json:"-" yaml:"-"`
 
 	// ID is the unique identifier for the model
 	ID string `json:"id"`
@@ -1733,16 +1734,13 @@ func (r *ModelRegistry) GetAvailableModelsByProvider(provider string) []*ModelIn
 		return nil
 	}
 
-	return r.clientModelInfosForCatalog(provider, true)
+	return r.ClientModelInfos(provider, anyClient)
 }
 
-// ClientModelInfos returns the available routes usable by third-party clients.
-func (r *ModelRegistry) ClientModelInfos(provider string) []*ModelInfo {
-	return r.clientModelInfosForCatalog(provider, false)
-}
-
-func (r *ModelRegistry) clientModelInfosForCatalog(provider string, includeSubscriptions bool) []*ModelInfo {
-	routes := r.clientCatalog(provider, includeSubscriptions, false)
+// ClientModelInfos returns the available routes the given client may use: unreserved
+// routes plus those reserved for it. Third-party clients pass "".
+func (r *ModelRegistry) ClientModelInfos(provider, client string) []*ModelInfo {
+	routes := r.clientCatalog(provider, client, false)
 	infos := make([]*ModelInfo, 0, len(routes))
 	for _, route := range routes {
 		infos = append(infos, route.Info)
@@ -1751,8 +1749,8 @@ func (r *ModelRegistry) clientModelInfosForCatalog(provider string, includeSubsc
 }
 
 // ClientModels formats a third-party client's catalog for its API protocol.
-func (r *ModelRegistry) ClientModels(provider, handlerType string) []map[string]any {
-	infos := r.ClientModelInfos(provider)
+func (r *ModelRegistry) ClientModels(provider, client, handlerType string) []map[string]any {
+	infos := r.ClientModelInfos(provider, client)
 	models := make([]map[string]any, 0, len(infos))
 	for _, info := range infos {
 		models = append(models, r.convertModelToMap(info, handlerType))

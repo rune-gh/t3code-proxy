@@ -466,7 +466,7 @@ func (s *Service) registerResolvedModelsForAuthFenced(a *coreauth.Auth, fence mo
 	if providerKey == "" {
 		return s.unregisterModelsForAuthFenced(a, fence)
 	}
-	claudeCodeOnly := a.IsClaudeSubscription()
+	reservedFor := a.ReservedClient()
 	normalizedModels := make([]*ModelInfo, 0, len(models))
 	for _, model := range models {
 		if model == nil {
@@ -478,7 +478,7 @@ func (s *Service) registerResolvedModelsForAuthFenced(a *coreauth.Auth, fence mo
 		}
 		clone := *model
 		clone.ID = modelID
-		clone.ClaudeCodeOnly = claudeCodeOnly
+		clone.ReservedFor = reservedFor
 		normalizedModels = append(normalizedModels, &clone)
 	}
 	if len(normalizedModels) == 0 {
