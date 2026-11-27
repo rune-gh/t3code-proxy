@@ -553,7 +553,9 @@ func (s *Service) antigravityModelsForHintsWithConfig(auth *coreauth.Auth, hints
 	models = applyOAuthModelAliasForAuth(cfg, "antigravity", auth.AuthKind(), auth.Attributes, models)
 	models = s.appendPluginModels("antigravity", models, excluded)
 	models = applyOAuthSettingsForAuth(cfg, "antigravity", auth.AuthKind(), models)
-	return applyModelPrefixes(models, auth.Prefix, cfg.ForceModelPrefix)
+	// These models reach the registry through ReplaceClientModels, not
+	// registerResolvedModelsForAuthFenced, so they need the login's reservation here.
+	return withReservation(applyModelPrefixes(models, auth.Prefix, cfg.ForceModelPrefix), auth.ReservedClient())
 }
 
 func (s *Service) asyncProbeAntigravityCapabilities(ctx context.Context, auth *coreauth.Auth, providerKey string) {

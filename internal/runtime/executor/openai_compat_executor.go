@@ -248,6 +248,7 @@ func (e *OpenAICompatExecutor) executeWithCredentials(ctx context.Context, auth 
 	reporter.ObserveResponseModel(body)
 	// Ensure we at least record the request even if upstream doesn't return usage
 	// Translate response back to source format when needed
+	body = helps.NormalizeOpenAIContentParts(body)
 	var param any
 	out := sdktranslator.TranslateNonStream(ctx, to, responseFormat, req.Model, helps.ApplyPatchOriginalRequest(req, opts), translated, body, &param)
 	if helps.ApplyPatchTranslationError(param) != nil || len(out) == 0 {
@@ -562,6 +563,7 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 				if !sawFinishReason && openAICompatChunkHasFinishReason(dataPayload) {
 					sawFinishReason = true
 				}
+				dataPayload = helps.NormalizeOpenAIContentParts(dataPayload)
 			}
 
 			// Observe complete upstream frames before translation or downstream backpressure.

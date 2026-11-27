@@ -466,7 +466,6 @@ func (s *Service) registerResolvedModelsForAuthFenced(a *coreauth.Auth, fence mo
 	if providerKey == "" {
 		return s.unregisterModelsForAuthFenced(a, fence)
 	}
-	reservedFor := a.ReservedClient()
 	normalizedModels := make([]*ModelInfo, 0, len(models))
 	for _, model := range models {
 		if model == nil {
@@ -478,9 +477,9 @@ func (s *Service) registerResolvedModelsForAuthFenced(a *coreauth.Auth, fence mo
 		}
 		clone := *model
 		clone.ID = modelID
-		clone.ReservedFor = reservedFor
 		normalizedModels = append(normalizedModels, &clone)
 	}
+	normalizedModels = withReservation(normalizedModels, a.ReservedClient())
 	if len(normalizedModels) == 0 {
 		return s.unregisterModelsForAuthFenced(a, fence)
 	}
@@ -489,6 +488,22 @@ func (s *Service) registerResolvedModelsForAuthFenced(a *coreauth.Auth, fence mo
 		return false
 	}
 	return true
+}
+
+// withReservation returns copies of models that only reservedFor may use ("" leaves
+// them open). Every path that publishes an auth's models must apply it, or a reserved
+// subscription is listed to, and routed for, every client.
+func withReservation(models []*ModelInfo, reservedFor string) []*ModelInfo {
+	out := make([]*ModelInfo, 0, len(models))
+	for _, model := range models {
+		if model == nil {
+			continue
+		}
+		clone := *model
+		clone.ReservedFor = reservedFor
+		out = append(out, &clone)
+	}
+	return out
 }
 
 // unregisterModelsForAuthFenced removes a client's models only if fence

@@ -1224,7 +1224,7 @@
         },
         "claudeCodeDisableCloakingModelList": {
           "label": "Disable model ID cloaking",
-          "hint": "Return original model IDs in Anthropic model list responses instead of cloaked IDs. Disabled by default."
+          "hint": "Return only real model IDs in Anthropic model list responses. Turn off to list other providers' models under cloaked claude-fable-5-dd-… IDs so Claude Code can pick them. On by default."
         },
         "codexDisableCloaking": {
           "label": "Disable request cloaking",

@@ -170,7 +170,7 @@ func rewriteClaudeDDModelInBody(rawJSON []byte) []byte {
 //   - c: The Gin context for the request.
 func (h *ClaudeCodeAPIHandler) ClaudeModels(c *gin.Context) {
 	cfg := h.CurrentConfig()
-	disableCloaking := cfg != nil && cfg.ClaudeCode.DisableCloakingModelList
+	disableCloaking := cfg == nil || !cfg.ClaudeCode.CloaksModelList()
 	h.WriteModelListResponse(c, h.HandlerType(), claudemodels.BuildResponse(h.ModelsForRequest(c, h.HandlerType()), disableCloaking))
 }
 

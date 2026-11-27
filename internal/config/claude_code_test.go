@@ -14,13 +14,18 @@ func TestParseConfigBytesClaudeCodeModelListCloaking(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "defaults to enabled cloaking",
+			name: "defaults to no cloaking",
 			yaml: "port: 8317\n",
 			want: false,
 		},
 		{
 			name: "disables model list cloaking",
 			yaml: "claude-code:\n  disable-cloaking-model-list: true\n",
+			want: false,
+		},
+		{
+			name: "opts into model list cloaking",
+			yaml: "claude-code:\n  disable-cloaking-model-list: false\n",
 			want: true,
 		},
 	}
@@ -31,8 +36,8 @@ func TestParseConfigBytesClaudeCodeModelListCloaking(t *testing.T) {
 			if errParse != nil {
 				t.Fatalf("ParseConfigBytes() error = %v", errParse)
 			}
-			if got := cfg.ClaudeCode.DisableCloakingModelList; got != tt.want {
-				t.Fatalf("DisableCloakingModelList = %t, want %t", got, tt.want)
+			if got := cfg.ClaudeCode.CloaksModelList(); got != tt.want {
+				t.Fatalf("CloaksModelList() = %t, want %t", got, tt.want)
 			}
 		})
 	}

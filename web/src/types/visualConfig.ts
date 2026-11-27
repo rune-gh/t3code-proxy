@@ -254,7 +254,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   claudeHeaderTimezone: '',
   claudeModelLevelCooling: false,
   claudeDisableCloakMode: false,
-  claudeCodeDisableCloakingModelList: false,
+  claudeCodeDisableCloakingModelList: true,
   codexDisableCloaking: false,
   codexModelLevelCooling: false,
   codexStreamBootstrapBuffering: false,

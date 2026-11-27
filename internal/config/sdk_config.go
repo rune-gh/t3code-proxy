@@ -359,8 +359,16 @@ func parseCodexWebSearchResultCacheTTL(raw string) (time.Duration, error) {
 
 // ClaudeCodeConfig configures Claude Code compatibility behavior.
 type ClaudeCodeConfig struct {
-	// DisableCloakingModelList disables model ID cloaking in Anthropic model list responses.
-	DisableCloakingModelList bool `yaml:"disable-cloaking-model-list" json:"disable-cloaking-model-list"`
+	// DisableCloakingModelList controls model ID cloaking in Anthropic model list responses.
+	// Cloaking lists other providers' models under claude-fable-5-dd-<reversed ID> so that
+	// Claude Code can pick them. Unset means true: Claude Code's gateway model discovery
+	// feeds T3 Code's Claude picker, which should list Claude models only. Set false to cloak.
+	DisableCloakingModelList *bool `yaml:"disable-cloaking-model-list,omitempty" json:"disable-cloaking-model-list,omitempty"`
+}
+
+// CloaksModelList reports whether Anthropic model lists include cloaked non-Claude models.
+func (c ClaudeCodeConfig) CloaksModelList() bool {
+	return c.DisableCloakingModelList != nil && !*c.DisableCloakingModelList
 }
 
 // StreamingConfig holds server streaming behavior configuration.
