@@ -908,6 +908,7 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 		Name                  *string                             `json:"name"`
 		Priority              *int                                `json:"priority"`
 		Prefix                *string                             `json:"prefix"`
+		ReservedFor           *string                             `json:"reserved-for"`
 		Disabled              *bool                               `json:"disabled"`
 		DisableCooling        json.RawMessage                     `json:"disable-cooling"`
 		BaseURL               *string                             `json:"base-url"`
@@ -957,6 +958,9 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 	}
 	if body.Value.Prefix != nil {
 		entry.Prefix = strings.TrimSpace(*body.Value.Prefix)
+	}
+	if body.Value.ReservedFor != nil {
+		entry.ReservedFor = *body.Value.ReservedFor
 	}
 	if body.Value.Disabled != nil {
 		entry.Disabled = *body.Value.Disabled

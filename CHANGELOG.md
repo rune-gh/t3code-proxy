@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `reserved-for: opencode` on an OpenAI-compatible upstream gives its credentials to OpenCode
+  alone, for example to spend Mistral's Vibe Code budget from OpenCode instead of Mistral Vibe.
+  Other clients neither list nor reach its models (`403 ... available only through OpenCode`).
+  The hub recognizes OpenCode by its `opencode/...` User-Agent or `x-opencode-client` header,
+  and OpenCode's catalog (`/opencode/<key>/api.json`) includes the reserved models.
 - `/provider/<name>/v1` serves the Responses WebSocket, `/responses/compact` and `/alpha/search`,
   so Codex can use `/provider/codex/v1` as its base URL. With `model_catalog_url` pointed at
   `/provider/codex/v1/models`, Codex signed in with a hub access key reads its model list live
@@ -101,6 +106,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The OpenCode and Claude Code model catalogs give aliases with shared display names distinct labels
+  and omit image, video, audio and embedding models that cannot handle chat.
 - Claude Code's gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) sees the
   Claude subscription models again, so Claude Mythos 5.1 and 5.2 reach T3 Code's Claude model
   picker. Discovery sends `User-Agent: claude-code/<version>`, which the Claude Code check that

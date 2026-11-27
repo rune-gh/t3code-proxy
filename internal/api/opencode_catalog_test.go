@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	claudemodels "github.com/rune-oai/t3code-proxy/internal/client/claude/models"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/internal/util"
 	"github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
@@ -25,6 +26,12 @@ func TestOpenCodeCatalogListsHubModelsInModelsDevFormat(t *testing.T) {
 			Thinking: &registry.ThinkingSupport{Levels: []string{"low", "high", "max"}}, SupportedInputModalities: []string{"text", "image"},
 		}}},
 		{id: "opencode-codex", provider: "codex", models: []*registry.ModelInfo{{ID: "gpt-opencodetest-5.6", ContextLength: 400000, MaxCompletionTokens: 128000, Thinking: &registry.ThinkingSupport{Levels: []string{"low", "medium", "high", "xhigh"}}}}},
+		{id: "opencode-mistral", provider: "mistral", models: []*registry.ModelInfo{
+			{ID: "codestral-catalog-test", DisplayName: "Codestral"},
+			{ID: "codestral-catalog-alias-test", DisplayName: "Codestral"},
+			{ID: "voxtral-catalog-test", SupportedInputModalities: []string{"audio"}, SupportedOutputModalities: []string{"text"}},
+			{ID: "image-catalog-alias-test", MetadataModelID: "gpt-image-2"},
+		}},
 		{id: "opencode-xai", provider: "xai", models: []*registry.ModelInfo{
 			{ID: "grok-opencodetest-4.7"},
 			{ID: "grok-imagine-opencodetest", SupportedOutputModalities: []string{"image"}},
@@ -78,8 +85,42 @@ func TestOpenCodeCatalogListsHubModelsInModelsDevFormat(t *testing.T) {
 	if grok.Provider.NPM != openCodeNPMOpenAICompatible || grok.Limit.Context != openCodeDefaultContext || grok.Limit.Output != openCodeDefaultOutput {
 		t.Fatalf("grok model = %+v", grok)
 	}
-	if _, listed := provider.Models["grok-imagine-opencodetest"]; listed {
-		t.Fatal("an image-only model must not be offered to OpenCode")
+	for _, id := range []string{"grok-imagine-opencodetest", "voxtral-catalog-test", "image-catalog-alias-test"} {
+		if _, listed := provider.Models[id]; listed {
+			t.Errorf("non-chat model %q offered to OpenCode", id)
+		}
+	}
+	for _, id := range []string{"codestral-catalog-test", "codestral-catalog-alias-test"} {
+		model := provider.Models[id]
+		if model.ID != id || model.Name != "Codestral ("+id+")" {
+			t.Errorf("OpenCode model %q = %+v", id, model)
+		}
+	}
+
+	headers := map[string]string{"User-Agent": "claude-code/2.1.332", "Anthropic-Version": "2023-06-01"}
+	response := scopedRequest(server, http.MethodGet, "/v1/models", "", headers)
+	var claudeCatalog struct {
+		Data []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &claudeCatalog); response.Code != http.StatusOK || err != nil {
+		t.Fatalf("Claude catalog: status %d, decode %v", response.Code, err)
+	}
+	labels := make(map[string]string, len(claudeCatalog.Data))
+	for _, entry := range claudeCatalog.Data {
+		labels[claudemodels.ResolveClaudeModelIDPrefix(entry.ID)] = entry.DisplayName
+	}
+	for _, id := range []string{"grok-imagine-opencodetest", "voxtral-catalog-test", "image-catalog-alias-test"} {
+		if _, listed := labels[id]; listed {
+			t.Errorf("non-chat model %q offered to Claude Code", id)
+		}
+	}
+	for _, id := range []string{"codestral-catalog-test", "codestral-catalog-alias-test"} {
+		if got := labels[id]; got != "Codestral ("+id+")" {
+			t.Errorf("Claude model %q label = %q", id, got)
+		}
 	}
 }
 
@@ -252,5 +293,63 @@ func TestAntigravitySubscriptionReservedForAntigravityCLI(t *testing.T) {
 	resp := scopedRequest(server, http.MethodPost, "/provider/antigravity/v1beta/models/"+model+":generateContent", `{"contents":[{"parts":[{"text":"hi"}]}]}`, agy)
 	if resp.Code != http.StatusOK || len(executor.authIDs) != 1 || executor.authIDs[0] != a.ID {
 		t.Fatalf("Antigravity CLI: status %d, dispatched to %v: %s", resp.Code, executor.authIDs, resp.Body.String())
+	}
+}
+
+func TestReservedForOpenCodeServesOnlyOpenCode(t *testing.T) {
+	server := newTestServer(t)
+	manager := server.handlers.AuthManager
+	executor := &providerScopeExecutor{provider: "vibe-test"}
+	manager.RegisterExecutor(executor)
+	const model = "vibe/mistral-reserved-test"
+	a := &auth.Auth{ID: "vibe-key", Provider: "vibe-test", Status: auth.StatusActive, Attributes: map[string]string{
+		"api_key":                 "vibe-secret",
+		auth.AttributeReservedFor: registry.ReservedForOpenCode,
+	}}
+	if _, err := manager.Register(context.Background(), a); err != nil {
+		t.Fatal(err)
+	}
+	reg := registry.GetGlobalRegistry()
+	reg.RegisterClient(a.ID, "vibe-test", []*registry.ModelInfo{{ID: model, OwnedBy: "mistral", ReservedFor: a.ReservedClient()}})
+	t.Cleanup(func() { reg.UnregisterClient(a.ID) })
+	manager.RefreshSchedulerEntry(a.ID)
+
+	openCode := map[string]string{"User-Agent": "opencode/latest/2.3.0/cli"}
+	openCodeHeaderOnly := map[string]string{"User-Agent": "ai-sdk/openai-compatible", "X-Opencode-Client": "cli"}
+	vibe := map[string]string{"User-Agent": "Mistral-Vibe/2.4.0"}
+	claudeCode := map[string]string{"User-Agent": "claude-cli/2.1.332 (external, cli)", "X-App": "cli", "Anthropic-Beta": "claude-code-20250219", "Anthropic-Version": "2023-06-01"}
+	for _, tc := range []struct {
+		path    string
+		headers map[string]string
+		listed  bool
+	}{
+		{"/opencode/test-key/api.json", openCode, true},
+		{"/opencode/test-key/api.json", nil, true},
+		{"/v1/models", openCode, true},
+		{"/v1/models", openCodeHeaderOnly, true},
+		{"/v1/models", vibe, false},
+		{"/v1/models", claudeCode, false},
+		{"/v1/models", map[string]string{"User-Agent": testAntigravityCLIUA}, false},
+	} {
+		resp := scopedRequest(server, http.MethodGet, tc.path, "", tc.headers)
+		if resp.Code != http.StatusOK || strings.Contains(resp.Body.String(), model) != tc.listed {
+			t.Fatalf("%s (%s): status %d, want listed=%t: %s", tc.path, tc.headers["User-Agent"], resp.Code, tc.listed, resp.Body.String())
+		}
+	}
+
+	chat := `{"model":"` + model + `","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`
+	for _, headers := range []map[string]string{vibe, claudeCode} {
+		path := "/v1/chat/completions"
+		if headers["X-App"] != "" {
+			path = "/v1/messages"
+		}
+		resp := scopedRequest(server, http.MethodPost, path, chat, headers)
+		if resp.Code != http.StatusForbidden || !strings.Contains(resp.Body.String(), "only through OpenCode") || len(executor.authIDs) != 0 {
+			t.Fatalf("%s (%s): status %d, dispatched to %v: %s", path, headers["User-Agent"], resp.Code, executor.authIDs, resp.Body.String())
+		}
+	}
+	resp := scopedRequest(server, http.MethodPost, "/v1/chat/completions", chat, openCode)
+	if resp.Code != http.StatusOK || len(executor.authIDs) != 1 || executor.authIDs[0] != a.ID {
+		t.Fatalf("OpenCode: status %d, dispatched to %v: %s", resp.Code, executor.authIDs, resp.Body.String())
 	}
 }

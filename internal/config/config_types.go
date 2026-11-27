@@ -1123,6 +1123,10 @@ type OpenAICompatibility struct {
 	// Prefix optionally namespaces model aliases for this provider (e.g., "teamA/kimi-k2").
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
 
+	// ReservedFor limits this provider's credentials to one client, such as "opencode",
+	// so other clients neither list nor use its models. Empty means any client.
+	ReservedFor string `yaml:"reserved-for,omitempty" json:"reserved-for,omitempty"`
+
 	// BaseURL is the base URL for the external OpenAI-compatible API endpoint.
 	BaseURL string `yaml:"base-url" json:"base-url"`
 

@@ -1753,7 +1753,9 @@ func (r *ModelRegistry) ClientModels(provider, client, handlerType string) []map
 	infos := r.ClientModelInfos(provider, client)
 	models := make([]map[string]any, 0, len(infos))
 	for _, info := range infos {
-		models = append(models, r.convertModelToMap(info, handlerType))
+		if model := r.convertModelToMap(info, handlerType); model != nil {
+			models = append(models, model)
+		}
 	}
 	return models
 }
@@ -1764,7 +1766,9 @@ func (r *ModelRegistry) GetAvailableModelsForProvider(provider, handlerType stri
 	sort.Slice(infos, func(i, j int) bool { return infos[i].ID < infos[j].ID })
 	models := make([]map[string]any, 0, len(infos))
 	for _, info := range infos {
-		models = append(models, r.convertModelToMap(info, handlerType))
+		if model := r.convertModelToMap(info, handlerType); model != nil {
+			models = append(models, model)
+		}
 	}
 	return models
 }
@@ -1916,6 +1920,9 @@ func (r *ModelRegistry) convertModelToMap(model *ModelInfo, handlerType string) 
 		return result
 
 	case "claude":
+		if !model.SupportsTextChat() {
+			return nil
+		}
 		result := map[string]any{
 			"id":       model.ID,
 			"object":   "model",

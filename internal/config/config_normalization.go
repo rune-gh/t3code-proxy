@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rune-oai/t3code-proxy/internal/registry"
 	sdkpluginstore "github.com/rune-oai/t3code-proxy/sdk/pluginstore"
 	log "github.com/sirupsen/logrus"
 )
@@ -301,6 +302,12 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 		if e.BaseURL == "" {
 			// Skip providers with no base-url; treated as removed
 			continue
+		}
+		e.ReservedFor = strings.ToLower(strings.TrimSpace(e.ReservedFor))
+		if e.ReservedFor != "" && !registry.IsReservedClient(e.ReservedFor) {
+			// Keep the unknown value: it matches no client, so a typo hides the
+			// provider instead of opening it to every client.
+			log.Warnf("openai-compatibility %q: unknown reserved-for %q (known: %s, %s, %s); no client can use it", e.Name, e.ReservedFor, registry.ReservedForOpenCode, registry.ReservedForClaudeCode, registry.ReservedForAntigravityCLI)
 		}
 		out = append(out, e)
 	}

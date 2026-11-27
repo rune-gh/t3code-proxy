@@ -532,14 +532,17 @@ func (s *Server) Stop(ctx context.Context) error {
 	return nil
 }
 
-// subscriptionClientMiddleware classifies every client request for subscription
-// reservations: the standalone Antigravity CLI may use the Google Antigravity logins
-// and everyone else none of the reserved subscriptions. The Claude handler upgrades
-// a verified Claude Code request to the Claude subscriptions.
+// subscriptionClientMiddleware classifies every client request for credential
+// reservations: the standalone Antigravity CLI may use the Google Antigravity logins,
+// OpenCode the credentials reserved for it, and everyone else no reserved credential.
+// The Claude handler upgrades a verified Claude Code request to the Claude subscriptions.
 func subscriptionClientMiddleware(c *gin.Context) {
 	client := ""
-	if antigravitycli.IsAntigravityCLIUserAgent(c.GetHeader("User-Agent")) {
+	switch {
+	case antigravitycli.IsAntigravityCLIUserAgent(c.GetHeader("User-Agent")):
 		client = registry.ReservedForAntigravityCLI
+	case isOpenCodeRequest(c.Request):
+		client = registry.ReservedForOpenCode
 	}
 	c.Request = c.Request.WithContext(auth.WithSubscriptionClient(c.Request.Context(), client))
 }

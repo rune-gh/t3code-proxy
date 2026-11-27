@@ -985,3 +985,30 @@ func TestV8ExampleDocumentsSessionAffinityCompactionGuidance(t *testing.T) {
 		}
 	}
 }
+
+func TestV8OpenAICompatReservedForSurvivesLoadAndSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	raw := `api-keys:
+  openai-compatibility:
+    - name: mistral-vibe
+      prefix: vibe
+      reserved-for: opencode
+      base-url: https://api.mistral.ai/v1
+      keys: [{api-key: vibe-key}]
+`
+	if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for round := 0; round < 2; round++ {
+		cfg, err := LoadConfig(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.OpenAICompatibility) != 1 || cfg.OpenAICompatibility[0].ReservedFor != "opencode" {
+			t.Fatalf("round %d: openai-compatibility = %+v", round, cfg.OpenAICompatibility)
+		}
+		if err = SaveConfigPreserveComments(path, cfg, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

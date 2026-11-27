@@ -1495,3 +1495,31 @@ func TestConfigSynthesizer_EmptyConnectionPoolBlockOptsIn(t *testing.T) {
 		t.Fatalf("keyless OpenAI-compatible entry lost its group connection-pool block: %+v", keylessAuths)
 	}
 }
+
+func TestConfigSynthesizer_OpenAICompat_ReservedFor(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			OpenAICompatibility: []config.OpenAICompatibility{
+				{Name: "mistral", BaseURL: "https://api.mistral.ai/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "console-key"}}},
+				{Name: "mistral-vibe", Prefix: "vibe", ReservedFor: "opencode", BaseURL: "https://api.mistral.ai/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "vibe-key"}}},
+				{Name: "keyless", ReservedFor: "opencode", BaseURL: "https://keyless.example.com/v1"},
+			},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]string{"mistral": "", "mistral-vibe": "opencode", "keyless": "opencode"}
+	if len(auths) != len(want) {
+		t.Fatalf("expected %d auths, got %d", len(want), len(auths))
+	}
+	for _, a := range auths {
+		if got := a.ReservedClient(); got != want[a.Label] {
+			t.Fatalf("%s: ReservedClient() = %q, want %q", a.Label, got, want[a.Label])
+		}
+	}
+}

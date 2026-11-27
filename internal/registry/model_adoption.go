@@ -10,6 +10,39 @@ import (
 	"unicode"
 )
 
+// SupportsTextChat reports whether the model belongs in a chat client catalog.
+func (m *ModelInfo) SupportsTextChat() bool {
+	if m.Type == OpenAIImageModelType {
+		return false
+	}
+	for _, modalities := range [][]string{m.SupportedInputModalities, m.SupportedOutputModalities} {
+		if len(modalities) != 0 && !slices.ContainsFunc(modalities, func(modality string) bool {
+			return strings.EqualFold(strings.TrimSpace(modality), "text")
+		}) {
+			return false
+		}
+	}
+	// Older or configured models may lack modality metadata. Check the public ID
+	// and canonical ID so aliases cannot turn an image or audio model into a chat entry.
+	for _, id := range []string{m.ID, m.MetadataModelID} {
+		base := strings.ToLower(id[strings.LastIndexByte(id, '/')+1:])
+		for _, marker := range []string{"gpt-image", "imagine", "imagen", "veo-", "-tts", "tts-", "transcribe", "whisper", "embedding"} {
+			if strings.Contains(base, marker) {
+				return false
+			}
+		}
+	}
+	return !strings.HasSuffix(strings.ToLower(strings.TrimSpace(m.DisplayName)), " transcribe")
+}
+
+// CatalogDisplayName disambiguates aliases that share a display name.
+func CatalogDisplayName(name, id string, count int) string {
+	if count > 1 && name != id {
+		return name + " (" + id + ")"
+	}
+	return name
+}
+
 // Model adoption lets a request for a model no credential lists yet reach the
 // provider it belongs to instead of failing with "unknown provider". Clients
 // such as Claude Code, the Gemini CLI, OpenCode and Vibe ship their own model
@@ -140,6 +173,7 @@ type RegisteredModel struct {
 const (
 	ReservedForClaudeCode     = "claude-code"
 	ReservedForAntigravityCLI = "antigravity-cli"
+	ReservedForOpenCode       = "opencode"
 
 	// anyClient lists every route regardless of reservations.
 	anyClient = "*"
@@ -152,8 +186,19 @@ func ReservedClientName(client string) string {
 		return "Claude Code"
 	case ReservedForAntigravityCLI:
 		return "the Antigravity CLI"
+	case ReservedForOpenCode:
+		return "OpenCode"
 	}
 	return client
+}
+
+// IsReservedClient reports whether client names a client a credential can be reserved for.
+func IsReservedClient(client string) bool {
+	switch client {
+	case ReservedForClaudeCode, ReservedForAntigravityCLI, ReservedForOpenCode:
+		return true
+	}
+	return false
 }
 
 func reservationAllows(reservedFor, client string) bool {
@@ -185,9 +230,10 @@ func (r *ModelRegistry) ClientCatalog(scope, client string) []RegisteredModel {
 	return r.clientCatalog(scope, client, false)
 }
 
-// OpenCodeModels includes cooling credentials but excludes reserved subscriptions.
+// OpenCodeModels includes cooling credentials and those reserved for OpenCode, but
+// excludes credentials reserved for other clients.
 func (r *ModelRegistry) OpenCodeModels() []RegisteredModel {
-	return r.clientCatalog("", "", true)
+	return r.clientCatalog("", ReservedForOpenCode, true)
 }
 
 // Project each registration onto eligible credentials before resolving availability,

@@ -156,8 +156,9 @@ in its logs.
 
 The standalone hub reserves its Claude subscription credentials for Claude Code and its Google
 Antigravity logins for the Antigravity CLI. OpenCode lists a model when an eligible credential
-supplies it, such as an Anthropic or Gemini API key or another upstream. Asking for a reserved
-model by ID returns `403` unless an eligible credential also supplies it.
+supplies it, such as an Anthropic or Gemini API key or an upstream with `reserved-for: opencode`.
+Asking for a reserved model by ID returns `403` unless an eligible credential also supplies it.
+See [Mistral](#mistral-opencode-and-vibe).
 
 A fixed model list in `~/.config/opencode/opencode.json` is not updated by the hub. Remove
 Antigravity and Claude subscription models from it by hand, or point OpenCode at the catalog
@@ -179,13 +180,41 @@ To run both through the hub, give the hub both keys as two upstreams.
 3. Declare the reasoning levels Mistral accepts on models that have them, for example
    `thinking: {levels: [none, high], zero-allowed: true}` on `mistral-vibe-cli-latest`. Without it
    the hub turns "thinking off" into `reasoning_effort: low`, which Mistral rejects.
-4. Point Vibe at the hub in `~/.vibe/config.toml`: a `mistral` provider with
-   `api_base = "https://<hub>.<tailnet>.ts.net:8317/v1"`, `backend = "mistral"`,
-   `preserve_api_base = true`, and `api_key_env_var = "MISTRAL_API_KEY"`, with the hub access key
-   in `~/.vibe/.env`. Add each model as `[[models]]` with `name = "vibe/<model>"` and the alias Vibe
-   shows, such as `mistral-medium-3.5` for `vibe/mistral-vibe-cli-latest`.
+4. Choose the client that spends the Vibe budget:
+   - **OpenCode.** Set `reserved-for: opencode` on the Vibe upstream. Only OpenCode lists and
+     uses the `vibe/<model>` models, in its catalog as `t3code-proxy/vibe/<model>`. Every other
+     client, Mistral Vibe included, neither lists them nor reaches them: asking for one returns
+     `403 ... available only through OpenCode`. The hub recognizes OpenCode by its
+     `opencode/...` User-Agent or its `x-opencode-client` header. Point Vibe at the console
+     key's models (`name = "<model>"`) if it should keep working on the API budget.
+   - **Mistral Vibe.** Leave `reserved-for` unset and point Vibe at the hub in
+     `~/.vibe/config.toml`: a `mistral` provider with
+     `api_base = "https://<hub>.<tailnet>.ts.net:8317/v1"`, `backend = "mistral"`,
+     `preserve_api_base = true`, and `api_key_env_var = "MISTRAL_API_KEY"`, with the hub access
+     key in `~/.vibe/.env`. Add each model as `[[models]]` with `name = "vibe/<model>"` and the
+     alias Vibe shows, such as `mistral-medium-3.5` for `vibe/mistral-vibe-cli-latest`. T3 Code's
+     Mistral Vibe agent (ACP) reads the same files, so it follows.
 
-T3 Code's Mistral Vibe agent (ACP) reads the same files, so it follows.
+```yaml
+routing:
+  force-model-prefix: true
+api-keys:
+  openai-compatibility:
+    - name: mistral
+      base-url: https://api.mistral.ai/v1
+      keys: [{api-key: "<console key>"}]
+      models: [{name: mistral-medium-latest}]
+    - name: mistral-vibe
+      prefix: vibe
+      reserved-for: opencode
+      base-url: https://api.mistral.ai/v1
+      keys: [{api-key: "<Vibe key>"}]
+      models:
+        - name: mistral-vibe-cli-latest
+          thinking: {levels: [none, high], zero-allowed: true}
+```
+
+Mistral Vibe can still spend the Vibe budget directly if it signs in to Mistral outside the hub.
 
 The hub reads both budgets and shows them on the Overview page as money spent of the monthly
 amount, with the reset date. Two keys of one Mistral customer are recorded as one account, so
