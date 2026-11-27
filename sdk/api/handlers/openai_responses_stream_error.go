@@ -53,7 +53,7 @@ const (
 // was well formed: the connection failed, so the caller may replay it.
 var openAIResponsesStreamErrorClasses = map[int]openAIResponsesStreamErrorClass{
 	http.StatusUnauthorized:    {code: "invalid_api_key", errorType: openAIResponsesClientErrorType},
-	http.StatusForbidden:       {code: "insufficient_quota", errorType: openAIResponsesClientErrorType},
+	http.StatusForbidden:       {code: "permission_denied", errorType: openAIResponsesClientErrorType},
 	http.StatusTooManyRequests: {code: "rate_limit_exceeded", errorType: openAIResponsesClientErrorType},
 	http.StatusNotFound:        {code: "model_not_found", errorType: openAIResponsesClientErrorType},
 	http.StatusRequestTimeout:  {code: "request_timeout", errorType: openAIResponsesServerErrorType},
