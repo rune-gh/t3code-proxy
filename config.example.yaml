@@ -576,8 +576,10 @@ upstream:
     # API-key overrides use api-keys.claude[].keys[].cloak.mode.
     disable-claude-cloak-mode: false
 
-    # When true, return original model IDs in Anthropic model list responses instead of cloaked IDs.
-    disable-cloaking-model-list: false
+    # Default true: Anthropic model lists use real model IDs, so Claude Code's gateway model
+    # discovery (and T3 Code's Claude picker) lists Claude models only. Set false to also list
+    # other providers' models under cloaked claude-fable-5-dd-<reversed ID> IDs Claude Code can pick.
+    disable-cloaking-model-list: true
 
     # Anthropic-Beta is assembled per request rather than sent as a fixed list, matching
     # Claude Code: context-1m sits right after claude-code, mid-conversation-system

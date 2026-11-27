@@ -12,7 +12,8 @@ import (
 // OpenCode reads its model catalog from OPENCODE_MODELS_URL + "/api.json" in the
 // models.dev format and refreshes it every few minutes. Pointing that variable
 // at https://<hub>/opencode/<access key> makes OpenCode list every model the
-// hub serves, live, under one provider whose requests go back to the hub.
+// hub serves, live, under one provider whose requests go back to the hub, next
+// to OpenCode's own provider (see opencode_upstream.go).
 // OpenCode sends no credentials with that fetch, so the access key travels in
 // the path; request logs mask it (see util.MaskSensitivePath).
 
@@ -44,7 +45,15 @@ func openCodePathKeyToHeader(c *gin.Context) {
 
 func (s *Server) openCodeCatalogHandler(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, buildOpenCodeCatalog(requestBaseURL(c.Request)+"/v1", registry.GetGlobalRegistry().OpenCodeModels()))
+	hub := buildOpenCodeCatalog(requestBaseURL(c.Request)+"/v1", registry.GetGlobalRegistry().OpenCodeModels())
+	catalog := make(map[string]any, len(hub)+1)
+	for id, provider := range hub {
+		catalog[id] = provider
+	}
+	if upstream := openCodeUpstream.Provider(openCodeUpstreamFirstWait); upstream != nil {
+		catalog[openCodeUpstreamProviderID] = upstream
+	}
+	c.JSON(http.StatusOK, catalog)
 }
 
 // isOpenCodeRequest recognizes OpenCode, which may use credentials reserved for it

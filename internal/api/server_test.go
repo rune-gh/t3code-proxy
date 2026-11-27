@@ -2013,23 +2013,23 @@ func TestModelsDispatchByAnthropicVersionHeader(t *testing.T) {
 		}
 
 		var claudeModel map[string]any
-		var rewrittenModel map[string]any
+		var rawModel map[string]any
 		for _, m := range resp.Data {
 			id, _ := m["id"].(string)
 			switch id {
 			case "claude-sonnet-4-6":
 				claudeModel = m
-			case "claude-fable-5-dd-o4-tpg":
-				rewrittenModel = m
-			case "gpt-4o", "claude-gpt-4o":
-				t.Fatalf("expected non-claude model id to be rewritten as claude-fable-5-dd-<reversed>, got %q", id)
+			case "gpt-4o":
+				rawModel = m
+			case "claude-fable-5-dd-o4-tpg", "claude-gpt-4o":
+				t.Fatalf("model IDs are not cloaked by default, got %q", id)
 			}
 		}
 		if claudeModel == nil {
 			t.Fatalf("expected claude-sonnet-4-6 in response, got %s", rr.Body.String())
 		}
-		if rewrittenModel == nil {
-			t.Fatalf("expected claude-fable-5-dd-o4-tpg in response, got %s", rr.Body.String())
+		if rawModel == nil {
+			t.Fatalf("expected gpt-4o in response, got %s", rr.Body.String())
 		}
 		for _, field := range []string{"max_input_tokens", "max_tokens", "display_name"} {
 			if _, ok := claudeModel[field]; !ok {
@@ -2118,14 +2118,15 @@ func TestClaudeModelListCloakingConfigHotReload(t *testing.T) {
 		t.Fatalf("model %q not found in response: %s", want, recorder.Body.String())
 	}
 
-	assertModelID(claudemodels.EnsureClaudeModelIDPrefix(modelID))
+	// Claude Code's model list shows real IDs unless cloaking is turned on.
+	assertModelID(modelID)
 
 	updatedCfg := *server.cfg
 	updatedCfg.SDKConfig = server.cfg.SDKConfig
-	updatedCfg.ClaudeCode.DisableCloakingModelList = true
+	updatedCfg.ClaudeCode.DisableCloakingModelList = new(false)
 	server.UpdateClients(&updatedCfg)
 
-	assertModelID(modelID)
+	assertModelID(claudemodels.EnsureClaudeModelIDPrefix(modelID))
 }
 
 func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {

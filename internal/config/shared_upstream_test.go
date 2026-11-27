@@ -102,7 +102,7 @@ api-keys: {codex: [{base-url: https://example.invalid, keys: [{api-key: test-key
 							scoped.AuthDir, scoped.AuthAutoRefreshWorkers,
 							scoped.Codex.DisableCodexCloaking, scoped.Codex.StreamBootstrapBuffering, scoped.Codex.StreamBootstrapTimeout,
 							scoped.Codex.OrphanDelegationCompatibility, scoped.Codex.ModelLevelCooling, scoped.Codex.ResponseSteering,
-							scoped.Claude.ModelLevelCooling, scoped.ClaudeCode.DisableCloakingModelList, scoped.DisableClaudeCloakMode,
+							scoped.Claude.ModelLevelCooling, !scoped.ClaudeCode.CloaksModelList(), scoped.DisableClaudeCloakMode,
 							scoped.ClaudeHeaderDefaults.UserAgent, scoped.ClaudeHeaderDefaults.PackageVersion, scoped.ClaudeHeaderDefaults.RuntimeVersion,
 							scoped.ClaudeHeaderDefaults.OS, scoped.ClaudeHeaderDefaults.Arch, scoped.ClaudeHeaderDefaults.Timeout, scoped.ClaudeHeaderDefaults.Timezone,
 							scoped.ClaudeHeaderDefaults.StabilizeDeviceProfile != nil && *scoped.ClaudeHeaderDefaults.StabilizeDeviceProfile,

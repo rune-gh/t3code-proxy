@@ -61,7 +61,7 @@ func TestClaudeModelsResponseDisablesModelListCloaking(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	baseHandler := &handlers.BaseAPIHandler{Cfg: &sdkconfig.SDKConfig{
-		ClaudeCode: sdkconfig.ClaudeCodeConfig{DisableCloakingModelList: true},
+		ClaudeCode: sdkconfig.ClaudeCodeConfig{DisableCloakingModelList: new(true)},
 	}}
 	NewClaudeCodeAPIHandler(baseHandler).ClaudeModels(ctx)
 

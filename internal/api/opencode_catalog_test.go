@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +15,16 @@ import (
 	"github.com/rune-oai/t3code-proxy/sdk/cliproxy/auth"
 )
 
+// stubOpenCodeUpstream replaces the models.dev fetch for one test.
+func stubOpenCodeUpstream(t *testing.T, fetch func(context.Context, string) ([]byte, error)) {
+	t.Helper()
+	previous := openCodeUpstream
+	openCodeUpstream = newOpenCodeUpstreamCatalog("https://models.example/api.json", fetch)
+	t.Cleanup(func() { openCodeUpstream = previous })
+}
+
 func TestOpenCodeCatalogListsHubModelsInModelsDevFormat(t *testing.T) {
+	stubOpenCodeUpstream(t, func(context.Context, string) ([]byte, error) { return nil, errors.New("offline") })
 	server := newTestServer(t)
 	reg := registry.GetGlobalRegistry()
 	for _, client := range []struct {

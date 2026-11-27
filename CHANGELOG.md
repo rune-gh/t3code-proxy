@@ -35,7 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   answers names it does not know. Claude Mythos 5.1 and 5.2 are also built-in Claude models.
 - `GET /opencode/<access key>/api.json` serves the hub's models as a models.dev catalog for
   OpenCode's `OPENCODE_MODELS_URL`, so OpenCode lists models available to that client. The key in the path
-  is masked in logs.
+  is masked in logs. The catalog also carries OpenCode's own `opencode` provider, copied from
+  models.dev and refreshed hourly, so OpenCode's free models (`opencode/big-pickle` and others)
+  stay listed. OpenCode calls opencode.ai for those itself; the hub does not proxy them.
 
 - Provider-scoped client endpoints under `/provider/<name>` with filtered OpenAI, Anthropic and
   Gemini model catalogs, provider-pinned text execution and isolated session affinity. Named
@@ -108,6 +110,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The OpenCode and Claude Code model catalogs give aliases with shared display names distinct labels
   and omit image, video, audio and embedding models that cannot handle chat.
+- Claude Code's model picker (and T3 Code's Claude picker, which follows it) no longer lists every
+  GPT, Gemini, Grok and Mistral model under cloaked `claude-fable-5-dd-…` IDs. Gateway model
+  discovery made that cloaking visible. `claude-code.disable-cloaking-model-list` now defaults to
+  `true`; set it to `false` to cloak again.
+- Antigravity logins are reserved for the Antigravity CLI on a standalone hub too. Their catalog
+  was published through a path that skipped the reservation, so every client listed and could
+  use Antigravity's Gemini, Claude and GPT-OSS models.
+- Mistral reasoning models (Magistral, GLM 5.3 on Mistral) no longer break OpenAI-compatible
+  clients such as OpenCode with "Invalid stream event". Mistral sends reasoning as an array of
+  content parts; the hub now turns it into `reasoning_content` and plain-text `content`.
 - Claude Code's gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) sees the
   Claude subscription models again, so Claude Mythos 5.1 and 5.2 reach T3 Code's Claude model
   picker. Discovery sends `User-Agent: claude-code/<version>`, which the Claude Code check that

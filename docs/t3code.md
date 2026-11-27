@@ -51,11 +51,11 @@ the hub only with gateway model discovery. Turn it on next to the hub settings:
 
 Claude Code then reads `GET /v1/models` from the hub in the background and keeps the list in
 `~/.claude/cache/gateway-models.json`, so the new models appear from the next Claude Code start.
-It keeps only IDs that contain `claude`. The hub's Anthropic model list gives other providers'
-models cloaked `claude-fable-5-dd-…` IDs so that Claude Code can pick them too (Antigravity models
-are not among them, since those logins serve only the Antigravity CLI); set
-`claude-code.disable-cloaking-model-list: true` on the hub if the Claude picker should list only
-Claude models.
+It keeps only IDs that contain `claude`, and the hub lists only Claude models there, so the Claude
+picker shows Claude models only. To pick other providers' models in Claude Code as well, set
+`claude-code.disable-cloaking-model-list: false` on the hub: its Anthropic model list then also
+gives them cloaked `claude-fable-5-dd-…` IDs (never models reserved for another client, such as
+Antigravity's).
 
 ## Codex
 
@@ -135,6 +135,10 @@ OpenCode takes its model catalog from a models.dev-style URL. The hub serves its
 `https://<hub>/opencode/<access key>/api.json`: every model the hub serves, under one provider
 called `t3code-proxy`, refreshed by OpenCode every few minutes. Claude models use the Anthropic
 Messages API, Codex models the Responses API, and the rest OpenAI chat completions, all on the hub.
+The catalog also includes OpenCode's own `opencode` provider, copied from models.dev every hour,
+so OpenCode's free models (`opencode/big-pickle` and the other `-free` models) still show up.
+OpenCode sends those requests to opencode.ai itself, under OpenCode's free-usage limits; they do
+not pass through the hub, and other hub clients cannot use them.
 OpenCode cannot send a header with that fetch, so the access key is in the path; the hub masks it
 in its logs.
 
@@ -151,8 +155,8 @@ in its logs.
    `OPENCODE_AUTH_CONTENT={}` hides OpenCode's own saved logins from this instance. OpenCode
    1.18 fails to load its providers when a saved login names a provider the catalog lacks.
 
-3. Pick a `t3code-proxy/<model>` model in the thread. The instance lists only the hub's models;
-   your own OpenCode setup outside T3 Code is unchanged.
+3. Pick a `t3code-proxy/<model>` or `opencode/<free model>` model in the thread. The instance
+   lists only those; your own OpenCode setup outside T3 Code is unchanged.
 
 The standalone hub reserves its Claude subscription credentials for Claude Code and its Google
 Antigravity logins for the Antigravity CLI. OpenCode lists a model when an eligible credential
