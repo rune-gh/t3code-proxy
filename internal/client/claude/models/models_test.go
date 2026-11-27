@@ -51,9 +51,16 @@ func TestBuildResponse(t *testing.T) {
 	}
 }
 
-func TestBuildResponseWithCloakingDisabled(t *testing.T) {
+// Without cloaking the Anthropic list holds Claude models only. T3 Code's Claude
+// picker keeps every model Claude Code has ever reported, so a leaked GPT, Gemini or
+// Mistral model would stay in it for good.
+func TestBuildResponseWithCloakingDisabledListsClaudeModelsOnly(t *testing.T) {
 	availableModels := []map[string]any{
 		{"id": "gpt-4o", "display_name": "GPT-4o"},
+		{"id": "claude-opus-5-5", "display_name": "Claude Opus 5.5"},
+		{"id": "gemini-4-neon", "display_name": "Gemini 4 Neon"},
+		{"id": "mistral-large-latest", "display_name": "mistral-large-4"},
+		{"id": "devin/claude-fable-5-1", "display_name": "Claude Fable 5.1"},
 	}
 
 	response := BuildResponse(availableModels, true)
@@ -62,16 +69,19 @@ func TestBuildResponseWithCloakingDisabled(t *testing.T) {
 		t.Fatalf("data type = %T, want []map[string]any", response["data"])
 	}
 	if len(models) != 1 {
-		t.Fatalf("len(data) = %d, want 1", len(models))
+		t.Fatalf("data = %v, want claude-opus-5-5 only", models)
 	}
-	if got := models[0]["id"]; got != "gpt-4o" {
-		t.Fatalf("data[0].id = %v, want gpt-4o", got)
+	if got := models[0]["id"]; got != "claude-opus-5-5" {
+		t.Fatalf("data[0].id = %v, want claude-opus-5-5", got)
 	}
-	if got := response["first_id"]; got != "gpt-4o" {
-		t.Fatalf("first_id = %v, want gpt-4o", got)
+	if got := models[0]["display_name"]; got != "Claude Opus 5.5" {
+		t.Fatalf("display_name = %v, want Claude Opus 5.5 without a disambiguating suffix", got)
 	}
-	if got := response["last_id"]; got != "gpt-4o" {
-		t.Fatalf("last_id = %v, want gpt-4o", got)
+	if got := response["first_id"]; got != "claude-opus-5-5" {
+		t.Fatalf("first_id = %v, want claude-opus-5-5", got)
+	}
+	if got := response["last_id"]; got != "claude-opus-5-5" {
+		t.Fatalf("last_id = %v, want claude-opus-5-5", got)
 	}
 }
 

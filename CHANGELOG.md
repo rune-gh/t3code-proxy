@@ -114,6 +114,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   GPT, Gemini, Grok and Mistral model under cloaked `claude-fable-5-dd-…` IDs. Gateway model
   discovery made that cloaking visible. `claude-code.disable-cloaking-model-list` now defaults to
   `true`; set it to `false` to cloak again.
+- Without cloaking, the Anthropic model list (`GET /v1/models` with `Anthropic-Version` or a
+  Claude Code User-Agent) holds Claude models only, as documented. It used to list every other
+  provider's model under its real ID and rely on Claude Code to drop them. T3 Code keeps every
+  model Claude Code has ever reported, so a picker that saw the cloaked list before this release
+  keeps those entries until T3 Code's provider cache is cleared (see `docs/t3code.md`).
 - Antigravity logins are reserved for the Antigravity CLI on a standalone hub too. Their catalog
   was published through a path that skipped the reservation, so every client listed and could
   use Antigravity's Gemini, Claude and GPT-OSS models.

@@ -107,6 +107,10 @@ func TestOpenCodeCatalogListsHubModelsInModelsDevFormat(t *testing.T) {
 		}
 	}
 
+	// Claude Code lists other providers' models only under cloaked IDs.
+	cloakingCfg := *server.cfg
+	cloakingCfg.ClaudeCode.DisableCloakingModelList = new(false)
+	server.UpdateClients(&cloakingCfg)
 	headers := map[string]string{"User-Agent": "claude-code/2.1.332", "Anthropic-Version": "2023-06-01"}
 	response := scopedRequest(server, http.MethodGet, "/v1/models", "", headers)
 	var claudeCatalog struct {

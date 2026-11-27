@@ -11,7 +11,13 @@ import (
 const claudeDDModelPrefix = "claude-fable-5-dd-"
 
 // BuildResponse builds an Anthropic model response from available models.
+// Without cloaking the list holds Claude models only: Claude Code's gateway model
+// discovery feeds T3 Code's Claude picker, which keeps every model it has ever been
+// shown, so other providers' models must never reach it.
 func BuildResponse(availableModels []map[string]any, disableCloaking bool) map[string]any {
+	if disableCloaking {
+		availableModels = claudeModelsOnly(availableModels)
+	}
 	names := make(map[string]int, len(availableModels))
 	for _, model := range availableModels {
 		if name, ok := model["display_name"].(string); ok && name != "" {
@@ -86,6 +92,17 @@ func ResolveClaudeModelIDPrefix(id string) string {
 		return resolved + "(" + suffix + ")"
 	}
 	return resolved
+}
+
+// claudeModelsOnly keeps the models Claude Code can pick by their real ID.
+func claudeModelsOnly(models []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(models))
+	for _, model := range models {
+		if id, _ := model["id"].(string); strings.HasPrefix(id, "claude-") {
+			out = append(out, model)
+		}
+	}
+	return out
 }
 
 func cloneModel(model map[string]any) map[string]any {
