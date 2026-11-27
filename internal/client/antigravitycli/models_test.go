@@ -16,6 +16,10 @@ func TestIsAntigravityCLIUserAgent(t *testing.T) {
 		{"antigravity/cli/1.5.14 (aidev_client; os_type=linux; arch=amd64; auth_method=gateway)", true},
 		{"Antigravity/CLI/1.6.0", true},
 		{"  antigravity/cli/1.5.14  ", true},
+		// agy 1.5.18's ACP server in Gemini API key mode (T3 Code) generates through the Go genai SDK.
+		{"google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 +298f53e483 X:fieldtrack,boringcrypto,nogolistexportnewformat", true},
+		{"google-genai-sdk/1.79.1 gl-go/go1.26.1", false},
+		{"google-genai-sdk/1.30.0 gl-node/22.11.0", false},
 		{"antigravity/hub/2.29.0", false},
 		{"antigravity", false},
 		{"curl/8.7.1", false},

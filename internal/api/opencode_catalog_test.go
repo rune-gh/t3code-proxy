@@ -304,6 +304,12 @@ func TestAntigravitySubscriptionReservedForAntigravityCLI(t *testing.T) {
 	if resp.Code != http.StatusOK || len(executor.authIDs) != 1 || executor.authIDs[0] != a.ID {
 		t.Fatalf("Antigravity CLI: status %d, dispatched to %v: %s", resp.Code, executor.authIDs, resp.Body.String())
 	}
+	// agy's ACP server in Gemini API key mode, as T3 Code runs it, generates through the Go genai SDK.
+	agyACP := map[string]string{"User-Agent": "google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 +298f53e483 X:fieldtrack,boringcrypto,nogolistexportnewformat"}
+	resp = scopedRequest(server, http.MethodPost, "/provider/antigravity/v1beta/models/"+model+":streamGenerateContent?alt=sse", `{"contents":[{"parts":[{"text":"hi"}]}]}`, agyACP)
+	if resp.Code != http.StatusOK || len(executor.authIDs) != 2 || executor.authIDs[1] != a.ID {
+		t.Fatalf("Antigravity CLI over ACP: status %d, dispatched to %v: %s", resp.Code, executor.authIDs, resp.Body.String())
+	}
 }
 
 func TestReservedForOpenCodeServesOnlyOpenCode(t *testing.T) {
