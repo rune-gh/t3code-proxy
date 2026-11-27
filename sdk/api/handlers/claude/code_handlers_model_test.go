@@ -7,6 +7,7 @@ import (
 
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
+	claudemodels "github.com/rune-oai/t3code-proxy/internal/client/claude/models"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
 	"github.com/rune-oai/t3code-proxy/sdk/api/handlers"
 	sdkconfig "github.com/rune-oai/t3code-proxy/sdk/config"
@@ -47,7 +48,7 @@ func TestClaudeModelsResponseUsesConfiguredDisplayName(t *testing.T) {
 	t.Fatalf("model %q not found in response", modelID)
 }
 
-func TestClaudeModelsResponseDisablesModelListCloaking(t *testing.T) {
+func TestClaudeModelsResponseWithoutCloakingOmitsOtherModels(t *testing.T) {
 	const clientID = "claude-disable-model-list-cloaking-test"
 	const modelID = "gpt-disable-model-list-cloaking-test"
 	registryRef := registry.GetGlobalRegistry()
@@ -74,11 +75,10 @@ func TestClaudeModelsResponseDisablesModelListCloaking(t *testing.T) {
 		t.Fatalf("decode response: %v", errUnmarshal)
 	}
 	for _, model := range response.Data {
-		if model.ID == modelID {
-			return
+		if model.ID == modelID || model.ID == claudemodels.EnsureClaudeModelIDPrefix(modelID) {
+			t.Fatalf("non-Claude model listed as %q with cloaking disabled", model.ID)
 		}
 	}
-	t.Fatalf("uncloaked model %q not found in response", modelID)
 }
 
 func TestRewriteClaudeDDModelInBody(t *testing.T) {

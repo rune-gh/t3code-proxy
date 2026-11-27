@@ -59,6 +59,13 @@ picker shows Claude models only. To pick other providers' models in Claude Code 
 gives them cloaked `claude-fable-5-dd-…` IDs (never models reserved for another client, such as
 Antigravity's).
 
+T3 Code never drops a model from its Claude picker once Claude Code has reported it. If the hub
+ever served cloaked IDs (before `disable-cloaking-model-list` defaulted to `true`, or while it was
+`false`), the picker keeps listing GPT, Gemini, Grok and Mistral entries after the hub stops serving
+them. To clear them, stop T3 Code, remove the `claude-fable-5-dd-…` entries from
+`~/.t3/caches/claudeAgent.json` (or delete the file; T3 Code probes Claude again on start), then
+start T3 Code.
+
 ## Codex
 
 Point the machine's Codex at the hub in `~/.codex/config.toml` as in the setup guide. In T3 Code,

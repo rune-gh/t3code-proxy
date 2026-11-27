@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2013,23 +2014,17 @@ func TestModelsDispatchByAnthropicVersionHeader(t *testing.T) {
 		}
 
 		var claudeModel map[string]any
-		var rawModel map[string]any
 		for _, m := range resp.Data {
 			id, _ := m["id"].(string)
 			switch id {
 			case "claude-sonnet-4-6":
 				claudeModel = m
-			case "gpt-4o":
-				rawModel = m
-			case "claude-fable-5-dd-o4-tpg", "claude-gpt-4o":
-				t.Fatalf("model IDs are not cloaked by default, got %q", id)
+			case "gpt-4o", "claude-fable-5-dd-o4-tpg", "claude-gpt-4o":
+				t.Fatalf("the Anthropic list holds Claude models only by default, got %q", id)
 			}
 		}
 		if claudeModel == nil {
 			t.Fatalf("expected claude-sonnet-4-6 in response, got %s", rr.Body.String())
-		}
-		if rawModel == nil {
-			t.Fatalf("expected gpt-4o in response, got %s", rr.Body.String())
 		}
 		for _, field := range []string{"max_input_tokens", "max_tokens", "display_name"} {
 			if _, ok := claudeModel[field]; !ok {
@@ -2090,7 +2085,7 @@ func TestClaudeModelListCloakingConfigHotReload(t *testing.T) {
 	})
 
 	server := newTestServer(t)
-	assertModelID := func(want string) {
+	listedIDs := func() []string {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 		req.Header.Set("Authorization", "Bearer test-key")
@@ -2110,23 +2105,27 @@ func TestClaudeModelListCloakingConfigHotReload(t *testing.T) {
 		if errUnmarshal := json.Unmarshal(recorder.Body.Bytes(), &response); errUnmarshal != nil {
 			t.Fatalf("decode response: %v", errUnmarshal)
 		}
+		ids := make([]string, 0, len(response.Data))
 		for _, model := range response.Data {
-			if model.ID == want {
-				return
-			}
+			ids = append(ids, model.ID)
 		}
-		t.Fatalf("model %q not found in response: %s", want, recorder.Body.String())
+		return ids
 	}
+	cloakedID := claudemodels.EnsureClaudeModelIDPrefix(modelID)
 
-	// Claude Code's model list shows real IDs unless cloaking is turned on.
-	assertModelID(modelID)
+	// The Anthropic list holds Claude models only unless cloaking is turned on.
+	if ids := listedIDs(); slices.Contains(ids, modelID) || slices.Contains(ids, cloakedID) {
+		t.Fatalf("non-Claude model listed with cloaking disabled: %v", ids)
+	}
 
 	updatedCfg := *server.cfg
 	updatedCfg.SDKConfig = server.cfg.SDKConfig
 	updatedCfg.ClaudeCode.DisableCloakingModelList = new(false)
 	server.UpdateClients(&updatedCfg)
 
-	assertModelID(claudemodels.EnsureClaudeModelIDPrefix(modelID))
+	if ids := listedIDs(); !slices.Contains(ids, cloakedID) {
+		t.Fatalf("cloaked model %q not listed: %v", cloakedID, ids)
+	}
 }
 
 func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {
