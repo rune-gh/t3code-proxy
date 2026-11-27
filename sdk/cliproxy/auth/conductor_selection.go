@@ -917,10 +917,10 @@ func (m *Manager) availableAuthsForRouteModelForRequest(ctx context.Context, aut
 			if resetIn < 0 {
 				resetIn = 0
 			}
-			claudeCooldown, claudeSignals := claudeCooldownMetadataForAuths(ctx, auths, func(candidate *Auth) string {
+			claudeCooldown := claudeCooldownMetadataForAuths(ctx, auths, func(candidate *Auth) string {
 				return m.selectionModelForAuth(candidate, routeModel)
 			}, now, clientHeaders...)
-			return nil, newModelCooldownErrorForCandidates(routeModel, providerForError, resetIn, lastCandidateErr, claudeCooldown, claudeSignals)
+			return nil, newModelCooldownErrorForCandidates(routeModel, providerForError, resetIn, lastCandidateErr, claudeCooldown)
 		}
 		if unauthorizedCount == len(auths) && len(auths) > 0 {
 			terminalCause := latestUnauthorizedCandidateError(auths)
@@ -1059,8 +1059,7 @@ func restoreModelCooldownErrorModel(err error, requestedModel string) error {
 		cooldownErr.provider,
 		cooldownErr.resetIn,
 		cooldownErr.cause,
-		cooldownErr.claudeCooldown,
-		cooldownErr.claudeSignals,
+		cooldownErr.claude,
 	)
 }
 
@@ -3208,9 +3207,10 @@ func selectorExcludesZeroWeight(selector Selector) bool {
 //   - earliest: the earliest active timed cooldown recovery instant
 //   - hasUnblocked: true when at least one eligible candidate is still available
 //   - ok: true when no candidate is available and at least one is in a timed cooldown
-func (m *Manager) earliestPoolCooldownForModelAt(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, now time.Time) (earliest time.Time, hasUnblocked bool, ok bool) {
+//   - claudeUsageLimit: true when every candidate is cooling after a rejected Claude usage window
+func (m *Manager) earliestPoolCooldownForModelAt(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, now time.Time) (earliest time.Time, hasUnblocked, ok, claudeUsageLimit bool) {
 	if m == nil {
-		return time.Time{}, false, false
+		return time.Time{}, false, false, false
 	}
 	excludeZeroWeight := selectorExcludesZeroWeight(m.Selector())
 	m.mu.RLock()
@@ -3228,6 +3228,7 @@ func (m *Manager) earliestPoolCooldownForModelAt(ctx context.Context, providers 
 
 	totalCandidates := 0
 	cooling := 0
+	usageLimited := 0
 	for _, candidate := range m.auths {
 		if candidate == nil || candidate.Disabled {
 			continue
@@ -3263,10 +3264,13 @@ func (m *Manager) earliestPoolCooldownForModelAt(ctx context.Context, providers 
 		checkModel := m.selectionModelForAuth(candidate, model)
 		blocked, reason, next := isAuthBlockedForModelForRequest(ctx, candidate, checkModel, now, opts.Headers)
 		if !blocked {
-			return time.Time{}, true, false
+			return time.Time{}, true, false, false
 		}
 		if reason == blockReasonCooldown {
 			cooling++
+			if _, signals := claudeUnifiedCooldownForAuth(candidate, checkModel, now); len(signals) > 0 {
+				usageLimited++
+			}
 		}
 		// Count every timed auto-recovery toward the pool's earliest reset,
 		// including transient non-cooldown blocks (e.g. a short capacity 429),
@@ -3278,9 +3282,9 @@ func (m *Manager) earliestPoolCooldownForModelAt(ctx context.Context, providers 
 		}
 	}
 	if totalCandidates > 0 && cooling > 0 && !earliest.IsZero() {
-		return earliest, false, true
+		return earliest, false, true, usageLimited == totalCandidates
 	}
-	return time.Time{}, false, false
+	return time.Time{}, false, false, false
 }
 
 func observeSelectionCooldownDeadline(dst *time.Time, err error, now time.Time) {
@@ -3316,7 +3320,7 @@ func (m *Manager) annotatePoolCooldownTerminalErrorAt(ctx context.Context, provi
 	if errors.As(lastErr, &existing) && existing != nil {
 		return lastErr
 	}
-	deadline, hasUnblocked, ok := m.earliestPoolCooldownForModelAt(ctx, providers, model, opts, now)
+	deadline, hasUnblocked, ok, claudeUsageLimit := m.earliestPoolCooldownForModelAt(ctx, providers, model, opts, now)
 	if hasUnblocked {
 		return lastErr
 	}
@@ -3327,7 +3331,7 @@ func (m *Manager) annotatePoolCooldownTerminalErrorAt(ctx context.Context, provi
 	if !ok {
 		return lastErr
 	}
-	return &poolCooldownTerminalError{cause: lastErr, deadline: deadline}
+	return &poolCooldownTerminalError{cause: lastErr, deadline: deadline, claudeUsageLimit: claudeUsageLimit}
 }
 
 func (m *Manager) warnLogAuthUnavailable(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}, err error) {

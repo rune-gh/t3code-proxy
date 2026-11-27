@@ -11,11 +11,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/rune-oai/t3code-proxy/internal/config"
 	"github.com/rune-oai/t3code-proxy/internal/registry"
@@ -51,13 +53,18 @@ func TestExhaustedPoolOnlyWhenEveryAccountIsLimited(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, provider := range []string{"claude", "codex"} {
 		for _, tc := range []struct {
-			name       string
-			limited    map[string]bool
-			wantStatus int
+			name             string
+			limited          map[string]bool
+			wantStatus       int
+			requestRateLimit bool
 		}{
-			{"one limited", map[string]bool{"key-a": true}, http.StatusOK},
-			{"all limited", map[string]bool{"key-a": true, "key-b": true}, http.StatusTooManyRequests},
+			{name: "one limited", limited: map[string]bool{"key-a": true}, wantStatus: http.StatusOK},
+			{name: "all limited", limited: map[string]bool{"key-a": true, "key-b": true}, wantStatus: http.StatusTooManyRequests},
+			{name: "one quota and one request rate limit", limited: map[string]bool{"key-a": true, "key-b": true}, wantStatus: http.StatusTooManyRequests, requestRateLimit: true},
 		} {
+			if provider != "claude" && tc.requestRateLimit {
+				continue
+			}
 			t.Run(provider+"/"+tc.name, func(t *testing.T) {
 				up := &poolUpstream{limited: tc.limited}
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +74,12 @@ func TestExhaustedPoolOnlyWhenEveryAccountIsLimited(t *testing.T) {
 					}
 					body, _ := io.ReadAll(r.Body)
 					if up.record(key) {
+						if tc.requestRateLimit && key == "key-b" {
+							w.Header().Set("Retry-After", "120")
+							w.WriteHeader(http.StatusTooManyRequests)
+							_, _ = io.WriteString(w, `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the requests per minute rate limit. Please try again later."}}`)
+							return
+						}
 						writeLimit(w, provider)
 						return
 					}
@@ -114,10 +127,14 @@ func TestExhaustedPoolOnlyWhenEveryAccountIsLimited(t *testing.T) {
 					router.POST(path, openaihandlers.NewOpenAIResponsesAPIHandler(base).Responses)
 					reqBody = `{"model":"` + model + `","input":"hi"}`
 				}
-				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(reqBody))
-				req.Header.Set("Content-Type", "application/json")
-				rec := httptest.NewRecorder()
-				router.ServeHTTP(rec, req)
+				send := func(body string) *httptest.ResponseRecorder {
+					req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+					req.Header.Set("Content-Type", "application/json")
+					rec := httptest.NewRecorder()
+					router.ServeHTTP(rec, req)
+					return rec
+				}
+				rec := send(reqBody)
 
 				attempts := up.seen()
 				if rec.Code != tc.wantStatus {
@@ -131,6 +148,34 @@ func TestExhaustedPoolOnlyWhenEveryAccountIsLimited(t *testing.T) {
 				}
 				if tc.wantStatus == http.StatusTooManyRequests && !strings.Contains(strings.ToLower(rec.Body.String()), "limit") {
 					t.Fatalf("limit body missing limit error: %s", rec.Body.String())
+				}
+				if provider == "claude" && tc.wantStatus == http.StatusTooManyRequests {
+					// The streaming follow-up is rejected by the selector without calling upstream.
+					streamBody := strings.TrimSuffix(reqBody, "}") + `,"stream":true}`
+					for i, rec := range []*httptest.ResponseRecorder{rec, send(streamBody)} {
+						seconds, errParse := strconv.ParseInt(rec.Header().Get("Retry-After"), 10, 64)
+						if rec.Code != http.StatusTooManyRequests || errParse != nil || seconds <= 0 {
+							t.Fatalf("response %d: status=%d Retry-After=%q body=%s", i+1, rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
+						}
+						detail := ojson.GetBytesNoCopy(rec.Body.Bytes(), "error")
+						if got := detail.Get("type").String(); got != "rate_limit_error" {
+							t.Fatalf("response %d: error.type=%q, want Claude's rate_limit_error type", i+1, got)
+						}
+						message := detail.Get("message").String()
+						resetHint := " (reset after " + (time.Duration(seconds) * time.Second).String() + ")"
+						if !strings.HasSuffix(message, resetHint) {
+							t.Fatalf("response %d: error.message=%q, want reset matching Retry-After %d", i+1, message, seconds)
+						}
+						if tc.requestRateLimit && !strings.Contains(message, "requests per minute rate limit") {
+							t.Fatalf("response %d: error.message=%q, want requests per minute rate limit", i+1, message)
+						}
+						if !tc.requestRateLimit && message != "Usage limit reached"+resetHint {
+							t.Fatalf("response %d: error.message=%q, want usage limit and reset", i+1, message)
+						}
+					}
+					if attempts := up.seen(); len(attempts) != 2 {
+						t.Fatalf("attempts=%v, want no upstream calls during cooldown", attempts)
+					}
 				}
 			})
 		}
