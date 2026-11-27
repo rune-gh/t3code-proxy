@@ -751,10 +751,9 @@ func (s *authScheduler) mixedUnavailableErrorLocked(providers []string, model st
 	var latestAuthID string
 	var latestAuthErr error
 
-	allClaude := true
+	claudeCooldown := claudeCooldownMetadata{unified: true, usageLimited: true}
 	var earliestClaudeTime time.Time
 	var earliestClaudeID string
-	var earliestClaudeSignals map[string]string
 
 	for _, providerKey := range providers {
 		providerState := s.providers[providerKey]
@@ -772,15 +771,16 @@ func (s *authScheduler) mixedUnavailableErrorLocked(providers []string, model st
 		if !localEarliest.IsZero() && (earliest.IsZero() || localEarliest.Before(earliest)) {
 			earliest = localEarliest
 		}
-		if localTotal > 0 {
-			localClaude, localClaudeEarliest, localClaudeID, localSignals := shard.claudeCooldownSummaryLocked(providerKey, model, now, predicate)
-			if !localClaude {
-				allClaude = false
-			} else if allClaude && !localClaudeEarliest.IsZero() {
+		if localTotal > 0 && claudeCooldown.unified {
+			localClaude, localClaudeEarliest, localClaudeID := shard.claudeCooldownSummaryLocked(providerKey, model, now, predicate)
+			if !localClaude.unified {
+				claudeCooldown = claudeCooldownMetadata{}
+			} else {
+				claudeCooldown.usageLimited = claudeCooldown.usageLimited && localClaude.usageLimited
 				if earliestClaudeTime.IsZero() || localClaudeEarliest.Before(earliestClaudeTime) || (localClaudeEarliest.Equal(earliestClaudeTime) && localClaudeID < earliestClaudeID) {
 					earliestClaudeTime = localClaudeEarliest
 					earliestClaudeID = localClaudeID
-					earliestClaudeSignals = localSignals
+					claudeCooldown.signals = localClaude.signals
 				}
 			}
 		}
@@ -816,11 +816,7 @@ func (s *authScheduler) mixedUnavailableErrorLocked(providers []string, model st
 		if resetIn < 0 {
 			resetIn = 0
 		}
-		var claudeSignals map[string]string
-		if allClaude {
-			claudeSignals = earliestClaudeSignals
-		}
-		return newModelCooldownErrorForCandidates(model, "", resetIn, lastCandidateErr, allClaude, claudeSignals)
+		return newModelCooldownErrorForCandidates(model, "", resetIn, lastCandidateErr, claudeCooldown)
 	}
 	if unauthorizedCount == total {
 		terminalCause := latestAuthErr
@@ -1571,8 +1567,8 @@ func (m *modelScheduler) unavailableErrorLocked(provider, model string, predicat
 		if resetIn < 0 {
 			resetIn = 0
 		}
-		claudeCooldown, _, _, claudeSignals := m.claudeCooldownSummaryLocked(provider, model, now, predicate)
-		return newModelCooldownErrorForCandidates(model, providerForError, resetIn, lastCandidateErr, claudeCooldown, claudeSignals)
+		claudeCooldown, _, _ := m.claudeCooldownSummaryLocked(provider, model, now, predicate)
+		return newModelCooldownErrorForCandidates(model, providerForError, resetIn, lastCandidateErr, claudeCooldown)
 	}
 	if unauthorizedCount == total {
 		terminalCause := authErr
@@ -1688,22 +1684,19 @@ func (m *modelScheduler) availabilitySummaryLocked(predicate func(*scheduledAuth
 	return total, cooldownCount, unauthorizedCount, earliest
 }
 
-func (m *modelScheduler) claudeCooldownSummaryLocked(fallbackProvider, model string, now time.Time, predicate func(*scheduledAuth) bool) (bool, time.Time, string, map[string]string) {
+func (m *modelScheduler) claudeCooldownSummaryLocked(fallbackProvider, model string, now time.Time, predicate func(*scheduledAuth) bool) (claudeCooldownMetadata, time.Time, string) {
 	if m == nil {
-		return false, time.Time{}, "", nil
+		return claudeCooldownMetadata{}, time.Time{}, ""
 	}
-	matched := 0
 	var earliest time.Time
 	var earliestID string
-	var earliestAuth *Auth
-	var earliestSignals map[string]string
+	metadata := claudeCooldownMetadata{unified: true, usageLimited: true}
 	for _, entry := range m.entries {
 		if predicate != nil && !predicate(entry) {
 			continue
 		}
-		matched++
 		if entry == nil || entry.auth == nil {
-			return false, time.Time{}, "", nil
+			return claudeCooldownMetadata{}, time.Time{}, ""
 		}
 		entryProvider := ""
 		if entry.meta != nil && entry.meta.providerKey != "" {
@@ -1714,7 +1707,7 @@ func (m *modelScheduler) claudeCooldownSummaryLocked(fallbackProvider, model str
 			entryProvider = strings.ToLower(strings.TrimSpace(fallbackProvider))
 		}
 		if entryProvider != "claude" {
-			return false, time.Time{}, "", nil
+			return claudeCooldownMetadata{}, time.Time{}, ""
 		}
 		checkModel := model
 		if existingModelState(entry.auth, checkModel) == nil && m.modelKey != "" {
@@ -1722,21 +1715,21 @@ func (m *modelScheduler) claudeCooldownSummaryLocked(fallbackProvider, model str
 		}
 		okClaude, signals := claudeUnifiedCooldownForAuth(entry.auth, checkModel, now)
 		if !okClaude {
-			return false, time.Time{}, "", nil
+			return claudeCooldownMetadata{}, time.Time{}, ""
 		}
+		metadata.usageLimited = metadata.usageLimited && len(signals) > 0
 		if entry.state == scheduledStateCooldown && !entry.nextRetryAt.IsZero() {
-			if earliestAuth == nil || entry.nextRetryAt.Before(earliest) || (entry.nextRetryAt.Equal(earliest) && entry.auth.ID < earliestID) {
+			if earliest.IsZero() || entry.nextRetryAt.Before(earliest) || (entry.nextRetryAt.Equal(earliest) && entry.auth.ID < earliestID) {
 				earliest = entry.nextRetryAt
 				earliestID = entry.auth.ID
-				earliestAuth = entry.auth
-				earliestSignals = signals
+				metadata.signals = signals
 			}
 		}
 	}
-	if matched == 0 || earliestAuth == nil {
-		return false, time.Time{}, "", nil
+	if earliest.IsZero() {
+		return claudeCooldownMetadata{}, time.Time{}, ""
 	}
-	return true, earliest, earliestID, earliestSignals
+	return metadata, earliest, earliestID
 }
 
 // rebuildIndexesLocked reconstructs ready and blocked views from the current entry map.

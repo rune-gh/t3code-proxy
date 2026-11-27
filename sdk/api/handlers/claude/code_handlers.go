@@ -590,6 +590,10 @@ func (h *ClaudeCodeAPIHandler) toClaudeErrorWithRetryAfter(msg *interfaces.Error
 	}
 	errType, message := claudeErrorDetailFromText(status, errText)
 	if status == http.StatusTooManyRequests && msg != nil && msg.Error != nil {
+		var usageLimit interface{ IsClaudeUsageLimit() bool }
+		if errors.As(msg.Error, &usageLimit) && usageLimit.IsClaudeUsageLimit() {
+			message = "Usage limit reached"
+		}
 		var cooldown interface{ IsModelCooldown() bool }
 		if errors.As(msg.Error, &cooldown) && cooldown != nil && cooldown.IsModelCooldown() {
 			if seconds, errParse := strconv.ParseInt(retryAfter, 10, 64); errParse == nil && seconds > 0 {

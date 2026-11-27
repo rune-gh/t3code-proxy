@@ -384,8 +384,9 @@ func (e *authUnavailableError) Headers() http.Header {
 // passthrough headers while marking the error as a model cooldown and exposing
 // the pool's earliest recovery deadline via Retry-After.
 type poolCooldownTerminalError struct {
-	cause    error
-	deadline time.Time
+	cause            error
+	deadline         time.Time
+	claudeUsageLimit bool
 }
 
 func (e *poolCooldownTerminalError) Error() string {
@@ -418,6 +419,10 @@ func (e *poolCooldownTerminalError) As(target any) bool {
 
 func (e *poolCooldownTerminalError) IsModelCooldown() bool {
 	return e != nil && !e.deadline.IsZero()
+}
+
+func (e *poolCooldownTerminalError) IsClaudeUsageLimit() bool {
+	return e != nil && e.claudeUsageLimit
 }
 
 func (e *poolCooldownTerminalError) StatusCode() int {

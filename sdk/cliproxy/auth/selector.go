@@ -104,12 +104,18 @@ const (
 )
 
 type modelCooldownError struct {
-	model          string
-	resetIn        time.Duration
-	provider       string
-	cause          error
-	claudeCooldown bool
-	claudeSignals  map[string]string
+	model    string
+	resetIn  time.Duration
+	provider string
+	cause    error
+	claude   claudeCooldownMetadata
+}
+
+type claudeCooldownMetadata struct {
+	// A restored credential cooldown can support a retry header without a recorded rejection.
+	unified      bool
+	usageLimited bool
+	signals      map[string]string
 }
 
 // NewModelCooldownError creates an error representing model-level cooldown.
@@ -122,20 +128,20 @@ func newModelCooldownError(model, provider string, resetIn time.Duration) *model
 }
 
 func newModelCooldownErrorWithCause(model, provider string, resetIn time.Duration, cause error) *modelCooldownError {
-	return newModelCooldownErrorForCandidates(model, provider, resetIn, cause, isClaudeCooldownProvider(provider), nil)
+	return newModelCooldownErrorForCandidates(model, provider, resetIn, cause, claudeCooldownMetadata{unified: isClaudeCooldownProvider(provider)})
 }
 
-func newModelCooldownErrorForCandidates(model, provider string, resetIn time.Duration, cause error, claudeCooldown bool, claudeSignals map[string]string) *modelCooldownError {
+func newModelCooldownErrorForCandidates(model, provider string, resetIn time.Duration, cause error, claude claudeCooldownMetadata) *modelCooldownError {
 	if resetIn < 0 {
 		resetIn = 0
 	}
+	claude.signals = maps.Clone(claude.signals)
 	return &modelCooldownError{
-		model:          model,
-		provider:       provider,
-		resetIn:        resetIn,
-		cause:          cause,
-		claudeCooldown: claudeCooldown,
-		claudeSignals:  maps.Clone(claudeSignals),
+		model:    model,
+		provider: provider,
+		resetIn:  resetIn,
+		cause:    cause,
+		claude:   claude,
 	}
 }
 
@@ -145,6 +151,10 @@ func isClaudeCooldownProvider(provider string) bool {
 
 func (e *modelCooldownError) IsModelCooldown() bool {
 	return true
+}
+
+func (e *modelCooldownError) IsClaudeUsageLimit() bool {
+	return e != nil && e.claude.usageLimited
 }
 
 func (e *modelCooldownError) Unwrap() error {
@@ -406,7 +416,7 @@ func (e *modelCooldownError) SafeResponseHeaders() http.Header {
 
 func (e *modelCooldownError) Headers() http.Header {
 	headers := e.SafeResponseHeaders()
-	if e != nil && e.claudeCooldown && e.resetIn > 0 {
+	if e != nil && e.claude.unified && e.resetIn > 0 {
 		e.appendClaudeUnifiedHeaders(headers)
 	}
 	return headers
@@ -420,8 +430,8 @@ func (e *modelCooldownError) appendClaudeUnifiedHeaders(headers http.Header) {
 	resetAt := time.Now().Unix() + resetSeconds
 	resetStr := strconv.FormatInt(resetAt, 10)
 
-	if hasRejectedClaudeUnifiedSignals(e.claudeSignals) {
-		for key, value := range e.claudeSignals {
+	if hasRejectedClaudeUnifiedSignals(e.claude.signals) {
+		for key, value := range e.claude.signals {
 			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(key)), "anthropic-ratelimit-unified-") {
 				headers.Set(key, value)
 			}
@@ -767,13 +777,10 @@ func claudeUnifiedCooldownForAuth(auth *Auth, model string, now time.Time) (bool
 	return claudeSignalsFromEvaluatedQuota(auth.Quota)
 }
 
-func claudeCooldownMetadataForAuths(ctx context.Context, auths []*Auth, modelForAuth func(*Auth) string, now time.Time, clientHeaders ...http.Header) (bool, map[string]string) {
-	if len(auths) == 0 {
-		return false, nil
-	}
+func claudeCooldownMetadataForAuths(ctx context.Context, auths []*Auth, modelForAuth func(*Auth) string, now time.Time, clientHeaders ...http.Header) claudeCooldownMetadata {
 	var earliestAuth *Auth
-	var earliestSignals map[string]string
 	var earliestNext time.Time
+	metadata := claudeCooldownMetadata{unified: true, usageLimited: true}
 	for _, candidate := range auths {
 		checkModel := ""
 		if modelForAuth != nil {
@@ -781,21 +788,22 @@ func claudeCooldownMetadataForAuths(ctx context.Context, auths []*Auth, modelFor
 		}
 		okClaude, signals := claudeUnifiedCooldownForAuth(candidate, checkModel, now)
 		if !okClaude {
-			return false, nil
+			return claudeCooldownMetadata{}
 		}
+		metadata.usageLimited = metadata.usageLimited && len(signals) > 0
 		blocked, reason, next := isAuthBlockedForModelForRequest(ctx, candidate, checkModel, now, clientHeaders...)
 		if blocked && reason == blockReasonCooldown && next.After(now) {
 			if earliestAuth == nil || next.Before(earliestNext) || (next.Equal(earliestNext) && candidate.ID < earliestAuth.ID) {
 				earliestAuth = candidate
-				earliestSignals = signals
+				metadata.signals = signals
 				earliestNext = next
 			}
 		}
 	}
 	if earliestAuth == nil {
-		return false, nil
+		return claudeCooldownMetadata{}
 	}
-	return true, earliestSignals
+	return metadata
 }
 
 func authPriority(auth *Auth) int {
@@ -993,10 +1001,10 @@ func getAvailableAuthsWithPriorityModeForRequest(ctx context.Context, auths []*A
 			if resetIn < 0 {
 				resetIn = 0
 			}
-			claudeCooldown, claudeSignals := claudeCooldownMetadataForAuths(ctx, auths, func(*Auth) string {
+			claudeCooldown := claudeCooldownMetadataForAuths(ctx, auths, func(*Auth) string {
 				return model
 			}, now, clientHeaders...)
-			return nil, newModelCooldownErrorForCandidates(model, providerForError, resetIn, nil, claudeCooldown, claudeSignals)
+			return nil, newModelCooldownErrorForCandidates(model, providerForError, resetIn, nil, claudeCooldown)
 		}
 		return nil, newAuthUnavailableError(earliest, now)
 	}

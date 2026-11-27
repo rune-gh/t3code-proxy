@@ -920,6 +920,32 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 				if got := safeHeaders.Get("Anthropic-Ratelimit-Unified-Status"); got != "" {
 					t.Fatalf("SafeResponseHeaders leaked unified header %q", got)
 				}
+
+				if !cooldownErr.IsClaudeUsageLimit() {
+					t.Fatal("expected usage limit for the confirmed Claude cooldown")
+				}
+				legacyID := authID + "-legacy"
+				registry.GetGlobalRegistry().RegisterClient(legacyID, "claude", []*registry.ModelInfo{{ID: modelID}})
+				t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(legacyID) })
+				legacyReset := time.Now().Add(3 * time.Hour)
+				if _, errRegister := manager.Register(context.Background(), &Auth{
+					ID:             legacyID,
+					Provider:       "claude",
+					Status:         StatusError,
+					Unavailable:    true,
+					NextRetryAfter: legacyReset,
+					Quota:          QuotaState{Exceeded: true, Reason: "credential_quota", NextRecoverAt: legacyReset},
+				}); errRegister != nil {
+					t.Fatalf("register legacy auth: %v", errRegister)
+				}
+
+				_, errExecute = manager.Execute(context.Background(), []string{"claude"}, cliproxyexecutor.Request{Model: modelID}, cliproxyexecutor.Options{})
+				if !errors.As(errExecute, &cooldownErr) || cooldownErr.IsClaudeUsageLimit() {
+					t.Fatalf("expected a generic cooldown with an unconfirmed credential, got %v", errExecute)
+				}
+				if got := cooldownErr.Headers().Get("Anthropic-Ratelimit-Unified-Representative-Claim"); got != "seven_day" {
+					t.Fatalf("representative claim = %q, want seven_day from the first credential to reset", got)
+				}
 			})
 		}
 	})
@@ -948,7 +974,10 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 	})
 
 	t.Run("preserves allowed shared windows on overage claim and aligns model-family window resets", func(t *testing.T) {
-		overageErr := newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", 30*time.Second, nil, true, map[string]string{
+		cooldownWithSignals := func(delay time.Duration, signals map[string]string) *modelCooldownError {
+			return newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", delay, nil, claudeCooldownMetadata{unified: true, signals: signals})
+		}
+		overageErr := cooldownWithSignals(30*time.Second, map[string]string{
 			"Anthropic-Ratelimit-Unified-Status":               "rejected",
 			"Anthropic-Ratelimit-Unified-Representative-Claim": "overage",
 			"Anthropic-Ratelimit-Unified-5h-Status":            "allowed",
@@ -966,7 +995,7 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 			t.Fatalf("overage cooldown claim = %q, want overage", got)
 		}
 
-		sonnetErr := newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", 2*time.Hour, nil, true, map[string]string{
+		sonnetErr := cooldownWithSignals(2*time.Hour, map[string]string{
 			"Anthropic-Ratelimit-Unified-Status":               "rejected",
 			"Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day_sonnet",
 			"Anthropic-Ratelimit-Unified-5h-Status":            "allowed",
@@ -983,7 +1012,7 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 			t.Fatalf("7d_sonnet reset = %q, want %q", got, sonnetHeaders.Get("Anthropic-Ratelimit-Unified-Reset"))
 		}
 
-		overageNoClaimErr := newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", 30*time.Second, nil, true, map[string]string{
+		overageNoClaimErr := cooldownWithSignals(30*time.Second, map[string]string{
 			"Anthropic-Ratelimit-Unified-Status":         "rejected",
 			"Anthropic-Ratelimit-Unified-5h-Status":      "allowed",
 			"Anthropic-Ratelimit-Unified-7d-Status":      "allowed",
@@ -997,7 +1026,7 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 			t.Fatalf("overage without claim 5h status = %q, want allowed", got)
 		}
 
-		sonnetNoClaimErr := newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", 2*time.Hour, nil, true, map[string]string{
+		sonnetNoClaimErr := cooldownWithSignals(2*time.Hour, map[string]string{
 			"Anthropic-Ratelimit-Unified-Status":           "rejected",
 			"Anthropic-Ratelimit-Unified-5h-Status":        "allowed",
 			"Anthropic-Ratelimit-Unified-7d-Status":        "allowed",
@@ -1009,7 +1038,7 @@ func TestModelCooldownError_ClaudeUnifiedRateLimitHeaders(t *testing.T) {
 			t.Fatalf("7d_sonnet without claim inferred %q, want seven_day_sonnet", got)
 		}
 
-		fiveAllowedOnlyErr := newModelCooldownErrorForCandidates("claude-sonnet-4-5-20250929", "claude", 2*time.Hour, nil, true, map[string]string{
+		fiveAllowedOnlyErr := cooldownWithSignals(2*time.Hour, map[string]string{
 			"Anthropic-Ratelimit-Unified-Status":    "rejected",
 			"Anthropic-Ratelimit-Unified-5h-Status": "allowed",
 		})
