@@ -423,6 +423,27 @@ func TestBuildErrorResponseBodyWithError_RequestTimeoutIsServerError(t *testing.
 	}
 }
 
+// A 403 is an access refusal, not exhausted quota. Clients such as Codex treat
+// insufficient_quota as a usage limit, so a client reservation must not report it.
+func TestBuildErrorResponseBody_ForbiddenIsPermissionDenied(t *testing.T) {
+	body := BuildErrorResponseBody(http.StatusForbidden, "model gemini-4-neon-xhigh is available only through the Antigravity CLI with the configured credentials")
+	var payload struct {
+		Error struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if errUnmarshal := json.Unmarshal(body, &payload); errUnmarshal != nil {
+		t.Fatalf("unmarshal error body: %v", errUnmarshal)
+	}
+	if payload.Error.Type != "permission_error" || payload.Error.Code != "permission_denied" {
+		t.Fatalf("type/code = %q/%q, want permission_error/permission_denied", payload.Error.Type, payload.Error.Code)
+	}
+	if got := openAIResponsesStreamErrorClassFor(http.StatusForbidden).code; got != "permission_denied" {
+		t.Fatalf("responses stream 403 code = %q, want permission_denied", got)
+	}
+}
+
 func TestBuildErrorResponseBody_CompactsPrettyPrintedJSON(t *testing.T) {
 	prettyJSON := "{\n  \"error\": {\n    \"code\": 500,\n    \"message\": \"Internal error encountered.\",\n    \"status\": \"INTERNAL\"\n  }\n}"
 	body := BuildErrorResponseBody(http.StatusInternalServerError, prettyJSON)

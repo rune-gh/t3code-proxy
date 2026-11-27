@@ -108,6 +108,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A plain 403 from the hub, such as a model reserved for another client, now reports error code
+  `permission_denied` instead of `insufficient_quota`, so clients no longer mistake an access
+  refusal for an exhausted usage limit.
+
 - T3 Code's Antigravity threads no longer fail with `403 ... available only through the Antigravity
   CLI`. Signed in with a Gemini API key, `agy acp` (1.5.18) sends its generate requests through
   Google's Go genai SDK, whose User-Agent is `google-genai-sdk/… gl-go/… cl/…` rather than
