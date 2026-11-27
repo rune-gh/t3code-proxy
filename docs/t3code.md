@@ -8,7 +8,9 @@ and API-key upstream, its login flow and its client API surface.
 Subscription proxying may violate provider terms and can lead to suspension or a ban. Never
 serve other people's traffic with your subscriptions. The hub enforces the first-party client for
 two of them: Claude subscriptions serve only Claude Code (including the Claude Code instance T3
-Code runs), and Google Antigravity logins serve only the standalone Antigravity CLI. Other clients
+Code runs), and Google Antigravity logins serve only the standalone Antigravity CLI. The hub
+recognizes `agy` by its `antigravity/cli/…` User-Agent, and its ACP server's generate requests by
+the `google-genai-sdk/… gl-go/… cl/…` User-Agent of the Go genai SDK built into it. Other clients
 neither list nor reach those models unless an API key or another account supplies them.
 
 T3 Code needs no plugin and no change on the hub. Requests go through the clients' own config

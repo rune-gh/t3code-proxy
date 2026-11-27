@@ -30,8 +30,22 @@ var supportedLevelSet = map[string]struct{}{
 
 // IsAntigravityCLIUserAgent reports whether userAgent identifies the standalone
 // Antigravity CLI (`agy`).
+//
+// agy sends "antigravity/cli/<version> (...)" in gateway mode. Its ACP server
+// signed in with a Gemini API key, as T3 Code runs it, sends generate requests
+// through Google's Go genai SDK instead, as "google-genai-sdk/<version>
+// gl-go/<go version> cl/<changelist> ...". Only Google's internal builds add the
+// "cl/" changelist; the public SDK does not, so other genai clients stay out.
 func IsAntigravityCLIUserAgent(userAgent string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(userAgent)), "antigravity/cli/")
+	userAgent = strings.ToLower(strings.TrimSpace(userAgent))
+	if strings.HasPrefix(userAgent, "antigravity/cli/") {
+		return true
+	}
+	fields := strings.Fields(userAgent)
+	return len(fields) >= 3 &&
+		strings.HasPrefix(fields[0], "google-genai-sdk/") &&
+		strings.HasPrefix(fields[1], "gl-go/") &&
+		strings.HasPrefix(fields[2], "cl/")
 }
 
 // ResolveLevels returns the Antigravity CLI effort levels supported by support

@@ -108,6 +108,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- T3 Code's Antigravity threads no longer fail with `403 ... available only through the Antigravity
+  CLI`. Signed in with a Gemini API key, `agy acp` (1.5.18) sends its generate requests through
+  Google's Go genai SDK, whose User-Agent is `google-genai-sdk/… gl-go/… cl/…` rather than
+  `antigravity/cli/…`. The hub now recognizes that internal-build User-Agent as the Antigravity CLI.
 - The OpenCode and Claude Code model catalogs give aliases with shared display names distinct labels
   and omit image, video, audio and embedding models that cannot handle chat.
 - Claude Code's model picker (and T3 Code's Claude picker, which follows it) no longer lists every
