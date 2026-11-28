@@ -308,6 +308,7 @@ func TestHubBudget_ExhaustedTenantDoesNotStarveAnotherTenant(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(hub.Close)
 	serverB := dialRole(t, srv.URL, "b", RoleServer, "s", "Server")
+	waitForRegisteredServers(t, hub, "b", 1)
 	clientB := dialRole(t, srv.URL, "b", RoleClient, "c", "Client")
 	_ = readTextJSONFrame(t, clientB)
 
@@ -435,6 +436,7 @@ func TestHubLimits_BinaryPayloadAndTransportBoundaries(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(hub.Close)
 	server := dialRole(t, srv.URL, "key", RoleServer, "s", "Server")
+	waitForRegisteredServers(t, hub, "key", 1)
 	client := dialRole(t, srv.URL, "key", RoleClient, "c", "Client")
 	_ = readTextJSONFrame(t, client)
 	for _, size := range []int{MaxRawPayloadBytes, MaxRawPayloadBytes + 1, MaxInboundFrameBytes - 6, MaxInboundFrameBytes - 5} {

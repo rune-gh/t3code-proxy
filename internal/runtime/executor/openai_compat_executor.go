@@ -53,6 +53,10 @@ type OpenAICompatExecutor struct {
 	cfg      *config.Config
 }
 
+// isMistralBaseURL selects the upstreams that reject echoed reasoning fields.
+// Tests replace it to point a local server at the Mistral request path.
+var isMistralBaseURL = helps.IsMistralBaseURL
+
 // NewOpenAICompatExecutor creates an executor bound to a provider key (e.g., "openrouter").
 func NewOpenAICompatExecutor(provider string, cfg *config.Config) *OpenAICompatExecutor {
 	return &OpenAICompatExecutor{provider: provider, cfg: cfg}
@@ -179,6 +183,9 @@ func (e *OpenAICompatExecutor) executeWithCredentials(ctx context.Context, auth 
 	if opts.Alt == "responses/compact" {
 		_ = doc.Delete("stream")
 		sanitizeOpenAIResponsesReasoningEncryptedContentWithCompatModelAndBaseURLDoc(ctx, "openai compat executor", doc, true, resolveResponsesSignatureTargetModel(baseModel, req, opts), baseURL)
+	}
+	if opts.Alt != "responses/compact" && isMistralBaseURL(baseURL) {
+		helps.StripMistralEchoedReasoningDoc(doc)
 	}
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	helps.ApplyPayloadConfigWithRequestDoc(e.cfg, baseModel, to.String(), from.String(), "", doc, originalTranslated, requestedModel, requestPath, opts.Headers)
@@ -426,6 +433,9 @@ func (e *OpenAICompatExecutor) executeStreamWithCredentials(ctx context.Context,
 	// are captured even when the upstream is an OpenAI-compatible provider.
 	helps.SetBoolIfDifferentDoc(doc, "stream_options.include_usage", true)
 
+	if isMistralBaseURL(baseURL) {
+		helps.StripMistralEchoedReasoningDoc(doc)
+	}
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	helps.ApplyPayloadConfigWithRequestDoc(e.cfg, baseModel, to.String(), from.String(), "", doc, originalTranslated, requestedModel, requestPath, opts.Headers)
 	translated = doc.Bytes()

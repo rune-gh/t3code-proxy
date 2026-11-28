@@ -46,6 +46,26 @@ func dialRoleWithType(t *testing.T, serverURL, apiKey string, role Role, uuid, n
 	return conn
 }
 
+// waitForRegisteredServers blocks until the hub has registered want servers
+// for apiKey. A dial returns once the handshake completes, before the hub
+// registers the peer, so a client dialed right away may see a shorter list.
+func waitForRegisteredServers(t *testing.T, hub *Hub, apiKey string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		hub.mu.RLock()
+		got := len(hub.realms[apiKey].sortedServers())
+		hub.mu.RUnlock()
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hub registered %d servers, want %d", got, want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func readBinaryDataFrame(t *testing.T, conn *websocket.Conn) DataFrameView {
 	t.Helper()
 	msgType, raw, errRead := readTunnelTestMessage(conn)
@@ -249,6 +269,7 @@ func TestHubExchange_ManyToManyFullDuplexMultiplexing(t *testing.T) {
 	for s := 0; s < numPeers; s++ {
 		servers[s] = dialRole(t, srv.URL, "key-mesh", RoleServer, fmt.Sprintf("srv-%d", s), fmt.Sprintf("Server %d", s))
 	}
+	waitForRegisteredServers(t, hub, "key-mesh", numPeers)
 
 	clients := make([]*websocket.Conn, numPeers)
 	clientWriteMu := make([]sync.Mutex, numPeers)
@@ -555,6 +576,7 @@ func TestHubExchange_ControllablePingAndKeyRevocation(t *testing.T) {
 	_ = readTextJSONFrame(t, cliRevoke)
 
 	srvKeep := dialRole(t, srv.URL, "key-keep", RoleServer, "s-keep", "Keep Server")
+	waitForRegisteredServers(t, hub, "key-keep", 1)
 	cliKeep := dialRole(t, srv.URL, "key-keep", RoleClient, "c-keep", "Keep Client")
 	_ = readTextJSONFrame(t, cliKeep)
 

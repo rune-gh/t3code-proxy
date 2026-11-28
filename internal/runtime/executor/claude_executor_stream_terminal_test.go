@@ -20,12 +20,16 @@ import (
 	sdktranslator "github.com/rune-oai/t3code-proxy/sdk/translator"
 )
 
+// captureClaudeUsagePlugin collects Claude usage records from one test's
+// upstream. Usage plugins are global, so a record published late by another
+// test would otherwise land here; baseURL keeps only this test's records.
 type captureClaudeUsagePlugin struct {
 	records chan usage.Record
+	baseURL string
 }
 
 func (p *captureClaudeUsagePlugin) HandleUsage(_ context.Context, record usage.Record) {
-	if p == nil || record.Provider != "claude" {
+	if p == nil || record.Provider != "claude" || record.BaseURL != p.baseURL {
 		return
 	}
 	select {
@@ -74,6 +78,7 @@ func TestClaudeExecutor_ExecuteStream_Translated_ClientDisconnectAfterTerminalEv
 	pluginName := "test-claude-translated-disconnect"
 	plugin := &captureClaudeUsagePlugin{
 		records: make(chan usage.Record, 4),
+		baseURL: server.URL,
 	}
 	usage.RegisterNamedPlugin(pluginName, plugin)
 	t.Cleanup(func() {
@@ -170,6 +175,7 @@ func TestClaudeExecutor_ExecuteStream_Passthrough_ClientDisconnectAfterTerminalE
 	pluginName := "test-claude-passthrough-disconnect"
 	plugin := &captureClaudeUsagePlugin{
 		records: make(chan usage.Record, 4),
+		baseURL: server.URL,
 	}
 	usage.RegisterNamedPlugin(pluginName, plugin)
 	t.Cleanup(func() {

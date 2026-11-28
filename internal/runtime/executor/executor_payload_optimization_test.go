@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/MoeForge/moego/ojson"
 	cliproxyexecutor "github.com/rune-oai/t3code-proxy/sdk/cliproxy/executor"
@@ -483,6 +482,9 @@ func TestNormalizeXAIImageRefsDocArbitraryNestedExtensionPath(t *testing.T) {
 	}
 }
 
+// The allocation bound is the regression guard: materializing the messages
+// array allocates far more than 64 KiB. Wall-clock limits flaked on busy CI
+// runners, so these subtests do not time the helpers.
 func TestClaudeCacheControlDocChecksDoNotMaterializeLargeMessagesArray(t *testing.T) {
 	t.Run("split messages container avoids 1MiB materialization", func(t *testing.T) {
 		chunk := strings.Repeat("a", 64*1024)
@@ -506,7 +508,6 @@ func TestClaudeCacheControlDocChecksDoNotMaterializeLargeMessagesArray(t *testin
 
 		var mBefore, mAfter runtime.MemStats
 		runtime.ReadMemStats(&mBefore)
-		start := time.Now()
 		ensureCacheControlDoc(doc)
 		if got := countCacheControlsDoc(doc); got != 2 {
 			t.Fatalf("countCacheControlsDoc = %d, want 2", got)
@@ -515,19 +516,15 @@ func TestClaudeCacheControlDocChecksDoNotMaterializeLargeMessagesArray(t *testin
 		upgradeClaudeCacheControlTTLDoc(doc, claudeCacheControlTTL1h)
 		normalizeCacheControlTTLDoc(doc)
 		stripClaudeCacheControlTTLDoc(doc)
-		elapsed := time.Since(start)
 		runtime.ReadMemStats(&mAfter)
 
 		allocated := mAfter.TotalAlloc - mBefore.TotalAlloc
 		if allocated > 64*1024 {
 			t.Fatalf("split messages: cache control doc helpers allocated %d bytes (> 64 KiB)", allocated)
 		}
-		if elapsed > 20*time.Millisecond {
-			t.Fatalf("split messages took %v (> 20ms); expected O(N) single-pass traversal", elapsed)
-		}
 	})
 
-	t.Run("unsplit 1024 messages runs in single-pass O(N) time and <64KiB allocs", func(t *testing.T) {
+	t.Run("unsplit 1024 messages stays under 64KiB of allocations", func(t *testing.T) {
 		chunk := strings.Repeat("b", 1024)
 		var b strings.Builder
 		b.Grow(1024*(len(chunk)+64) + 256)
@@ -553,21 +550,16 @@ func TestClaudeCacheControlDocChecksDoNotMaterializeLargeMessagesArray(t *testin
 
 		var mBefore, mAfter runtime.MemStats
 		runtime.ReadMemStats(&mBefore)
-		start := time.Now()
 		if got := countCacheControlsDoc(doc); got != 2 {
 			t.Fatalf("countCacheControlsDoc = %d, want 2", got)
 		}
 		enforceCacheControlLimitDoc(doc, 4)
 		normalizeCacheControlTTLDoc(doc)
-		elapsed := time.Since(start)
 		runtime.ReadMemStats(&mAfter)
 
 		allocated := mAfter.TotalAlloc - mBefore.TotalAlloc
 		if allocated > 64*1024 {
 			t.Fatalf("unsplit 1024 messages: allocated %d bytes (> 64 KiB)", allocated)
-		}
-		if elapsed > 20*time.Millisecond {
-			t.Fatalf("unsplit 1024 messages took %v (> 20ms); expected O(N) single-pass traversal", elapsed)
 		}
 	})
 }

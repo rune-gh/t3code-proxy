@@ -235,6 +235,7 @@ func TestHubReview_ByteBudgetBackpressureAndReclaim(t *testing.T) {
 
 	srvSlow := dialRole(t, srv.URL, "key-mem", RoleServer, "srv-mem-slow", "Slow Mem Server")
 	srvClean := dialRole(t, srv.URL, "key-mem", RoleServer, "srv-mem-clean", "Clean Mem Server")
+	waitForRegisteredServers(t, hub, "key-mem", 2)
 	cli := dialRole(t, srv.URL, "key-mem", RoleClient, "cli-mem", "Mem Client")
 	_ = readTextJSONFrame(t, cli)
 

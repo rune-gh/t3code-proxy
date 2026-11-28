@@ -231,6 +231,7 @@ func TestHubAuth_MethodAndCredentials(t *testing.T) {
 			t.Fatalf("Dial with query type override error = %v", errOver)
 		}
 		registerCleanupConn(t, overrideConn)
+		waitForRegisteredServers(t, hub, "key-beta", 2)
 
 		// Client role ignores type (both omitted and blank/arbitrary values allowed).
 		cliCheck, cliResp, errCli := websocket.DefaultDialer.Dial(
