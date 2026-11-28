@@ -108,6 +108,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Multi-turn conversations with reasoning models on Mistral (GLM, DeepSeek, Magistral) no
+  longer fail on their second turn with `422 extra_forbidden`. OpenAI-compatible clients such as
+  OpenCode echo earlier reasoning back as `reasoning_content` and similar fields, and the hub adds
+  a `reasoning_content` placeholder to Claude tool calls; Mistral rejects any of them. Requests to
+  a `mistral.ai` upstream now drop those fields before payload rules run.
 - A plain 403 from the hub, such as a model reserved for another client, now reports error code
   `permission_denied` instead of `insufficient_quota`, so clients no longer mistake an access
   refusal for an exhausted usage limit.
